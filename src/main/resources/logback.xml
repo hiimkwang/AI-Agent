@@ -1,0 +1,64 @@
+<configuration>
+    <property name="LOGS" value="./logs"/>
+
+    <!-- Console Appender -->
+    <appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <Pattern>
+                %d{yyyy-MM-dd HH:mm:ss:SSS} | %highlightex(%-5level) | [%magenta(${PID})] | [%thread] | %cyan(%logger{15}.%M.%L) | %msg%n
+            </Pattern>
+        </layout>
+    </appender>
+
+    <!-- Rolling File Appender for autotrade.log -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOGS}/aiagent.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <Pattern>
+                %d{yyyy-MM-dd HH:mm:ss:SSS} | %highlightex(%-5level) | [%magenta(${PID})] | [%thread] | %cyan(%logger{15}.%M.%L) | %msg%n
+            </Pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOGS}/archived/aiagent.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>10GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Rolling File Appender for autotrade_other.log -->
+    <appender name="FILE-OTHER" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOGS}/aiagent_other.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <Pattern>%d{yyyy-MM-dd HH:mm:ss};%msg%n</Pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOGS}/archived/aiagent_other.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>10GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Logger for main package -->
+    <logger name="com.ai.aiagent" level="info" additivity="false">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="Console"/>
+    </logger>
+
+    <!-- Logger for other-log -->
+    <logger name="other-log" level="info" additivity="false">
+        <appender-ref ref="FILE-OTHER"/>
+        <appender-ref ref="Console"/>
+    </logger>
+
+    <!-- Root Logger -->
+    <root level="error">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="Console"/>
+    </root>
+
+    <!-- Color ConversionRule -->
+    <conversionRule conversionWord="highlightex"
+                    converterClass="com.ai.aiagent.utility.HighlightingCompositeConverterEx"/>
+</configuration>

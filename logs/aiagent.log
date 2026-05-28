@@ -1,0 +1,407 @@
+2026-05-27 16:11:51:347 | [32mINFO [0;39m | [[35m11428[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarting.54[0;39m | Starting AiAgentApplication using Java 21.0.9 with PID 11428 (D:\Quang-Wordspace\AIAgent\target\classes started by hiimk in D:\Quang-Wordspace\AIAgent)
+2026-05-27 16:11:51:349 | [32mINFO [0;39m | [[35m11428[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStartupProfileInfo.652[0;39m | No active profile set, falling back to 1 default profile: "default"
+2026-05-27 16:11:52:094 | [1;31mERROR[0;39m | [[35m11428[0;39m] | [main] | [36mo.s.b.SpringApplication.reportFailure.863[0;39m | Application run failed
+org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'jacksonJsonMapper' defined in class path resource [org/springframework/boot/jackson/autoconfigure/JacksonAutoConfiguration.class]: Unsatisfied dependency expressed through method 'jacksonJsonMapper' parameter 0: Error creating bean with name 'jsonMapperBuilder' defined in class path resource [org/springframework/boot/jackson/autoconfigure/JacksonAutoConfiguration.class]: Failed to instantiate [tools.jackson.databind.json.JsonMapper$Builder]: Factory method 'jsonMapperBuilder' threw exception with message: Could not initialize class tools.jackson.databind.json.JsonMapper$Builder
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:546)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1362)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1194)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:196)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1218)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1184)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1121)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:994)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:621)
+	at org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:143)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:756)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:445)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:321)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1365)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1354)
+	at com.ai.aiagent.AiAgentApplication.main(AiAgentApplication.java:10)
+Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'jsonMapperBuilder' defined in class path resource [org/springframework/boot/jackson/autoconfigure/JacksonAutoConfiguration.class]: Failed to instantiate [tools.jackson.databind.json.JsonMapper$Builder]: Factory method 'jsonMapperBuilder' threw exception with message: Could not initialize class tools.jackson.databind.json.JsonMapper$Builder
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:657)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1362)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1194)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:351)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201)
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:229)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1762)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1651)
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912)
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791)
+	... 21 common frames omitted
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [tools.jackson.databind.json.JsonMapper$Builder]: Factory method 'jsonMapperBuilder' threw exception with message: Could not initialize class tools.jackson.databind.json.JsonMapper$Builder
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:183)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:72)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:152)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	... 33 common frames omitted
+Caused by: java.lang.NoClassDefFoundError: Could not initialize class tools.jackson.databind.json.JsonMapper$Builder
+	at tools.jackson.databind.json.JsonMapper.builder(JsonMapper.java:147)
+	at org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration.jsonMapperBuilder(JacksonAutoConfiguration.java:103)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:155)
+	... 36 common frames omitted
+Caused by: java.lang.ExceptionInInitializerError: Exception java.lang.NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs [in thread "background-preinit"]
+	at tools.jackson.databind.introspect.JacksonAnnotationIntrospector.<clinit>(JacksonAnnotationIntrospector.java:37)
+	at tools.jackson.databind.cfg.MapperBuilder.<clinit>(MapperBuilder.java:50)
+	at tools.jackson.databind.json.JsonMapper.builder(JsonMapper.java:147)
+	at org.springframework.boot.jackson.autoconfigure.JacksonBackgroundPreinitializer.preinitialize(JacksonBackgroundPreinitializer.java:32)
+	at org.springframework.boot.autoconfigure.preinitialize.BackgroundPreinitializingApplicationListener$Runner.run(BackgroundPreinitializingApplicationListener.java:123)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+2026-05-27 16:14:00:398 | [32mINFO [0;39m | [[35m27500[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarting.50[0;39m | Starting AiAgentApplication using Java 21.0.9 with PID 27500 (D:\Quang-Wordspace\AIAgent\target\classes started by hiimk in D:\Quang-Wordspace\AIAgent)
+2026-05-27 16:14:00:398 | [32mINFO [0;39m | [[35m27500[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStartupProfileInfo.654[0;39m | No active profile set, falling back to 1 default profile: "default"
+2026-05-27 16:14:01:287 | [32mINFO [0;39m | [[35m27500[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarted.56[0;39m | Started AiAgentApplication in 1.061 seconds (process running for 1.456)
+2026-05-27 16:17:12:617 | [1;31mERROR[0;39m | [[35m27500[0;39m] | [http-nio-8080-exec-4] | [36mo.a.c.c.C.[.[.[.[dispatcherServlet].log.175[0;39m | Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.RuntimeException: java.lang.RuntimeException: status code: 500; body: {"error":"llama runner process has terminated: GGML_ASSERT(ctx-\u003emem_buffer != NULL) failed"}] with root cause
+java.lang.RuntimeException: status code: 500; body: {"error":"llama runner process has terminated: GGML_ASSERT(ctx-\u003emem_buffer != NULL) failed"}
+	at dev.langchain4j.model.ollama.OllamaClient.toException(OllamaClient.java:238)
+	at dev.langchain4j.model.ollama.OllamaClient.chat(OllamaClient.java:99)
+	at dev.langchain4j.model.ollama.OllamaChatModel.lambda$generate$0(OllamaChatModel.java:87)
+	at dev.langchain4j.internal.RetryUtils$RetryPolicy.withRetry(RetryUtils.java:192)
+	at dev.langchain4j.internal.RetryUtils.withRetry(RetryUtils.java:229)
+	at dev.langchain4j.model.ollama.OllamaChatModel.generate(OllamaChatModel.java:87)
+	at dev.langchain4j.model.chat.ChatLanguageModel.generate(ChatLanguageModel.java:39)
+	at dev.langchain4j.model.chat.ChatLanguageModel.generate(ChatLanguageModel.java:27)
+	at com.ai.aiagent.modules.rag.service.RagChatService.retrieveAndAnswer(RagChatService.java:58)
+	at com.ai.aiagent.modules.rag.controller.RagChatController.receiveTeamsMessage(RagChatController.java:28)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:255)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:188)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:118)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:926)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:831)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1089)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:914)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:590)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:206)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1736)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:63)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+2026-05-27 16:18:28:860 | [1;31mERROR[0;39m | [[35m27500[0;39m] | [http-nio-8080-exec-10] | [36mo.a.c.c.C.[.[.[.[dispatcherServlet].log.175[0;39m | Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.RuntimeException: java.lang.RuntimeException: status code: 500; body: {"error":"llama runner process has terminated with exit code 2"}] with root cause
+java.lang.RuntimeException: status code: 500; body: {"error":"llama runner process has terminated with exit code 2"}
+	at dev.langchain4j.model.ollama.OllamaClient.toException(OllamaClient.java:238)
+	at dev.langchain4j.model.ollama.OllamaClient.chat(OllamaClient.java:99)
+	at dev.langchain4j.model.ollama.OllamaChatModel.lambda$generate$0(OllamaChatModel.java:87)
+	at dev.langchain4j.internal.RetryUtils$RetryPolicy.withRetry(RetryUtils.java:192)
+	at dev.langchain4j.internal.RetryUtils.withRetry(RetryUtils.java:229)
+	at dev.langchain4j.model.ollama.OllamaChatModel.generate(OllamaChatModel.java:87)
+	at dev.langchain4j.model.chat.ChatLanguageModel.generate(ChatLanguageModel.java:39)
+	at dev.langchain4j.model.chat.ChatLanguageModel.generate(ChatLanguageModel.java:27)
+	at com.ai.aiagent.modules.rag.service.RagChatService.retrieveAndAnswer(RagChatService.java:58)
+	at com.ai.aiagent.modules.rag.controller.RagChatController.receiveTeamsMessage(RagChatController.java:28)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:255)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:188)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:118)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:926)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:831)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1089)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:914)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:590)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:206)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1736)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:63)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+2026-05-27 16:20:59:149 | [32mINFO [0;39m | [[35m23892[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarting.50[0;39m | Starting AiAgentApplication using Java 21.0.9 with PID 23892 (D:\Quang-Wordspace\AIAgent\target\classes started by hiimk in D:\Quang-Wordspace\AIAgent)
+2026-05-27 16:20:59:151 | [32mINFO [0;39m | [[35m23892[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStartupProfileInfo.654[0;39m | No active profile set, falling back to 1 default profile: "default"
+2026-05-27 16:21:00:063 | [32mINFO [0;39m | [[35m23892[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarted.56[0;39m | Started AiAgentApplication in 1.102 seconds (process running for 1.503)
+2026-05-27 16:21:18:548 | [1;31mERROR[0;39m | [[35m23892[0;39m] | [http-nio-8080-exec-1] | [36mo.a.c.c.C.[.[.[.[dispatcherServlet].log.175[0;39m | Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.RuntimeException: java.lang.RuntimeException: status code: 500; body: {"error":"llama runner process has terminated: cudaMalloc failed: out of memory"}] with root cause
+java.lang.RuntimeException: status code: 500; body: {"error":"llama runner process has terminated: cudaMalloc failed: out of memory"}
+	at dev.langchain4j.model.ollama.OllamaClient.toException(OllamaClient.java:238)
+	at dev.langchain4j.model.ollama.OllamaClient.chat(OllamaClient.java:99)
+	at dev.langchain4j.model.ollama.OllamaChatModel.lambda$generate$0(OllamaChatModel.java:87)
+	at dev.langchain4j.internal.RetryUtils$RetryPolicy.withRetry(RetryUtils.java:192)
+	at dev.langchain4j.internal.RetryUtils.withRetry(RetryUtils.java:229)
+	at dev.langchain4j.model.ollama.OllamaChatModel.generate(OllamaChatModel.java:87)
+	at dev.langchain4j.model.chat.ChatLanguageModel.generate(ChatLanguageModel.java:39)
+	at dev.langchain4j.model.chat.ChatLanguageModel.generate(ChatLanguageModel.java:27)
+	at com.ai.aiagent.modules.rag.service.RagChatService.retrieveAndAnswer(RagChatService.java:59)
+	at com.ai.aiagent.modules.rag.controller.RagChatController.receiveTeamsMessage(RagChatController.java:28)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:255)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:188)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:118)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:926)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:831)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1089)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:914)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:590)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:206)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1736)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:63)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+2026-05-27 16:24:09:357 | [32mINFO [0;39m | [[35m18148[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarting.50[0;39m | Starting AiAgentApplication using Java 21.0.9 with PID 18148 (D:\Quang-Wordspace\AIAgent\target\classes started by hiimk in D:\Quang-Wordspace\AIAgent)
+2026-05-27 16:24:09:359 | [32mINFO [0;39m | [[35m18148[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStartupProfileInfo.654[0;39m | No active profile set, falling back to 1 default profile: "default"
+2026-05-27 16:24:10:269 | [32mINFO [0;39m | [[35m18148[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarted.56[0;39m | Started AiAgentApplication in 1.11 seconds (process running for 1.545)
+2026-05-27 16:24:15:445 | [1;31mERROR[0;39m | [[35m18148[0;39m] | [http-nio-8080-exec-1] | [36mo.a.c.c.C.[.[.[.[dispatcherServlet].log.175[0;39m | Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.RuntimeException: java.lang.RuntimeException: java.net.ConnectException: Failed to connect to localhost/[0:0:0:0:0:0:0:1]:11434] with root cause
+java.net.ConnectException: Connection refused: getsockopt
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:690)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at retrofit2.OkHttpCall.execute(OkHttpCall.java:204)
+	at dev.langchain4j.model.ollama.OllamaClient.embed(OllamaClient.java:196)
+	at dev.langchain4j.model.ollama.OllamaEmbeddingModel.lambda$embedAll$0(OllamaEmbeddingModel.java:59)
+	at dev.langchain4j.internal.RetryUtils$RetryPolicy.withRetry(RetryUtils.java:192)
+	at dev.langchain4j.internal.RetryUtils.withRetry(RetryUtils.java:229)
+	at dev.langchain4j.model.ollama.OllamaEmbeddingModel.lambda$embedAll$1(OllamaEmbeddingModel.java:59)
+	at java.base/java.util.Collections$SingletonList.forEach(Collections.java:5186)
+	at dev.langchain4j.model.ollama.OllamaEmbeddingModel.embedAll(OllamaEmbeddingModel.java:53)
+	at dev.langchain4j.model.embedding.EmbeddingModel.embed(EmbeddingModel.java:34)
+	at dev.langchain4j.model.embedding.EmbeddingModel.embed(EmbeddingModel.java:24)
+	at com.ai.aiagent.modules.rag.service.RagChatService.retrieveAndAnswer(RagChatService.java:36)
+	at com.ai.aiagent.modules.rag.controller.RagChatController.receiveTeamsMessage(RagChatController.java:28)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:255)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:188)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:118)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:926)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:831)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1089)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:914)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:590)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:206)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:51)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1736)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:63)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+2026-05-27 23:04:40:130 | [32mINFO [0;39m | [[35m27908[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarting.50[0;39m | Starting AiAgentApplication using Java 21.0.9 with PID 27908 (D:\Quang-Wordspace\AIAgent\target\classes started by hiimk in D:\Quang-Wordspace\AIAgent)
+2026-05-27 23:04:40:132 | [32mINFO [0;39m | [[35m27908[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStartupProfileInfo.654[0;39m | No active profile set, falling back to 1 default profile: "default"
+2026-05-27 23:04:41:182 | [32mINFO [0;39m | [[35m27908[0;39m] | [main] | [36mc.a.a.AiAgentApplication.logStarted.56[0;39m | Started AiAgentApplication in 1.242 seconds (process running for 1.724)
+2026-05-27 23:11:15:396 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-3] | [36mc.a.a.m.r.s.RagIngestionService.processOfficeFile.32[0;39m | --- BẮT ĐẦU ĐỌC FILE: URD_SPCT_2020 Feb_ver 1.4.docx ---
+2026-05-27 23:11:16:295 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-3] | [36mc.a.a.m.r.s.RagIngestionService.processOfficeFile.38[0;39m | 1. Đã phân giải xong file. Tổng số ký tự đọc được: 17460
+2026-05-27 23:11:16:296 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-3] | [36mc.a.a.m.r.s.RagIngestionService.processOfficeFile.41[0;39m | Preview nội dung đọc được: 
+	Mã số tài liệu		
+	CÔNG TY CỔ PHẦN CHỨNG KHOÁN NGÂN HÀNG ĐT&PT VIỆT NAM	PHÒNG TỰ DOANH		TÀI LIỆU	YÊU CẦU NGƯỜI SỬ DỤNG	   XÂY DỰNG HỆ THỐNG PHẦN MỀM GIAO DỊCH CÁC SẢN PHẨM CẤU TRÚC		<Phiên bản: 1.4>	
+2026-05-27 23:11:16:334 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-3] | [36mc.a.a.m.r.s.RagIngestionService.processOfficeFile.46[0;39m | 2. Đã băm file thành 26 đoạn (chunks). Đang tiến hành nhúng Vector...
+2026-05-27 23:11:43:210 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-3] | [36mc.a.a.m.r.s.RagIngestionService.processOfficeFile.54[0;39m | --- HOÀN TẤT! Đã lưu 26 vector vào Postgres ---
+2026-05-27 23:14:42:780 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-9] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.37[0;39m | >>> NHẬN CÂU HỎI: Tính năng mua/bán rổ ETF bao gồm các chức năng gì
+2026-05-27 23:14:43:737 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-9] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.46[0;39m | Tìm thấy 3 đoạn văn liên quan trong DB (Ngưỡng > 0.4)
+2026-05-27 23:14:43:737 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-9] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.56[0;39m | MATCH [1]: Điểm khớp: 0.869784551317796 | Nguồn: URD_SPCT_2020 Feb_ver 1.4.docx | Nội dung trích xuất: Chức năng thống kê lệnh khớp mua/bán của BSC:
+Phần mềm bổ sung tính năng thêm 1 tab thống kê mua/bán đã khớp của tài khoản BSC, giao diện có thể theo bảng như sau:
+Thời gian	Tiểu khoản	Mã CW	Lệnh (Mua/Bán)	Số lượng khớp	Giá khớp
+2026-05-27 23:14:43:737 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-9] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.56[0;39m | MATCH [2]: Điểm khớp: 0.8567472597455421 | Nguồn: URD_SPCT_2020 Feb_ver 1.4.docx | Nội dung trích xuất: Ví dụ 1.
+
+Loại hình	Mua
+Tên rổ	Test	Giá trị mua/bán dự tính	14,695,000	Tiểu khoản	00010008686
+
+Mã cổ phiếu	Loại lệnh mua/bán	Số lượng cổ phiếu (theo khai báo rổ)	Tỷ lệ dự khớp	Mức giá mua/bán dự kiến	Giá trị khớp dự kiến
+CTG	B1	100	0%	22,000	2,200,000
+VPB	MP	100	100%	20,500	2,050,000
+GAS	MP	50	100%	93,900	4,695,000
+VIC	A1	50	80%	115,000	5,750,000
+
++ Cho phép thay đổi khối lượng mua/bán khác nhau cho từng mã cổ phiếu trong rổ khác nhau. Ví dụ như cùng với rổ cổ phiếu ở ví dụ 1, 4 mã cổ phiếu trong rổ có thể được mua/bán với khối lượng tùy chỉnh, khác với khối lượng cổ phiếu đã khai báo. Đồng thời, giá trị mua/bán dự tính cũng thay đổi theo khối lượng đã điều chỉnh.
+Mã cổ phiếu	Loại lệnh mua/bán	Số lượng cổ phiếu (sau thay đổi)	Tỷ lệ dự khớp	Mức giá mua/bán dự kiến	Giá trị khớp dự kiến
+CTG	B1	80	0%	22,000	
+VPB	MP	50	100%	20,500	
+GAS	MP	60	100%	93,900	
+VIC	A1	50	80%	115,000
+2026-05-27 23:14:43:737 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-9] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.56[0;39m | MATCH [3]: Điểm khớp: 0.8409839116841713 | Nguồn: URD_SPCT_2020 Feb_ver 1.4.docx | Nội dung trích xuất: Lưu ý: số lượng cổ phiếu để mặc định là theo khai báo rổ nhưng cho phép người dùng thay đổi giá trị ở cột này
+Tính năng đặt lệnh mua/bán rổ cổ phiếu
+Cho phép đẩy toàn bộ lệnh mua/bán rổ cổ phiếu lên đồng thời tại các mức giá tùy chỉnh cho từng mã cổ phiếu trong rổ (theo như minh họa trên).
+Sau khi đẩy toàn bộ lệnh trên lên thị trường, cho phép hủy toàn bộ lệnh chưa khớp bằng tính năng Hủy mua/bán rổ cổ phiếu
+Hoàn thiện mua/bán rổ cổ phiếu: Đối với các rổ cổ phiếu chưa khớp 100%, hệ thống tự tính toán số lượng cổ phiếu chưa mua được, đẩy lệnh MP cho toàn bộ chỗ cổ phiếu chưa được khớp còn lại lên sàn để đảm bảo tỷ lệ hoàn thành là 100%.
+2026-05-27 23:14:43:739 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-9] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.66[0;39m | Đang gọi Qwen 7B để tổng hợp câu trả lời...
+2026-05-27 23:15:00:277 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-9] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.68[0;39m | <<< TRẢ LỜI: Tôi xin lỗi, nhưng tài liệu khảo sát bạn cung cấp không đề cập đến tính năng mua/bán rổ ETF cụ thể. Tài liệu chủ yếu tập trung vào tính năng thống kê lệnh khớp mua/bán của BSC và tính năng đặt lệnh mua/bán rổ cổ phiếu.
+
+Nếu bạn có thêm thông tin hoặc tài liệu chi tiết hơn về tính năng mua/bán rổ ETF, tôi sẽ rất vui lòng giúp đỡ bạn phân tích và hiểu rõ hơn.
+2026-05-27 23:17:49:141 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-1] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.37[0;39m | >>> NHẬN CÂU HỎI: Tính năng mua/bán rổ ETF bao gồm các chức năng gì
+2026-05-27 23:17:50:029 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-1] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.46[0;39m | Tìm thấy 3 đoạn văn liên quan trong DB (Ngưỡng > 0.4)
+2026-05-27 23:17:50:029 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-1] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.56[0;39m | MATCH [1]: Điểm khớp: 0.869784551317796 | Nguồn: URD_SPCT_2020 Feb_ver 1.4.docx | Nội dung trích xuất: Chức năng thống kê lệnh khớp mua/bán của BSC:
+Phần mềm bổ sung tính năng thêm 1 tab thống kê mua/bán đã khớp của tài khoản BSC, giao diện có thể theo bảng như sau:
+Thời gian	Tiểu khoản	Mã CW	Lệnh (Mua/Bán)	Số lượng khớp	Giá khớp
+2026-05-27 23:17:50:030 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-1] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.56[0;39m | MATCH [2]: Điểm khớp: 0.8567472597455421 | Nguồn: URD_SPCT_2020 Feb_ver 1.4.docx | Nội dung trích xuất: Ví dụ 1.
+
+Loại hình	Mua
+Tên rổ	Test	Giá trị mua/bán dự tính	14,695,000	Tiểu khoản	00010008686
+
+Mã cổ phiếu	Loại lệnh mua/bán	Số lượng cổ phiếu (theo khai báo rổ)	Tỷ lệ dự khớp	Mức giá mua/bán dự kiến	Giá trị khớp dự kiến
+CTG	B1	100	0%	22,000	2,200,000
+VPB	MP	100	100%	20,500	2,050,000
+GAS	MP	50	100%	93,900	4,695,000
+VIC	A1	50	80%	115,000	5,750,000
+
++ Cho phép thay đổi khối lượng mua/bán khác nhau cho từng mã cổ phiếu trong rổ khác nhau. Ví dụ như cùng với rổ cổ phiếu ở ví dụ 1, 4 mã cổ phiếu trong rổ có thể được mua/bán với khối lượng tùy chỉnh, khác với khối lượng cổ phiếu đã khai báo. Đồng thời, giá trị mua/bán dự tính cũng thay đổi theo khối lượng đã điều chỉnh.
+Mã cổ phiếu	Loại lệnh mua/bán	Số lượng cổ phiếu (sau thay đổi)	Tỷ lệ dự khớp	Mức giá mua/bán dự kiến	Giá trị khớp dự kiến
+CTG	B1	80	0%	22,000	
+VPB	MP	50	100%	20,500	
+GAS	MP	60	100%	93,900	
+VIC	A1	50	80%	115,000
+2026-05-27 23:17:50:030 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-1] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.56[0;39m | MATCH [3]: Điểm khớp: 0.8409839116841713 | Nguồn: URD_SPCT_2020 Feb_ver 1.4.docx | Nội dung trích xuất: Lưu ý: số lượng cổ phiếu để mặc định là theo khai báo rổ nhưng cho phép người dùng thay đổi giá trị ở cột này
+Tính năng đặt lệnh mua/bán rổ cổ phiếu
+Cho phép đẩy toàn bộ lệnh mua/bán rổ cổ phiếu lên đồng thời tại các mức giá tùy chỉnh cho từng mã cổ phiếu trong rổ (theo như minh họa trên).
+Sau khi đẩy toàn bộ lệnh trên lên thị trường, cho phép hủy toàn bộ lệnh chưa khớp bằng tính năng Hủy mua/bán rổ cổ phiếu
+Hoàn thiện mua/bán rổ cổ phiếu: Đối với các rổ cổ phiếu chưa khớp 100%, hệ thống tự tính toán số lượng cổ phiếu chưa mua được, đẩy lệnh MP cho toàn bộ chỗ cổ phiếu chưa được khớp còn lại lên sàn để đảm bảo tỷ lệ hoàn thành là 100%.
+2026-05-27 23:17:50:030 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-1] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.66[0;39m | Đang gọi Qwen 7B để tổng hợp câu trả lời...
+2026-05-27 23:17:55:023 | [32mINFO [0;39m | [[35m27908[0;39m] | [http-nio-8080-exec-1] | [36mc.a.a.m.r.s.RagChatService.retrieveAndAnswer.68[0;39m | <<< TRẢ LỜI: Tôi xin lỗi, nhưng tài liệu khảo sát bạn cung cấp không đề cập đến tính năng mua/bán rổ ETF cụ thể. Tài liệu chủ yếu tập trung vào tính năng thống kê lệnh khớp mua/bán của BSC và tính năng đặt lệnh mua/bán rổ cổ phiếu.
+
+Nếu bạn có thêm thông tin hoặc tài liệu chi tiết hơn về tính năng mua/bán rổ ETF, tôi sẽ rất vui lòng giúp đỡ bạn phân tích và hiểu rõ hơn.
