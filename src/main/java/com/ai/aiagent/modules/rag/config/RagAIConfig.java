@@ -1,37 +1,42 @@
 package com.ai.aiagent.modules.rag.config;
 
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.ollama.OllamaEmbeddingModel;
-import dev.langchain4j.store.embedding.EmbeddingStore;
-import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
-import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
 
 @Configuration
 public class RagAIConfig {
 
+    @Value("${rag.openai.api-key}")
+    private String openAiApiKey;
+    @Value("${rag.openai.embedding-model}")
+    private String embeddingModelName;
+    @Value("${rag.openai.embedding-dimensions}")
+    private int embeddingDimensions;
+
+    /**
+     * Embedding bằng OpenAI text-embedding-3.
+     * LƯU Ý: model embedding của truy vấn và của tài liệu PHẢI giống nhau,
+     * nên khi đổi model bắt buộc phải nạp (re-ingest) lại toàn bộ tài liệu.
+     *
+     * Việc lưu trữ vector giờ do {@code RagVectorRepository} đảm nhiệm (JdbcTemplate)
+     * để hỗ trợ Hybrid Search, nên không còn bean EmbeddingStore của langchain4j ở đây.
+     */
     @Bean
     public EmbeddingModel ragEmbeddingModel() {
-        return OllamaEmbeddingModel.builder()
-                .baseUrl("http://localhost:11434")
-                .modelName("nomic-embed-text")
-                .build();
-    }
-
-    @Bean
-    public EmbeddingStore<TextSegment> ragEmbeddingStore() {
-        return PgVectorEmbeddingStore.builder()
-                .host("localhost")
-                .port(5432)
-                .user("admin")
-                .password("admin")
-                .database("rag_db")
-                .table("sharepoint_vectors")
-                // Model nomic-embed-text sinh ra vector có độ dài 768 chiều
-                .dimension(768)
-                // Tự động tạo bảng và extension pgvector nếu chưa tồn tại
-                .createTable(true)
+        if (openAiApiKey == null || openAiApiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "Chưa cấu hình OPENAI_API_KEY – cần thiết cho embedding text-embedding-3.");
+        }
+        return OpenAiEmbeddingModel.builder()
+                .apiKey(openAiApiKey)
+                .modelName(embeddingModelName)
+                .dimensions(embeddingDimensions)
+                .timeout(Duration.ofMinutes(2))
                 .build();
     }
 }

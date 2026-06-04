@@ -1,0 +1,135 @@
+🔵 QUY TRÌNH UPLOAD FILE
+Phần 1 — 3 cách đưa file vào (entry points)
+
+┌─ Cách A: /upload          → 1 file,  ĐỒNG BỘ (đợi xong mới trả về)
+├─ Cách B: /upload-batch    → nhiều file, CHẠY NỀN → trả jobId
+└─ Cách C: /ingest-folder   → cả thư mục trên server, CHẠY NỀN → trả jobId
+File: RagIngestionController.java
+
+Với cách B & C (dùng cho 500 file) — luồng bất đồng bộ:
+
+
+Client gọi /ingest-folder {path, category}
+   │
+   ▼
+[1] Controller liệt kê file hợp lệ trong folder
+   │   → tạo Job (jobId, total=500, state=RUNNING)
+   ▼
+[2] Trả NGAY về client: { jobId, statusUrl }   ← không đợi
+   │
+   ▼  (chạy nền trong RagIngestionJobService)
+[3] Worker lặp từng file:
+   │     - set currentFile = "hop-dong.docx"
+   │     - gọi pipeline nạp 1 file (Phần 2 bên dưới)
+   │     - cập nhật processed++, succeeded/failed, totalChunks
+   │     - lỗi 1 file → ghi vào errors[], KHÔNG dừng cả job
+   ▼
+[4] Xong → state = DONE
+
+Client thăm dò: GET /jobs/{jobId}
+   → { state, percent: 42, processed: 210/500, currentFile, errors[] }
+File: RagIngestionJobService.java — 2 job song song, mỗi job xử lý file tuần tự, trạng thái lưu trong RAM.
+
+Phần 2 — Pipeline nạp 1 file (lõi)
+File: RagIngestionService.java
+
+
+File "noi-quy.docx" (category="nhan-su")
+   │
+   ▼
+[1] PARSE — ApachePOI bóc text thô       → "tài liệu 25.000 ký tự"
+   │
+   ▼
+[2] BĂM PARENT (2000 ký tự, overlap 200) → Parent#1, #2, #3... (~12 parent)
+   │
+   ▼
+[3] BĂM CHILD (500 ký tự, overlap 100)   → mỗi parent ⟶ ~4 child
+   │   Gom thành 2 list song song:
+   │     contents    = [child1, child2, ...]        (~48 child)
+   │     parentTexts = [parent của child1, ...]
+   │
+   ▼
+[4] SINH CONTEXT (nếu bật) — SONG SONG 8 luồng   🔸 gọi gpt-4o-mini (mỗi child 1 lần, song song)
+   │   contexts = ["Đoạn nói về quy trình nghỉ phép phòng KT", ...]
+   │   (nếu tắt → contexts = ["", "", ...])
+   │
+   ▼
+[5] EMBED cả lô — text = context + content        🔸 gọi OpenAI embedding (1 lần cho cả lô)
+   │   → 48 vector 1536 chiều
+   │
+   ▼
+[6] GHI ĐÈ — xóa chunk cũ cùng tên file (chống trùng)
+   │   deleteByDocId("noi-quy.docx")
+   │
+   ▼
+[7] LƯU DB — insertBatch vào rag_chunks
+       mỗi dòng = doc_id + file_name + category + chunk_index
+                + content + context + parent_content
+                + embedding(vector) + tsv(to_tsvector cho full-text)
+Kết quả 1 dòng trong DB:
+
+cột	giá trị
+file_name	noi-quy.docx
+category	nhan-su
+content	"...nghỉ phép tối đa 12 ngày..." (child nhỏ)
+context	"Đoạn này thuộc mục chế độ nghỉ phép" (LLM sinh)
+parent_content	đoạn lớn 2000 ký tự chứa child
+embedding	[0.02, -0.13, ...] (1536 số)
+tsv	'nghỉ':3 'phép':4 'tối':5 ... (full-text)
+🟢 QUY TRÌNH CHAT
+File: RagChatService.java
+
+
+POST /chat { question, provider?, model?, conversationId?, category? }
+   │
+   ▼
+[1] CHỌN MODEL TRẢ LỜI
+   │   override theo request → nếu không có thì lấy mặc định (Settings API)
+   │
+   ▼
+[2] VIẾT LẠI CÂU HỎI (nếu có conversationId + lịch sử)   🔸 gọi gpt-4o-mini
+   │   "còn cái kia?" + lịch sử → "Mức phụ cấp xăng xe NV kinh doanh?"
+   │   (chưa có lịch sử → giữ nguyên câu hỏi)
+   │
+   ▼
+[3] HYBRID SEARCH (lọc theo category nếu có)              🔸 gọi OpenAI embedding (embed câu hỏi)
+   │      ┌─ Vector search  (cosine, top 20) ─┐
+   │      └─ Full-text search (ts_rank, top 20)┘
+   │   → gộp bằng RRF → 30 ứng viên tốt nhất
+   │   (nếu có category → chỉ tìm trong nhóm đó: WHERE category = 'nhan-su')
+   │
+   ▼
+[4] RERANK — LLM đọc 30 ứng viên, chọn 5 đoạn liên quan nhất  🔸 gọi gpt-4o-mini
+   │   loại các đoạn "trùng từ khóa nhưng lạc đề"
+   │
+   ▼
+[5] MỞ RỘNG PARENT + KHỬ TRÙNG
+   │   từ 5 child → lấy parent_content (đoạn lớn, đủ ngữ cảnh)
+   │   nhiều child cùng 1 parent → chỉ lấy parent đó 1 lần
+   │   → dựng context kèm [Nguồn: noi-quy.docx]
+   │
+   ▼
+[6] SINH CÂU TRẢ LỜI                                       🔸 gọi model bạn chọn (GPT/Gemini/Ollama)
+   │   prompt: "chỉ trả lời theo tài liệu, nêu nguồn, không bịa"
+   │
+   ▼
+[7] LƯU HỘI THOẠI (theo conversationId, giữ 6 cặp gần nhất)
+   │
+   ▼
+Trả về: { "answer": "...", "sources": ["noi-quy.docx"] }
+Số lần gọi API mỗi câu hỏi
+Bước	Gọi gì	Khi nào
+[2] Rewrite	gpt-4o-mini	chỉ khi có conversationId + đã có lịch sử
+[3] Embed	OpenAI embedding	luôn
+[4] Rerank	gpt-4o-mini	luôn (trừ khi đổi Cohere)
+[6] Trả lời	model bạn chọn	luôn
+→ Câu đầu: 3 lần gọi. Câu nối tiếp: 4 lần gọi.
+
+Tóm tắt mối liên hệ Upload ↔ Chat
+
+UPLOAD tạo sẵn cho mỗi chunk:
+   • embedding  → để VECTOR search (bước chat [3])
+   • tsv        → để FULL-TEXT search (bước chat [3])
+   • context    → giúp khớp đúng hơn (Contextual Retrieval)
+   • parent     → để trả lời đủ ngữ cảnh (bước chat [5])
+   • category   → để lọc nhóm (bước chat [3])
