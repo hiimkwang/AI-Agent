@@ -6,29 +6,46 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
-        <relativePath/> </parent>
+        <version>3.5.9</version>
+        <relativePath/>
+    </parent>
 
     <groupId>com.ai</groupId>
     <artifactId>AIAgent</artifactId>
-    <version>0.0.1</version>
+    <version>0.2.0</version>
     <name>AIAgent</name>
     <description>AIAgent for RAG Document System</description>
 
     <properties>
         <java.version>21</java.version>
         <langchain4j.version>0.31.0</langchain4j.version>
-        <maven.test.skip>true</maven.test.skip>
+        <poi.version>5.4.0</poi.version>
+        <jsoup.version>1.18.3</jsoup.version>
+        <pdfbox.version>3.0.3</pdfbox.version>
+        <flexmark.version>0.64.8</flexmark.version>
+        <anthropic.version>2.34.0</anthropic.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
         <dependency>
@@ -37,6 +54,7 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- ============ LLM ============ -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
@@ -44,7 +62,7 @@
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-document-parser-apache-poi</artifactId>
+            <artifactId>langchain4j-open-ai</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
         <dependency>
@@ -52,19 +70,51 @@
             <artifactId>langchain4j-ollama</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
-        <!-- OpenAI: dùng cho cả Chat (GPT) lẫn Embedding (text-embedding-3) -->
+        <!-- Embedding chay TRONG TIEN TRINH (ONNX, khong can API key, khong can mang).
+             Dung cho dev/test va lam duong du phong khi provider ngoai gap su co. -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai</artifactId>
+            <artifactId>langchain4j-embeddings-all-minilm-l6-v2</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
+        <!-- Claude (Anthropic) qua SDK chinh thuc -->
         <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-pgvector</artifactId>
-            <version>${langchain4j.version}</version>
+            <groupId>com.anthropic</groupId>
+            <artifactId>anthropic-java</artifactId>
+            <version>${anthropic.version}</version>
         </dependency>
 
-        <!-- JdbcTemplate + Postgres driver: dùng cho Hybrid Search (quản lý schema trực tiếp) -->
+        <!-- ============ Chuyen doi tai lieu sang Markdown ============ -->
+        <!-- Office: .doc .docx .xls .xlsx .ppt .pptx (giu cau truc bang) -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <!-- PDF -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
+        <!-- HTML -> Markdown -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>${jsoup.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.vladsch.flexmark</groupId>
+            <artifactId>flexmark-html2md-converter</artifactId>
+            <version>${flexmark.version}</version>
+        </dependency>
+
+        <!-- ============ Luu tru ============ -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -74,7 +124,26 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
 
+        <!-- Cache trong bo nho (exact-match + semantic cache) -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

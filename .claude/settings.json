@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./mvnw compile)",
+      "Bash(./mvnw clean compile)",
+      "Bash(./mvnw package*)",
+      "Bash(./mvnw dependency:tree*)",
+      "Bash(./mvnw help:effective-pom*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(curl -s http://localhost:8080/*)",
+      "Bash(psql*-c \"SELECT*)",
+      "Bash(psql*-c \"\\\\d*)"
+    ],
+    "deny": [
+      "Read(./logs/**)",
+      "Read(./target/**)",
+      "Read(**/.env)",
+      "Read(**/*.pem)",
+      "Read(**/*.jks)"
+    ]
+  }
+}

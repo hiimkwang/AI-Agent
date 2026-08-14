@@ -1,0 +1,1150 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Quản trị trợ lý tài liệu</title>
+    <link rel="stylesheet" href="/app.css">
+    <style>
+        .page { max-width: 82rem; margin: 0 auto; padding: 1.2rem clamp(.8rem, 3vw, 2rem) 4rem; }
+
+        .tabs { display: flex; gap: .2rem; border-bottom: 1px solid var(--rule); margin-bottom: 1.2rem;
+                overflow-x: auto; }
+        .tabs button {
+            border: none; background: transparent; border-bottom: 2px solid transparent;
+            border-radius: 0; padding: .55rem .9rem; color: var(--muted); white-space: nowrap;
+            transition: color .15s ease, border-color .15s ease;
+        }
+        .tabs button:hover:not(.active) { color: var(--fg); box-shadow: none; }
+        .tabs button.active { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 700; }
+        .panel { display: none; animation: panel-in .15s ease; }
+        .panel.active { display: block; }
+        @keyframes panel-in { from { opacity: 0; } to { opacity: 1; } }
+
+        h2 { font-size: 1.15rem; margin: 0 0 .2rem; }
+        .sub { color: var(--muted); font-size: .9rem; margin: 0 0 1rem; max-width: 60ch; }
+        section + section { margin-top: 1.6rem; }
+
+        /* ------------------------------------------------------- Stat tiles */
+        .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1px;
+                 background: var(--rule); border: 1px solid var(--rule);
+                 border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+        .tile {
+            background: var(--surface); padding: .8rem .9rem .8rem 1.05rem;
+            border-left: 3px solid transparent; transition: border-color .15s ease;
+        }
+        .tile dt {
+            font-family: var(--mono); font-size: .66rem; letter-spacing: .1em;
+            text-transform: uppercase; color: var(--faint);
+        }
+        .tile dd {
+            margin: .25rem 0 0; font-size: 1.6rem; line-height: 1.1; font-weight: 600;
+            font-variant-numeric: lining-nums tabular-nums;
+        }
+        .tile dd small { font-size: .8rem; color: var(--muted); font-weight: 400; }
+        .tile.warn { border-left-color: var(--ochre); }
+        .tile.warn dd { color: var(--ochre); }
+        .tile.bad { border-left-color: var(--crimson); }
+        .tile.bad dd { color: var(--crimson); }
+        .tile.good { border-left-color: var(--good); }
+        .tile.good dd { color: var(--good); }
+
+        .kv { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .9rem; font-size: .88rem; }
+        .kv dt { color: var(--muted); }
+        .kv dd { margin: 0; font-family: var(--mono); font-size: .84rem; }
+
+        .drop {
+            border: 2px dashed var(--rule-strong);
+            border-radius: var(--radius);
+            padding: 1.6rem 1rem;
+            text-align: center;
+            color: var(--muted);
+            cursor: pointer;
+            background: var(--surface);
+        }
+        .drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+        .filelist { margin-top: .6rem; font-size: .85rem; }
+
+        .job { padding: .7rem .9rem; display: flex; flex-direction: column; gap: .4rem; }
+        .job .top { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+        .job .top b { font-family: var(--mono); font-size: .8rem; }
+
+        .chunk-preview { display: flex; flex-direction: column; gap: .5rem; }
+        .chunk-preview .c {
+            border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+            padding: .5rem .7rem; background: var(--surface);
+        }
+        .chunk-preview .c .h {
+            font-family: var(--mono); font-size: .7rem; color: var(--faint);
+            display: flex; gap: .5rem; margin-bottom: .3rem; flex-wrap: wrap;
+        }
+        .chunk-preview .c .t { font-size: .85rem; white-space: pre-wrap; }
+
+        /* ------------------------------------------------- Provider & API key */
+        #provider-select { max-width: 22rem; }
+        .provider-panel {
+            display: none;
+            flex-direction: column;
+            gap: .85rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--rule);
+        }
+        .provider-panel.active { display: flex; }
+        .provider-panel .field { flex: 0 0 auto; max-width: 26rem; }
+        .provider-panel .key-row { display: flex; gap: .4rem; }
+        .provider-panel .key-row input { flex: 1; }
+        .provider-panel .hint { font-size: .78rem; color: var(--faint); margin: .3rem 0 0; }
+        .provider-panel .hint.error { color: var(--crimson); }
+        .provider-panel .hint.ok { color: var(--good); }
+        .provider-panel .connect-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+        .default-model-card .row { align-items: flex-end; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand"><span class="dot"></span> Trợ lý tài liệu <small>quản trị</small></div>
+    <nav>
+        <a href="/">Hỏi đáp</a>
+        <a href="/admin.html" class="active">Quản trị</a>
+    </nav>
+    <div class="spacer"></div>
+    <button class="ghost tiny" id="theme-toggle">Tối</button>
+    <button class="ghost tiny" onclick="promptForKey()">API key</button>
+</div>
+
+<div class="page">
+    <div class="tabs">
+        <button data-tab="overview" class="active">Tổng quan</button>
+        <button data-tab="ingest">Nạp tài liệu</button>
+        <button data-tab="documents">Tài liệu</button>
+        <button data-tab="jobs">Job</button>
+        <button data-tab="providers">Nhà cung cấp &amp; API key</button>
+        <button data-tab="settings">Cấu hình</button>
+        <button data-tab="eval">Đánh giá</button>
+        <button data-tab="feedback">Phản hồi</button>
+    </div>
+
+    <!-- ============================================================ TỔNG QUAN -->
+    <div class="panel active" id="tab-overview">
+        <h2>Tổng quan hệ thống</h2>
+        <p class="sub">Số liệu tính từ lần khởi động gần nhất. Chi tiết dạng Prometheus có ở
+            <span class="mono">/actuator/prometheus</span>.</p>
+
+        <dl class="tiles" id="tiles"></dl>
+
+        <section class="row" style="align-items:stretch; margin-top:1.2rem">
+            <div class="card" style="flex:1 1 320px">
+                <h3>Pipeline đang chạy</h3>
+                <dl class="kv" id="pipeline-kv"></dl>
+            </div>
+            <div class="card" style="flex:1 1 260px">
+                <h3>Provider</h3>
+                <dl class="kv" id="providers-kv"></dl>
+                <p class="faint" style="font-size:.8rem;margin-bottom:0">
+                    Provider chưa có API key sẽ không chọn được ở màn hỏi đáp.</p>
+            </div>
+            <div class="card" style="flex:1 1 260px">
+                <h3>Nạp liệu</h3>
+                <dl class="kv" id="ingest-kv"></dl>
+            </div>
+        </section>
+
+        <section class="row">
+            <button onclick="loadOverview()">Làm mới</button>
+            <button onclick="clearCache()">Xoá cache câu trả lời</button>
+            <button class="danger" onclick="purgeConversations()">Dọn hội thoại cũ (&gt;90 ngày)</button>
+        </section>
+    </div>
+
+    <!-- ======================================================= NẠP TÀI LIỆU -->
+    <div class="panel" id="tab-ingest">
+        <h2>Nạp tài liệu</h2>
+        <p class="sub">Mọi định dạng đều được chuyển sang Markdown trước khi băm chunk — heading và
+            bảng biểu được giữ lại. Hãy dùng <b>Xem trước</b> để kiểm tra kết quả chuyển đổi
+            trước khi nạp thật.</p>
+
+        <section class="card">
+            <h3>1. Xem trước chuyển đổi (không nạp vào DB)</h3>
+            <div class="row">
+                <div class="field">
+                    <label for="preview-file">Chọn một file</label>
+                    <input type="file" id="preview-file">
+                </div>
+                <button class="primary" onclick="previewConvert()">Xem Markdown + chunk</button>
+            </div>
+            <div id="preview-out" style="margin-top:.8rem"></div>
+        </section>
+
+        <section class="card">
+            <h3>2. Nạp file</h3>
+            <div class="drop" id="drop">
+                Kéo–thả file vào đây, hoặc bấm để chọn.<br>
+                <small class="faint" id="ext-hint">Đang tải danh sách định dạng…</small>
+            </div>
+            <input type="file" id="upload-files" multiple hidden>
+            <div class="filelist" id="filelist"></div>
+
+            <div class="row" style="margin-top:.8rem">
+                <div class="field">
+                    <label for="up-category">Nhóm tài liệu (category)</label>
+                    <input id="up-category" placeholder="vd: nhan-su">
+                </div>
+                <div class="field">
+                    <label for="up-roles">Chỉ role được đọc (rỗng = mọi người)</label>
+                    <input id="up-roles" placeholder="vd: HR,ADMIN">
+                </div>
+                <div class="field">
+                    <label for="up-effective">Ngày hiệu lực</label>
+                    <input id="up-effective" type="date">
+                </div>
+                <div class="field">
+                    <label for="up-expires">Ngày hết hiệu lực</label>
+                    <input id="up-expires" type="date">
+                </div>
+                <div style="flex:0 0 auto">
+                    <label class="inline" title="Nạp lại kể cả khi nội dung không đổi">
+                        <input type="checkbox" id="up-force"> Nạp lại dù không đổi
+                    </label>
+                </div>
+                <button class="primary" onclick="uploadFiles()">Nạp</button>
+            </div>
+            <p class="faint" style="font-size:.82rem">
+                Metadata cũng có thể khai trực tiếp trong file .md bằng khối front-matter
+                (<span class="mono">title, category, doc_number, version, effective_date, roles</span>).
+                Giá trị điền ở form này sẽ thắng front-matter.
+            </p>
+            <div id="upload-out"></div>
+        </section>
+
+        <section class="card">
+            <h3>3. Nạp cả thư mục trên máy chủ</h3>
+            <div class="row">
+                <div class="field" style="flex:2 1 320px">
+                    <label for="folder-path">Đường dẫn thư mục</label>
+                    <input id="folder-path" placeholder="chỉ chấp nhận đường dẫn trong danh sách cho phép">
+                </div>
+                <div style="flex:0 0 auto">
+                    <label class="inline"><input type="checkbox" id="folder-recursive" checked> Gồm thư mục con</label>
+                </div>
+                <button class="primary" onclick="ingestFolder()">Nạp thư mục</button>
+            </div>
+            <p class="faint" style="font-size:.82rem" id="roots-hint"></p>
+        </section>
+    </div>
+
+    <!-- =========================================================== TÀI LIỆU -->
+    <div class="panel" id="tab-documents">
+        <h2>Tài liệu đã nạp</h2>
+        <p class="sub">Mỗi tài liệu giữ cả bản Markdown đã chuyển đổi, nên kiểm tra được bộ chuyển
+            đổi làm đúng hay sai mà không phải mở file gốc.</p>
+        <div class="row" style="margin-bottom:.8rem">
+            <div class="field"><label for="doc-search">Tìm theo tên / tiêu đề / số hiệu</label>
+                <input id="doc-search" placeholder="nhập rồi Enter"></div>
+            <div class="field"><label for="doc-category">Nhóm</label>
+                <select id="doc-category"><option value="">Tất cả</option></select></div>
+            <button onclick="loadDocuments()">Tìm</button>
+        </div>
+        <div class="card scroll" style="padding:0">
+            <table>
+                <thead><tr>
+                    <th>Tên file</th><th>Nhóm</th><th>Số hiệu / bản</th><th>Hiệu lực</th>
+                    <th>Trạng thái</th><th class="num">Chunk</th><th>Định dạng</th><th></th>
+                </tr></thead>
+                <tbody id="doc-rows"><tr><td colspan="8" class="empty">Đang tải…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ================================================================ JOB -->
+    <div class="panel" id="tab-jobs">
+        <h2>Job nạp liệu</h2>
+        <p class="sub">Trạng thái job lưu trong DB nên không mất khi khởi động lại, và job đang chạy
+            có thể yêu cầu dừng.</p>
+        <div class="row" style="margin-bottom:.8rem">
+            <button onclick="loadJobs()">Làm mới</button>
+            <label class="inline"><input type="checkbox" id="jobs-auto" checked> Tự làm mới mỗi 3 giây</label>
+        </div>
+        <div class="grid" id="jobs" style="grid-template-columns:1fr"></div>
+    </div>
+
+    <!-- ================================================ NHÀ CUNG CẤP & API KEY -->
+    <div class="panel" id="tab-providers">
+        <h2>Nhà cung cấp &amp; API key</h2>
+        <p class="sub">Nhập API key rồi bấm <b>Kết nối</b> — hệ thống gọi thẳng API của nhà cung
+            cấp để xác thực key và lấy đúng danh sách model đang khả dụng, không cần gõ tay tên
+            model. Kết nối thành công thì lưu ngay vào DB (chỉ ADMIN xem/sửa được, không bao giờ
+            hiển thị lại key đầy đủ) — để trống ô API key khi Kết nối lại nghĩa là dùng key đã lưu.</p>
+
+        <section class="card default-model-card" style="margin-bottom:1.2rem">
+            <h3>Model trả lời mặc định</h3>
+            <p class="sub" style="margin:0 0 .8rem">Đang dùng: <span class="chip accent mono" id="default-current">—</span></p>
+            <div class="row">
+                <div class="field">
+                    <label for="default-provider">Nhà cung cấp</label>
+                    <select id="default-provider">
+                        <option value="OPENAI">OpenAI</option>
+                        <option value="ANTHROPIC">Anthropic</option>
+                        <option value="GEMINI">Gemini</option>
+                        <option value="OLLAMA">Ollama</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="default-model">Model</label>
+                    <select id="default-model"></select>
+                </div>
+                <button class="primary" onclick="setDefaultModel()">Đặt làm mặc định</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="field" style="max-width:22rem">
+                <label for="provider-select">Chọn nhà cung cấp để cấu hình</label>
+                <select id="provider-select">
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="ollama">Ollama (nội bộ, không cần key)</option>
+                    <option value="cohere">Cohere (dùng cho rerank)</option>
+                </select>
+            </div>
+
+            <div class="provider-panel active" data-provider="openai">
+                <p class="row" style="margin:0"><span class="chip" id="chip-openai">—</span></p>
+                <div class="field">
+                    <label for="prov-openai-key">API key</label>
+                    <div class="key-row">
+                        <input type="password" autocomplete="new-password" id="prov-openai-key"
+                               placeholder="để trống = giữ nguyên">
+                        <button class="tiny danger ghost" onclick="clearProviderKey('openai')">Xoá</button>
+                    </div>
+                    <p class="hint" id="mask-openai"></p>
+                </div>
+                <div class="field"><label for="prov-openai-baseurl">Base URL (tuỳ chọn)</label>
+                    <input id="prov-openai-baseurl" placeholder="mặc định api.openai.com"></div>
+                <div class="field"><label for="prov-openai-model">Model</label>
+                    <select id="prov-openai-model"></select></div>
+                <div class="connect-row">
+                    <button class="primary" onclick="connectProvider('openai')" id="btn-connect-openai">Kết nối</button>
+                    <span class="hint" id="connect-status-openai"></span>
+                </div>
+            </div>
+
+            <div class="provider-panel" data-provider="anthropic">
+                <p class="row" style="margin:0"><span class="chip" id="chip-anthropic">—</span></p>
+                <div class="field">
+                    <label for="prov-anthropic-key">API key</label>
+                    <div class="key-row">
+                        <input type="password" autocomplete="new-password" id="prov-anthropic-key"
+                               placeholder="để trống = giữ nguyên">
+                        <button class="tiny danger ghost" onclick="clearProviderKey('anthropic')">Xoá</button>
+                    </div>
+                    <p class="hint" id="mask-anthropic"></p>
+                </div>
+                <div class="field"><label for="prov-anthropic-model">Model</label>
+                    <select id="prov-anthropic-model"></select></div>
+                <div class="row" style="gap:.6rem">
+                    <div class="field" style="flex:0 0 auto">
+                        <label class="inline"><input type="checkbox" id="prov-anthropic-thinking"> Bật thinking</label>
+                    </div>
+                    <div class="field"><label for="prov-anthropic-effort">Effort</label>
+                        <input id="prov-anthropic-effort" placeholder="low"></div>
+                </div>
+                <div class="connect-row">
+                    <button class="primary" onclick="connectProvider('anthropic')" id="btn-connect-anthropic">Kết nối</button>
+                    <span class="hint" id="connect-status-anthropic"></span>
+                </div>
+            </div>
+
+            <div class="provider-panel" data-provider="gemini">
+                <p class="row" style="margin:0"><span class="chip" id="chip-gemini">—</span></p>
+                <div class="field">
+                    <label for="prov-gemini-key">API key</label>
+                    <div class="key-row">
+                        <input type="password" autocomplete="new-password" id="prov-gemini-key"
+                               placeholder="để trống = giữ nguyên">
+                        <button class="tiny danger ghost" onclick="clearProviderKey('gemini')">Xoá</button>
+                    </div>
+                    <p class="hint" id="mask-gemini"></p>
+                </div>
+                <div class="field"><label for="prov-gemini-model">Model</label>
+                    <select id="prov-gemini-model"></select></div>
+                <div class="connect-row">
+                    <button class="primary" onclick="connectProvider('gemini')" id="btn-connect-gemini">Kết nối</button>
+                    <span class="hint" id="connect-status-gemini"></span>
+                </div>
+            </div>
+
+            <div class="provider-panel" data-provider="ollama">
+                <p class="row" style="margin:0"><span class="chip accent">nội bộ, không cần key</span></p>
+                <div class="field"><label for="prov-ollama-baseurl">Base URL</label>
+                    <input id="prov-ollama-baseurl" placeholder="http://localhost:11434"></div>
+                <div class="field"><label for="prov-ollama-model">Model</label>
+                    <select id="prov-ollama-model"></select></div>
+                <div class="connect-row">
+                    <button class="primary" onclick="connectProvider('ollama')" id="btn-connect-ollama">Kết nối</button>
+                    <span class="hint" id="connect-status-ollama"></span>
+                </div>
+            </div>
+
+            <div class="provider-panel" data-provider="cohere">
+                <p class="row" style="margin:0"><span class="chip" id="chip-cohere">—</span></p>
+                <p class="sub" style="margin:0">Chỉ dùng khi chọn <span class="mono">rerank.provider = COHERE</span>
+                    ở tab Cấu hình.</p>
+                <div class="field">
+                    <label for="prov-cohere-key">API key</label>
+                    <div class="key-row">
+                        <input type="password" autocomplete="new-password" id="prov-cohere-key"
+                               placeholder="để trống = giữ nguyên">
+                        <button class="tiny danger ghost" onclick="clearProviderKey('cohere')">Xoá</button>
+                    </div>
+                    <p class="hint" id="mask-cohere"></p>
+                </div>
+                <div class="field"><label for="prov-cohere-model">Rerank model</label>
+                    <select id="prov-cohere-model"></select></div>
+                <div class="connect-row">
+                    <button class="primary" onclick="connectProvider('cohere')" id="btn-connect-cohere">Kết nối</button>
+                    <span class="hint" id="connect-status-cohere"></span>
+                </div>
+            </div>
+
+            <section class="row" style="margin-top:.4rem">
+                <button onclick="saveProviders()">Lưu các lựa chọn khác (model đã chọn, base URL, thinking/effort…)</button>
+                <button onclick="loadProviders()">Làm mới</button>
+            </section>
+        </section>
+    </div>
+
+    <!-- =========================================================== CẤU HÌNH -->
+    <div class="panel" id="tab-settings">
+        <h2>Cấu hình runtime</h2>
+        <p class="sub">Đổi ở đây áp dụng <b>ngay</b>, không cần khởi động lại, và được lưu vào DB nên
+            sống qua lần restart sau. Đây là điều kiện để tinh chỉnh có cơ sở: đổi tham số → chạy lại
+            bộ đánh giá → so điểm. Provider/model trả lời mặc định cấu hình ở tab
+            <b>Nhà cung cấp &amp; API key</b>.</p>
+        <div class="card">
+            <div id="settings-form" class="row" style="align-items:flex-end"></div>
+            <div class="row" style="margin-top:1rem">
+                <button class="primary" onclick="saveSettings()">Áp dụng</button>
+                <button onclick="loadSettings()">Hoàn tác thay đổi chưa lưu</button>
+                <button class="danger" onclick="resetSettings()">Xoá cấu hình đã lưu trong DB</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================== ĐÁNH GIÁ -->
+    <div class="panel" id="tab-eval">
+        <h2>Đánh giá chất lượng</h2>
+        <p class="sub">Bộ câu hỏi chuẩn lưu trong DB. Mỗi lần chạy được ghi lại kèm tham số retrieval,
+            nên bạn thấy ngay điểm tăng hay tụt sau khi đổi cấu hình. Cache tự động bị tắt khi chạy
+            đánh giá.</p>
+
+        <section class="card">
+            <h3>Thêm câu hỏi vào bộ chuẩn</h3>
+            <div class="row">
+                <div class="field" style="flex:2 1 280px">
+                    <label for="ev-question">Câu hỏi</label>
+                    <input id="ev-question" placeholder="vd: Nghỉ phép hằng năm được bao nhiêu ngày?">
+                </div>
+                <div class="field">
+                    <label for="ev-source">Nguồn mong đợi (tên file, tuỳ chọn)</label>
+                    <input id="ev-source" placeholder="noi-quy.md">
+                </div>
+                <div class="field">
+                    <label for="ev-suite">Bộ</label>
+                    <input id="ev-suite" value="default">
+                </div>
+                <button class="primary" onclick="addEvalCase()">Thêm</button>
+            </div>
+        </section>
+
+        <section class="row">
+            <button class="primary" onclick="runEval()" id="ev-run">Chạy đánh giá</button>
+            <button onclick="loadEval()">Làm mới</button>
+        </section>
+
+        <section>
+            <h3 style="font-size:1rem">Các lần chạy</h3>
+            <div class="card scroll" style="padding:0">
+                <table>
+                    <thead><tr>
+                        <th>Thời điểm</th><th>Bộ</th><th>Model</th><th class="num">Case</th>
+                        <th class="num">Chấm được</th><th class="num">Faithfulness</th>
+                        <th class="num">Relevance</th><th class="num">Recall</th>
+                        <th class="num">Từ chối</th><th class="num">Latency</th><th class="num">Chi phí</th>
+                    </tr></thead>
+                    <tbody id="ev-runs"><tr><td colspan="11" class="empty">Chưa có lần chạy nào.</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section>
+            <h3 style="font-size:1rem">Câu hỏi trong bộ chuẩn</h3>
+            <div class="card scroll" style="padding:0">
+                <table>
+                    <thead><tr><th>Câu hỏi</th><th>Nguồn mong đợi</th><th>Bộ</th><th></th></tr></thead>
+                    <tbody id="ev-cases"><tr><td colspan="4" class="empty">Chưa có câu hỏi nào.</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- =========================================================== PHẢN HỒI -->
+    <div class="panel" id="tab-feedback">
+        <h2>Phản hồi người dùng</h2>
+        <p class="sub">Các câu trả lời bị đánh giá xấu — đây là danh sách việc cần xem lại, và là
+            nguồn tốt nhất để bổ sung vào bộ câu hỏi chuẩn.</p>
+        <div class="row" style="margin-bottom:.8rem"><button onclick="loadFeedback()">Làm mới</button></div>
+        <div class="grid" id="feedback-list" style="grid-template-columns:1fr"></div>
+    </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="/app.js"></script>
+<script>
+    /* ------------------------------------------------------------- Tabs */
+    const tabLoaders = {
+        overview: loadOverview, documents: loadDocuments, jobs: loadJobs,
+        settings: loadSettings, eval: loadEval, feedback: loadFeedback,
+        ingest: loadAllowedRoots, providers: loadProviders
+    };
+
+    function activateTab(name, push) {
+        const btn = document.querySelector('.tabs button[data-tab="' + name + '"]');
+        if (!btn) return;
+        document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + name).classList.add('active');
+        if (push !== false) location.hash = name;
+        (tabLoaders[name] || (() => {}))();
+    }
+
+    document.querySelectorAll('.tabs button').forEach(b => {
+        b.onclick = () => activateTab(b.dataset.tab);
+    });
+
+    const initialTab = location.hash.replace('#', '');
+    if (initialTab && document.getElementById('tab-' + initialTab)) {
+        activateTab(initialTab, false);
+    }
+
+    /* --------------------------------------------------------- Tổng quan */
+    async function loadOverview() {
+        const o = await api('/api/v1/rag/admin/overview');
+        const m = o.metrics || {}, c = o.corpus || {}, cache = o.cache || {}, fb = o.feedback || {};
+
+        tiles([
+            ['Tài liệu', fmtInt(c.documents)],
+            ['Đoạn (chunk)', fmtInt(c.chunksInIndex)],
+            ['Câu hỏi', fmtInt(m.questions)],
+            ['Tỷ lệ từ chối', fmtPercent(m.abstainRate), m.abstainRate > 40 ? 'warn' : ''],
+            ['Cache hit', fmtInt((m.cacheHitsExact || 0) + (m.cacheHitsSemantic || 0)), 'good'],
+            ['Chi phí ước tính', fmtMoney(m.costUsd), 'warn'],
+            ['Token vào/ra', fmtInt(m.inputTokens) + ' / ' + fmtInt(m.outputTokens)],
+            ['Hài lòng', fb.satisfactionRate == null ? '—' : fmtPercent(fb.satisfactionRate),
+                fb.satisfactionRate != null && fb.satisfactionRate < 70 ? 'bad' : 'good'],
+            ['Lỗi', fmtInt(m.errors), m.errors > 0 ? 'bad' : ''],
+            ['Tài liệu hết hiệu lực', fmtInt(c.expired), c.expired > 0 ? 'warn' : ''],
+        ]);
+
+        const lat = m.latencyMs || {};
+        kv('pipeline-kv', {
+            'Model trả lời': o.pipeline.answerModel,
+            'Model nội bộ': o.pipeline.internalModel,
+            'Embedding': o.pipeline.embeddingModel + ' (' + o.pipeline.embeddingDimensions + ' chiều)',
+            'Embedding sẵn sàng': o.pipeline.embeddingReady ? 'có' : 'CHƯA',
+            'Rerank': o.pipeline.reranker,
+            'Hybrid search': bool(o.pipeline.hybridEnabled),
+            'Multi-query': bool(o.pipeline.multiQueryEnabled),
+            'HyDE': bool(o.pipeline.hydeEnabled),
+            'Sinh ngữ cảnh chunk': bool(o.pipeline.contextualEnabled),
+            'Cổng từ chối trả lời': bool(o.pipeline.abstainEnabled),
+            'Cách băm chunk': o.pipeline.chunkingStrategy,
+            'Latency trung bình': 'tổng ' + fmtMs(lat.totalP50) + ' · truy xuất ' + fmtMs(lat.retrievalMean)
+                + ' · rerank ' + fmtMs(lat.rerankMean) + ' · sinh ' + fmtMs(lat.generationMean),
+            'Cache': fmtInt(cache.entries) + ' bản ghi, ' + fmtInt(cache.hits) + ' lần dùng'
+        });
+        kv('providers-kv', Object.fromEntries(
+            Object.entries(o.providers).map(([k, v]) => [k, v ? 'có API key' : 'chưa cấu hình'])));
+        kv('ingest-kv', {
+            'Thư mục cho phép': (o.ingest.allowedRoots || []).join(', ') || '(chưa cấu hình)',
+            'Bỏ qua file không đổi': bool(o.ingest.skipUnchanged),
+            'Định dạng hỗ trợ': (o.ingest.supportedExtensions || []).join(' ')
+        });
+    }
+
+    function bool(v) { return v ? 'bật' : 'tắt'; }
+
+    function tiles(items) {
+        document.getElementById('tiles').innerHTML = items.map(([label, value, cls]) =>
+            '<div class="tile ' + (cls || '') + '"><dt>' + escapeHtml(label) + '</dt><dd>'
+            + escapeHtml(String(value)) + '</dd></div>').join('');
+    }
+
+    function kv(id, obj) {
+        document.getElementById(id).innerHTML = Object.entries(obj).map(([k, v]) =>
+            '<dt>' + escapeHtml(k) + '</dt><dd>' + escapeHtml(String(v == null ? '—' : v)) + '</dd>').join('');
+    }
+
+    async function clearCache() {
+        const r = await api('/api/v1/rag/admin/cache', { method: 'DELETE' });
+        toast(r.message); loadOverview();
+    }
+
+    async function purgeConversations() {
+        if (!confirm('Xoá toàn bộ hội thoại không hoạt động quá 90 ngày?')) return;
+        const r = await api('/api/v1/rag/admin/conversations/purge?olderThanDays=90', { method: 'DELETE' });
+        toast(r.message);
+    }
+
+    /* ------------------------------------------------------- Nạp tài liệu */
+    async function loadAllowedRoots() {
+        try {
+            const r = await api('/api/v1/rag/admin/allowed-roots');
+            document.getElementById('ext-hint').textContent =
+                'Định dạng: ' + (r.supportedExtensions || []).join(' ');
+            document.getElementById('roots-hint').textContent = r.configured
+                ? 'Thư mục được phép: ' + r.roots.join(' · ')
+                : 'Chưa cấu hình rag.ingestion.allowed-roots — endpoint này sẽ từ chối mọi đường dẫn. '
+                  + 'Đặt biến môi trường RAG_ALLOWED_ROOTS để bật.';
+        } catch (e) { /* toast da hien */ }
+    }
+
+    async function previewConvert() {
+        const input = document.getElementById('preview-file');
+        if (!input.files.length) { toast('Chọn một file trước.', 'warn'); return; }
+        const form = new FormData();
+        form.append('file', input.files[0]);
+        const out = document.getElementById('preview-out');
+        out.innerHTML = '<p class="muted">Đang chuyển đổi…</p>';
+        try {
+            const r = await api('/api/v1/rag/admin/convert?includeChunks=true&maxChunks=25',
+                { method: 'POST', body: form });
+            out.innerHTML =
+                '<div class="row" style="margin-bottom:.6rem">'
+                + '<span class="chip accent">' + escapeHtml(r.format) + '</span>'
+                + '<span class="chip mono">' + fmtInt(r.markdownChars) + ' ký tự Markdown</span>'
+                + '<span class="chip mono">' + fmtInt(r.chunkCount) + ' chunk</span>'
+                + (r.warnings || []).map(w => '<span class="chip ochre">' + escapeHtml(w) + '</span>').join('')
+                + '</div>'
+                + '<details><summary style="cursor:pointer">Xem Markdown đã chuyển đổi</summary>'
+                + '<pre class="code">' + escapeHtml(r.markdown) + '</pre></details>'
+                + '<h4 style="font-size:.92rem;margin:.9rem 0 .4rem">Chunk sẽ được tạo '
+                + '(hiện ' + (r.chunks || []).length + '/' + r.chunkCount + ')</h4>'
+                + '<div class="chunk-preview">'
+                + (r.chunks || []).map(c =>
+                    '<div class="c"><div class="h">'
+                    + '<span>#' + c.index + '</span>'
+                    + '<span>' + fmtInt(c.chars) + ' ký tự</span>'
+                    + '<span>parent ' + fmtInt(c.parentChars) + '</span>'
+                    + '<span style="flex:1">' + escapeHtml(c.headingPath || '(không có heading)') + '</span>'
+                    + '</div><div class="t">' + escapeHtml(c.content) + '</div></div>').join('')
+                + '</div>';
+        } catch (e) {
+            out.innerHTML = '<p class="muted">Không chuyển đổi được file này.</p>';
+        }
+    }
+
+    const drop = document.getElementById('drop');
+    const filesInput = document.getElementById('upload-files');
+    drop.onclick = () => filesInput.click();
+    drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+    drop.ondragleave = () => drop.classList.remove('over');
+    drop.ondrop = (e) => {
+        e.preventDefault(); drop.classList.remove('over');
+        filesInput.files = e.dataTransfer.files;
+        showChosen();
+    };
+    filesInput.onchange = showChosen;
+
+    function showChosen() {
+        const list = Array.from(filesInput.files).map(f => f.name);
+        document.getElementById('filelist').innerHTML = list.length
+            ? '<b>' + list.length + ' file:</b> ' + escapeHtml(list.join(', '))
+            : '';
+    }
+
+    async function uploadFiles() {
+        if (!filesInput.files.length) { toast('Chọn file trước đã.', 'warn'); return; }
+        const form = new FormData();
+        Array.from(filesInput.files).forEach(f => form.append('files', f));
+        const q = new URLSearchParams();
+        const add = (k, id) => { const v = document.getElementById(id).value; if (v) q.set(k, v); };
+        add('category', 'up-category');
+        add('roles', 'up-roles');
+        add('effectiveDate', 'up-effective');
+        add('expiresDate', 'up-expires');
+        if (document.getElementById('up-force').checked) q.set('force', 'true');
+
+        const out = document.getElementById('upload-out');
+        out.innerHTML = '<p class="muted">Đang gửi…</p>';
+        try {
+            const r = await api('/api/v1/rag/admin/upload-batch?' + q, { method: 'POST', body: form });
+            out.innerHTML = '<p>' + escapeHtml(r.message) + ' <span class="mono">' + r.jobId + '</span></p>'
+                + ((r.rejected || []).length
+                    ? '<p class="muted">Bỏ qua vì không hỗ trợ: ' + escapeHtml(r.rejected.join(', ')) + '</p>' : '');
+            toast('Đã tạo job nạp liệu. Xem tiến độ ở tab Job.');
+            document.querySelector('.tabs button[data-tab=jobs]').click();
+        } catch (e) {
+            out.innerHTML = '';
+        }
+    }
+
+    async function ingestFolder() {
+        const path = document.getElementById('folder-path').value.trim();
+        if (!path) { toast('Nhập đường dẫn thư mục.', 'warn'); return; }
+        try {
+            const r = await api('/api/v1/rag/admin/ingest-folder', {
+                method: 'POST',
+                body: JSON.stringify({
+                    path,
+                    recursive: document.getElementById('folder-recursive').checked,
+                    category: document.getElementById('up-category').value || null,
+                    roles: document.getElementById('up-roles').value || null,
+                    force: document.getElementById('up-force').checked
+                })
+            });
+            toast(r.message);
+            document.querySelector('.tabs button[data-tab=jobs]').click();
+        } catch (e) { /* toast da hien */ }
+    }
+
+    /* ------------------------------------------------------------ Tài liệu */
+    async function loadDocuments() {
+        const search = document.getElementById('doc-search').value.trim();
+        const category = document.getElementById('doc-category').value;
+        const q = new URLSearchParams({ limit: '100' });
+        if (search) q.set('search', search);
+        if (category) q.set('category', category);
+
+        const [r, cats] = await Promise.all([
+            api('/api/v1/rag/admin/documents?' + q),
+            api('/api/v1/rag/admin/categories')
+        ]);
+
+        const sel = document.getElementById('doc-category');
+        if (sel.options.length <= 1) {
+            (cats.categories || []).forEach(c => {
+                const o = document.createElement('option');
+                o.value = c; o.textContent = c; sel.appendChild(o);
+            });
+        }
+
+        const rows = r.documents || [];
+        document.getElementById('doc-rows').innerHTML = rows.length ? rows.map(d => {
+            const expired = d.expiresDate && new Date(d.expiresDate) < new Date();
+            const statusChip = expired
+                ? '<span class="chip bad">hết hiệu lực</span>'
+                : (d.status === 'ACTIVE' ? '<span class="chip good">đang áp dụng</span>'
+                    : '<span class="chip ochre">' + escapeHtml(d.status || '?') + '</span>');
+            return '<tr>'
+                + '<td><b>' + escapeHtml(d.fileName) + '</b>'
+                + (d.title && d.title !== d.fileName
+                    ? '<br><small class="faint">' + escapeHtml(d.title) + '</small>' : '')
+                + (d.allowedRoles && d.allowedRoles.length
+                    ? '<br><span class="chip">chỉ ' + escapeHtml(d.allowedRoles.join(',')) + '</span>' : '')
+                + '</td>'
+                + '<td>' + escapeHtml(d.category || '—') + '</td>'
+                + '<td class="mono">' + escapeHtml(d.docNumber || '—')
+                + (d.version ? ' v' + escapeHtml(d.version) : '') + '</td>'
+                + '<td class="mono">' + (d.effectiveDate || '—')
+                + (d.expiresDate ? ' → ' + d.expiresDate : '') + '</td>'
+                + '<td>' + statusChip + '</td>'
+                + '<td class="num">' + fmtInt(d.chunkCount) + '</td>'
+                + '<td><span class="chip">' + escapeHtml(d.sourceFormat || '?') + '</span></td>'
+                + '<td style="white-space:nowrap">'
+                + '<button class="tiny" onclick="viewMarkdown(' + d.id + ')">Markdown</button> '
+                + '<button class="tiny danger" onclick="deleteDoc(' + d.id + ',\''
+                + escapeHtml(d.fileName).replace(/'/g, "\\'") + '\')">Xoá</button></td>'
+                + '</tr>';
+        }).join('') : '<tr><td colspan="8" class="empty">Chưa có tài liệu nào. '
+            + 'Sang tab “Nạp tài liệu” để bắt đầu.</td></tr>';
+    }
+
+    async function viewMarkdown(id) {
+        const r = await api('/api/v1/rag/admin/documents/' + id + '/markdown');
+        showModal('Markdown: ' + r.fileName,
+            r.available
+                ? '<pre class="code">' + escapeHtml(r.markdown) + '</pre>'
+                : '<p class="muted">' + escapeHtml(r.note || 'Không có bản Markdown.') + '</p>');
+    }
+
+    async function deleteDoc(id, name) {
+        if (!confirm('Xoá tài liệu "' + name + '" và toàn bộ đoạn của nó?')) return;
+        const r = await api('/api/v1/rag/admin/documents/' + id, { method: 'DELETE' });
+        toast(r.message);
+        loadDocuments();
+    }
+
+    /* ----------------------------------------------------------------- Job */
+    let jobsTimer = null;
+    async function loadJobs() {
+        const r = await api('/api/v1/rag/admin/jobs?limit=25');
+        const host = document.getElementById('jobs');
+        const jobs = r.jobs || [];
+        host.innerHTML = jobs.length ? jobs.map(j => {
+            const stateChip = { RUNNING: 'accent', DONE: 'good', CANCELLED: 'ochre',
+                                INTERRUPTED: 'bad' }[j.state] || '';
+            return '<div class="job"><div class="top">'
+                + '<span class="chip ' + stateChip + '">' + escapeHtml(j.state) + '</span>'
+                + '<b>' + escapeHtml(j.kind || '?') + '</b>'
+                + '<span class="muted">' + escapeHtml(j.category || 'không phân nhóm') + '</span>'
+                + '<span style="flex:1"></span>'
+                + '<span class="mono faint">' + fmtDate(j.startedAt) + ' · ' + fmtMs(j.elapsedMs) + '</span>'
+                + (j.state === 'RUNNING' && !j.cancelRequested
+                    ? ' <button class="tiny danger" onclick="cancelJob(\'' + j.jobId + '\')">Dừng</button>'
+                    : '')
+                + (j.cancelRequested && j.state === 'RUNNING'
+                    ? ' <span class="chip ochre">đang dừng…</span>' : '')
+                + '</div>'
+                + '<div class="bar"><i style="width:' + j.percent + '%"></i></div>'
+                + '<div class="muted" style="font-size:.84rem">'
+                + j.processed + '/' + j.total + ' file · '
+                + '<span style="color:var(--good)">' + j.succeeded + ' thành công</span> · '
+                + j.skipped + ' bỏ qua · '
+                + (j.failed ? '<span style="color:var(--crimson)">' + j.failed + ' lỗi</span>' : '0 lỗi')
+                + ' · ' + fmtInt(j.totalChunks) + ' chunk'
+                + (j.currentFile ? ' · đang xử lý <span class="mono">'
+                    + escapeHtml(j.currentFile) + '</span>' : '')
+                + '</div>'
+                + ((j.errors || []).length
+                    ? '<details><summary class="muted" style="cursor:pointer;font-size:.84rem">'
+                      + j.errors.length + ' cảnh báo / lỗi</summary><pre class="code">'
+                      + escapeHtml(j.errors.join('\n')) + '</pre></details>' : '')
+                + '</div>';
+        }).join('') : '<div class="empty">Chưa có job nào.</div>';
+
+        clearTimeout(jobsTimer);
+        if (document.getElementById('jobs-auto').checked
+            && document.getElementById('tab-jobs').classList.contains('active')
+            && jobs.some(j => j.state === 'RUNNING')) {
+            jobsTimer = setTimeout(loadJobs, 3000);
+        }
+    }
+
+    async function cancelJob(id) {
+        const r = await api('/api/v1/rag/admin/jobs/' + id + '/cancel', { method: 'POST' });
+        toast(r.message); loadJobs();
+    }
+
+    /* ------------------------------------------------------------ Cấu hình */
+    let settingsSnapshot = {};
+    // Provider/model trả lời mặc định giờ cấu hình ở tab "Nhà cung cấp & API key"
+    // (chọn từ danh sách model thật lấy được lúc Kết nối), không lặp lại ở đây nữa.
+    const HIDDEN_SETTINGS_KEYS = new Set(['llm.provider', 'llm.model']);
+    async function loadSettings() {
+        const r = await api('/api/v1/rag/settings');
+        settingsSnapshot = r.settings || {};
+        const labels = {
+            'internal.provider': 'Provider nội bộ', 'internal.model': 'Model nội bộ',
+            'retrieval.topK': 'Số đoạn đưa vào câu trả lời (top-k)',
+            'retrieval.candidates': 'Số ứng viên trước rerank',
+            'retrieval.vectorTopK': 'Top-k nhánh vector',
+            'retrieval.fulltextTopK': 'Top-k nhánh full-text',
+            'retrieval.hybridEnabled': 'Bật hybrid search',
+            'retrieval.multiQueryEnabled': 'Truy xuất cả câu gốc + câu viết lại',
+            'retrieval.hydeEnabled': 'Bật HyDE',
+            'retrieval.minRerankScore': 'Ngưỡng điểm rerank để trả lời',
+            'retrieval.minVectorScore': 'Ngưỡng cosine khi rerank lỗi',
+            'retrieval.abstainWhenBelowThreshold': 'Từ chối trả lời khi dưới ngưỡng',
+            'retrieval.recencyBoostEnabled': 'Ưu tiên tài liệu mới',
+            'retrieval.excludeExpired': 'Loại tài liệu hết hiệu lực',
+            'rerank.provider': 'Bộ rerank (LLM/COHERE/NONE)',
+            'cache.enabled': 'Bật cache câu trả lời',
+            'cache.semanticEnabled': 'Bật cache theo ngữ nghĩa',
+            'cache.semanticThreshold': 'Ngưỡng cosine cho cache ngữ nghĩa',
+            'ingestion.contextualEnabled': 'Sinh ngữ cảnh cho từng chunk (tốn LLM)',
+            'queryRewrite.enabled': 'Bật viết lại câu hỏi',
+            'retrieval.clarifyAmbiguousEnabled': 'Hỏi lại khi câu hỏi mơ hồ (trước khi tìm tài liệu)',
+            'chat.citationsEnabled': 'Hiện trích dẫn nguồn (giống NotebookLM)'
+        };
+        document.getElementById('settings-form').innerHTML =
+            Object.entries(settingsSnapshot).filter(([k]) => !HIDDEN_SETTINGS_KEYS.has(k)).map(([k, v]) => {
+                const label = labels[k] || k;
+                if (typeof v === 'boolean') {
+                    return '<div class="field" style="flex:1 1 240px"><label class="inline">'
+                        + '<input type="checkbox" data-key="' + k + '"' + (v ? ' checked' : '') + '> '
+                        + escapeHtml(label) + '</label>'
+                        + '<div class="faint mono" style="font-size:.72rem">' + k + '</div></div>';
+                }
+                const type = typeof v === 'number' ? 'number' : 'text';
+                const step = (typeof v === 'number' && !Number.isInteger(v)) ? ' step="0.01"' : '';
+                return '<div class="field" style="flex:1 1 200px"><label>' + escapeHtml(label) + '</label>'
+                    + '<input type="' + type + '"' + step + ' data-key="' + k + '" value="'
+                    + escapeHtml(String(v)) + '">'
+                    + '<div class="faint mono" style="font-size:.72rem">' + k + '</div></div>';
+            }).join('');
+    }
+
+    async function saveSettings() {
+        const changes = {};
+        document.querySelectorAll('#settings-form [data-key]').forEach(el => {
+            const key = el.dataset.key;
+            const value = el.type === 'checkbox' ? el.checked
+                : (el.type === 'number' ? Number(el.value) : el.value);
+            if (String(value) !== String(settingsSnapshot[key])) changes[key] = value;
+        });
+        if (!Object.keys(changes).length) { toast('Không có thay đổi nào.', 'warn'); return; }
+        const r = await api('/api/v1/rag/settings', { method: 'POST', body: JSON.stringify(changes) });
+        toast(r.message);
+        loadSettings();
+    }
+
+    async function resetSettings() {
+        if (!confirm('Xoá cấu hình đã lưu trong DB? Cần khởi động lại để trở về giá trị trong file.')) return;
+        const r = await api('/api/v1/rag/settings', { method: 'DELETE' });
+        toast(r.message);
+    }
+
+    /* ---------------------------------------------------- Nhà cung cấp & API key */
+
+    let providerSnapshot = {};
+    const CHAT_MODEL_FIELD = { openai: 'chatModel', anthropic: 'chatModel', gemini: 'chatModel',
+        ollama: 'chatModel', cohere: 'rerankModel' };
+
+    function fillModelSelect(selectEl, models, current) {
+        const list = (models || []).slice();
+        if (current && !list.includes(current)) list.unshift(current);
+        selectEl.innerHTML = list.length
+            ? list.map(m => '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + '</option>').join('')
+            : '<option value="" disabled selected>Bấm Kết nối để tải danh sách model</option>';
+        if (current) selectEl.value = current;
+    }
+
+    async function loadProviders() {
+        const p = await api('/api/v1/rag/admin/providers');
+        providerSnapshot = p;
+
+        function fillKey(name, info) {
+            document.getElementById('chip-' + name).outerHTML =
+                '<span class="chip ' + (info.apiKeySet ? 'good' : 'ochre') + '" id="chip-' + name + '">'
+                + (info.apiKeySet ? 'đã cấu hình' : 'chưa cấu hình') + '</span>';
+            document.getElementById('prov-' + name + '-key').value = '';
+            document.getElementById('mask-' + name).textContent = info.apiKeySet
+                ? 'Hiện tại: ' + info.apiKeyMasked : 'Chưa có API key nào được lưu.';
+        }
+
+        fillKey('openai', p.openai);
+        document.getElementById('prov-openai-baseurl').value = p.openai.baseUrl || '';
+        fillModelSelect(document.getElementById('prov-openai-model'), p.openai.models, p.openai.chatModel);
+
+        fillKey('anthropic', p.anthropic);
+        document.getElementById('prov-anthropic-thinking').checked = !!p.anthropic.thinkingEnabled;
+        document.getElementById('prov-anthropic-effort').value = p.anthropic.effort || '';
+        fillModelSelect(document.getElementById('prov-anthropic-model'), p.anthropic.models, p.anthropic.chatModel);
+
+        fillKey('gemini', p.gemini);
+        fillModelSelect(document.getElementById('prov-gemini-model'), p.gemini.models, p.gemini.chatModel);
+
+        document.getElementById('prov-ollama-baseurl').value = p.ollama.baseUrl || '';
+        fillModelSelect(document.getElementById('prov-ollama-model'), p.ollama.models, p.ollama.chatModel);
+
+        fillKey('cohere', p.cohere);
+        fillModelSelect(document.getElementById('prov-cohere-model'), p.cohere.models, p.cohere.rerankModel);
+
+        document.querySelectorAll('.provider-panel .connect-row .hint').forEach(h => { h.textContent = ''; h.className = 'hint'; });
+
+        await loadDefaultModelSection();
+    }
+
+    async function loadDefaultModelSection() {
+        const settings = await api('/api/v1/rag/settings');
+        document.getElementById('default-current').textContent = settings.provider + ' / ' + settings.model;
+        const provSel = document.getElementById('default-provider');
+        provSel.value = settings.provider;
+        fillDefaultModelOptions();
+        const modelSel = document.getElementById('default-model');
+        if ([...modelSel.options].some(o => o.value === settings.model)) modelSel.value = settings.model;
+    }
+
+    function fillDefaultModelOptions() {
+        const provider = document.getElementById('default-provider').value.toLowerCase();
+        const info = providerSnapshot[provider] || {};
+        const field = CHAT_MODEL_FIELD[provider];
+        fillModelSelect(document.getElementById('default-model'), info.models, info[field]);
+    }
+    document.getElementById('default-provider').addEventListener('change', fillDefaultModelOptions);
+
+    document.getElementById('provider-select').addEventListener('change', function () {
+        document.querySelectorAll('.provider-panel').forEach(p => {
+            p.classList.toggle('active', p.dataset.provider === this.value);
+        });
+    });
+
+    async function setDefaultModel() {
+        const provider = document.getElementById('default-provider').value;
+        const model = document.getElementById('default-model').value;
+        if (!model) { toast('Chưa có model nào để đặt mặc định — Kết nối provider này trước.', 'warn'); return; }
+        const r = await api('/api/v1/rag/settings', {
+            method: 'PUT', body: JSON.stringify({ provider, model })
+        });
+        toast(r.message);
+        loadDefaultModelSection();
+    }
+
+    async function connectProvider(name) {
+        const btn = document.getElementById('btn-connect-' + name);
+        const status = document.getElementById('connect-status-' + name);
+        const apiKeyEl = document.getElementById('prov-' + name + '-key');
+        const baseUrlEl = document.getElementById('prov-' + name + '-baseurl');
+
+        btn.disabled = true;
+        status.className = 'hint';
+        status.textContent = 'Đang kết nối…';
+        try {
+            const body = {};
+            if (apiKeyEl && apiKeyEl.value.trim()) body.apiKey = apiKeyEl.value.trim();
+            if (baseUrlEl && baseUrlEl.value.trim()) body.baseUrl = baseUrlEl.value.trim();
+
+            const r = await api('/api/v1/rag/admin/providers/' + name + '/connect', {
+                method: 'POST', body: JSON.stringify(body)
+            });
+            status.className = 'hint ok';
+            status.textContent = '✓ ' + r.message;
+            toast(r.message);
+            await loadProviders();
+        } catch (e) {
+            status.className = 'hint error';
+            status.textContent = e.message || 'Kết nối thất bại.';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function saveProviders() {
+        const changes = {};
+        const key = (id, field) => { const v = document.getElementById(id).value.trim(); if (v) changes[field] = v; };
+        const always = (id, field) => { const v = document.getElementById(id).value.trim(); if (v) changes[field] = v; };
+
+        key('prov-openai-key', 'openai.apiKey');
+        always('prov-openai-model', 'openai.chatModel');
+        always('prov-openai-baseurl', 'openai.baseUrl');
+
+        key('prov-anthropic-key', 'anthropic.apiKey');
+        always('prov-anthropic-model', 'anthropic.chatModel');
+        changes['anthropic.thinkingEnabled'] = document.getElementById('prov-anthropic-thinking').checked;
+        always('prov-anthropic-effort', 'anthropic.effort');
+
+        key('prov-gemini-key', 'gemini.apiKey');
+        always('prov-gemini-model', 'gemini.chatModel');
+
+        always('prov-ollama-baseurl', 'ollama.baseUrl');
+        always('prov-ollama-model', 'ollama.chatModel');
+
+        key('prov-cohere-key', 'cohere.apiKey');
+        always('prov-cohere-model', 'cohere.rerankModel');
+
+        const r = await api('/api/v1/rag/admin/providers', { method: 'POST', body: JSON.stringify(changes) });
+        toast(r.message);
+        loadProviders();
+    }
+
+    async function clearProviderKey(provider) {
+        if (!confirm('Xoá hẳn API key của ' + provider + '?')) return;
+        const r = await api('/api/v1/rag/admin/providers/' + provider + '/api-key', { method: 'DELETE' });
+        toast(r.message);
+        loadProviders();
+    }
+
+    /* ------------------------------------------------------------ Đánh giá */
+    async function loadEval() {
+        const [runs, cases] = await Promise.all([
+            api('/api/v1/rag/eval/runs?limit=20'),
+            api('/api/v1/rag/eval/cases')
+        ]);
+        const rows = runs.runs || [];
+        document.getElementById('ev-runs').innerHTML = rows.length ? rows.map(r =>
+            '<tr>'
+            + '<td class="mono">' + fmtDate(r.createdAt) + '</td>'
+            + '<td>' + escapeHtml(r.suite) + '</td>'
+            + '<td class="mono">' + escapeHtml((r.provider || '') + '/' + (r.model || '')) + '</td>'
+            + '<td class="num">' + r.total + '</td>'
+            + '<td class="num">' + r.judged + (r.skipped ? ' (bỏ ' + r.skipped + ')' : '') + '</td>'
+            + '<td class="num">' + fmtScore(r.avgFaithfulness) + '</td>'
+            + '<td class="num">' + fmtScore(r.avgAnswerRelevance) + '</td>'
+            + '<td class="num">' + fmtScore(r.contextRecall) + '</td>'
+            + '<td class="num">' + fmtScore(r.abstainRate) + '</td>'
+            + '<td class="num">' + fmtMs(r.avgLatencyMs) + '</td>'
+            + '<td class="num">' + fmtMoney(r.totalCostUsd) + '</td>'
+            + '</tr>').join('') : '<tr><td colspan="11" class="empty">Chưa có lần chạy nào.</td></tr>';
+
+        const cs = cases.cases || [];
+        document.getElementById('ev-cases').innerHTML = cs.length ? cs.map(c =>
+            '<tr><td>' + escapeHtml(c.question) + '</td>'
+            + '<td class="mono">' + escapeHtml(c.expectedSource || '—') + '</td>'
+            + '<td>' + escapeHtml(c.suite) + '</td>'
+            + '<td><button class="tiny danger" onclick="deleteCase(' + c.id + ')">Xoá</button></td></tr>'
+        ).join('') : '<tr><td colspan="4" class="empty">Chưa có câu hỏi nào. '
+            + 'Thêm 20–50 câu hỏi thật để đo được chất lượng.</td></tr>';
+    }
+
+    async function addEvalCase() {
+        const question = document.getElementById('ev-question').value.trim();
+        if (!question) { toast('Nhập câu hỏi.', 'warn'); return; }
+        const r = await api('/api/v1/rag/eval/cases', {
+            method: 'POST',
+            body: JSON.stringify({
+                suite: document.getElementById('ev-suite').value || 'default',
+                cases: [{
+                    question,
+                    expectedSource: document.getElementById('ev-source').value || null
+                }]
+            })
+        });
+        toast(r.message);
+        document.getElementById('ev-question').value = '';
+        document.getElementById('ev-source').value = '';
+        loadEval();
+    }
+
+    async function deleteCase(id) {
+        await api('/api/v1/rag/eval/cases/' + id, { method: 'DELETE' });
+        loadEval();
+    }
+
+    async function runEval() {
+        const btn = document.getElementById('ev-run');
+        btn.disabled = true;
+        btn.textContent = 'Đang chạy… (mỗi câu tốn vài lời gọi LLM)';
+        try {
+            const r = await api('/api/v1/rag/eval/run', {
+                method: 'POST',
+                body: JSON.stringify({ suite: document.getElementById('ev-suite').value || 'default' })
+            });
+            toast('Đánh giá xong: faithfulness ' + fmtScore(r.avgFaithfulness)
+                + ', relevance ' + fmtScore(r.avgAnswerRelevance)
+                + ', recall ' + fmtScore(r.contextRecall));
+            loadEval();
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Chạy đánh giá';
+        }
+    }
+
+    /* ------------------------------------------------------------ Phản hồi */
+    async function loadFeedback() {
+        const r = await api('/api/v1/rag/admin/feedback/negative?limit=40');
+        const items = r.items || [];
+        document.getElementById('feedback-list').innerHTML = items.length ? items.map(i =>
+            '<div style="padding:.8rem .9rem">'
+            + '<div class="row" style="margin-bottom:.3rem">'
+            + '<span class="chip bad">👎</span>'
+            + '<span class="faint mono" style="font-size:.76rem">' + fmtDate(i.createdAt) + '</span>'
+            + '</div>'
+            + '<div><b>Hỏi:</b> ' + escapeHtml(i.question || '(không rõ)') + '</div>'
+            + '<div class="muted" style="margin-top:.3rem"><b>Đáp:</b> '
+            + escapeHtml((i.answer || '').slice(0, 400)) + '</div>'
+            + (i.comment ? '<div class="chip ochre" style="margin-top:.4rem">'
+                + escapeHtml(i.comment) + '</div>' : '')
+            + '</div>').join('') : '<div class="empty">Chưa có phản hồi xấu nào. '
+            + 'Người dùng bấm 👎 ở màn hỏi đáp thì sẽ hiện ở đây.</div>';
+    }
+
+    loadOverview();
+    loadAllowedRoots();
+</script>
+</body>
+</html>
