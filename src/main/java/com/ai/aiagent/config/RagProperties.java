@@ -65,12 +65,46 @@ public class RagProperties {
         /** bge-m3 (1024 chieu) cho ket qua tot voi tieng Viet. */
         private String ollamaModel = "bge-m3";
 
+        private final Trial trial = new Trial();
+
         public String modelName() {
+            return modelNameOf(provider, openaiModel, ollamaModel);
+        }
+
+        static String modelNameOf(String provider, String openaiModel, String ollamaModel) {
             return switch (provider == null ? "" : provider.toUpperCase()) {
                 case "OLLAMA" -> ollamaModel;
                 case "LOCAL" -> "all-minilm-l6-v2";
                 default -> openaiModel;
             };
+        }
+    }
+
+    /**
+     * Model embedding UNG VIEN, chay song song voi model dang dung de so sanh.
+     *
+     * Ly do ton tai: doi model embedding la thay doi dat gia nhat trong he thong - phai
+     * tao lai schema va nap lai TOAN BO tai lieu, va sai thi phai lam lai lan nua. Nhung
+     * neu khong thu duoc truoc thi quyet dinh chi dua tren cam giac.
+     *
+     * Co che nay nhung lai CHINH cac chunk dang co bang model ung vien vao mot bang phu
+     * (chi {@code chunk_id + embedding}), roi do recall@k/MRR cua hai ben tren cung mot
+     * bo cau hoi. Index dang chay khong bi dong den, nen thu nghiem an toan tuyet doi.
+     */
+    @Getter @Setter
+    public static class Trial {
+        private boolean enabled = false;
+        /** OPENAI | OLLAMA | LOCAL */
+        private String provider = "OPENAI";
+        private String openaiModel = "text-embedding-3-large";
+        private String ollamaModel = "bge-m3";
+        private int dimensions = 3072;
+        /** Bang phu chi chua {@code chunk_id + embedding}. */
+        private String table = "rag_chunks_trial";
+        private int batchSize = 64;
+
+        public String modelName() {
+            return Embedding.modelNameOf(provider, openaiModel, ollamaModel);
         }
     }
 
@@ -140,6 +174,12 @@ public class RagProperties {
          * khi chay retrieval. Neu mo ho -> hoi lai nguoi dung ngay, khong tra loi dai.
          */
         private boolean clarifyAmbiguousEnabled = true;
+        /**
+         * Mo rong viet tat/thuat ngu bang bang {@code rag_synonyms} truoc khi truy xuat.
+         * Them MOT bien the truy van, khong thay the cau goc - nen khong lam mat tu khoa
+         * nguoi dung da go.
+         */
+        private boolean glossaryEnabled = true;
     }
 
     @Getter @Setter
@@ -179,6 +219,18 @@ public class RagProperties {
         private int minSectionChars = 200;
         private boolean prefixHeadingPath = true;
         private boolean dedupeWithinDocument = true;
+        /**
+         * Nhan dien {@code Phan/Chuong/Muc/Dieu/Phu luc} lam moc cau truc, ke ca khi tai
+         * lieu khong co heading Markdown nao (thuong gap voi file chuyen tu PDF/Word).
+         * Nho vay chunk khong bao gio bi cat ngang giua mot Dieu.
+         */
+        private boolean legalStructureEnabled = true;
+        /**
+         * Gan ten tai lieu + so hieu + ngay hieu luc vao van ban DEM DI NHUNG.
+         * Khong co buoc nay, thong tin do khong nam trong vector nen cau hoi dang
+         * "quy dinh so bao nhieu", "van ban nao quy dinh" gan nhu chac chan truot.
+         */
+        private boolean prefixDocumentIdentity = true;
     }
 
     @Getter @Setter

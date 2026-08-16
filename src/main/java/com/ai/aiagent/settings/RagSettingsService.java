@@ -54,6 +54,7 @@ public class RagSettingsService {
     private static final String K_CONTEXTUAL = "ingestion.contextualEnabled";
     private static final String K_REWRITE = "queryRewrite.enabled";
     private static final String K_CLARIFY = "retrieval.clarifyAmbiguousEnabled";
+    private static final String K_GLOSSARY = "retrieval.glossaryEnabled";
     private static final String K_CITATIONS = "chat.citationsEnabled";
 
     private final RagProperties props;
@@ -117,6 +118,7 @@ public class RagSettingsService {
         m.put(K_CONTEXTUAL, props.getIngestion().isContextualEnabled());
         m.put(K_REWRITE, props.getQueryRewrite().isEnabled());
         m.put(K_CLARIFY, props.getRetrieval().isClarifyAmbiguousEnabled());
+        m.put(K_GLOSSARY, props.getRetrieval().isGlossaryEnabled());
         m.put(K_CITATIONS, props.getChat().isCitationsEnabled());
         return m;
     }
@@ -207,6 +209,7 @@ public class RagSettingsService {
             case K_CONTEXTUAL -> props.getIngestion().setContextualEnabled(bool(value));
             case K_REWRITE -> props.getQueryRewrite().setEnabled(bool(value));
             case K_CLARIFY -> r.setClarifyAmbiguousEnabled(bool(value));
+            case K_GLOSSARY -> r.setGlossaryEnabled(bool(value));
             case K_CITATIONS -> props.getChat().setCitationsEnabled(bool(value));
             default -> {
                 return false;

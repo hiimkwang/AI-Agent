@@ -50,11 +50,13 @@ public class QueryPlanner {
 
     private final InternalLlm internalLlm;
     private final RagProperties props;
+    private final GlossaryService glossary;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public QueryPlanner(InternalLlm internalLlm, RagProperties props) {
+    public QueryPlanner(InternalLlm internalLlm, RagProperties props, GlossaryService glossary) {
         this.internalLlm = internalLlm;
         this.props = props;
+        this.glossary = glossary;
     }
 
     public QueryPlan plan(String question, List<Turn> history) {
@@ -75,11 +77,36 @@ public class QueryPlanner {
             variants.clear();
             variants.add(rewritten);
         }
+        if (props.getRetrieval().isGlossaryEnabled()) {
+            String expanded = expandWithGlossary(rewritten);
+            if (expanded != null) variants.add(expanded);
+        }
         if (props.getRetrieval().isHydeEnabled()) {
             String hyde = hyde(rewritten);
             if (hyde != null && !hyde.isBlank()) variants.add(hyde);
         }
         return new QueryPlan(question, rewritten, new ArrayList<>(variants), null);
+    }
+
+    /**
+     * Bien the co mo rong viet tat: "quy dinh margin" -> "quy dinh margin giao dich ky quy".
+     *
+     * THEM mot bien the chu khong THAY THE cau goc. Neu thay the, cau hoi go tat se mat
+     * chinh tu khoa nguoi dung go - ma trong tai lieu noi bo, tu viet tat cung thuong
+     * xuat hien nguyen dang. Them bien the thi RRF tu gop hai ket qua, gan nhu mien phi
+     * vi ha tang multi-query da co san.
+     */
+    private String expandWithGlossary(String query) {
+        try {
+            Set<String> expansions = glossary.expand(query);
+            if (expansions.isEmpty()) return null;
+            String expanded = query + " " + String.join(" ", expansions);
+            log.debug("Mo rong thuat ngu: '{}' -> '{}'", query, expanded);
+            return expanded;
+        } catch (Exception e) {
+            log.warn("Mo rong thuat ngu loi ({}) -> bo qua bien the nay.", e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -126,7 +153,7 @@ public class QueryPlanner {
     }
 
     private Normalized normalizeWithClarityCheck(String question, String formattedHistory) {
-        String prompt = """
+        String prompt = glossaryBlock(question) + """
                 Ban la buoc CHUAN HOA CAU HOI truoc khi he thong tim kiem tai lieu noi bo.
 
                 Cho LICH SU HOI THOAI (co the rong neu day la tin nhan dau tien) va CAU HOI
@@ -186,9 +213,30 @@ public class QueryPlanner {
         return new Normalized(rewritten, clarifying);
     }
 
+    /**
+     * Khoi thuat ngu chen len dau prompt viet lai.
+     *
+     * Muc dich khac voi {@link #expandWithGlossary}: o day la de model viet lai cau hoi
+     * BANG DUNG thuat ngu cua tai lieu (giup ca nhanh vector), con kia la mo rong tho
+     * cho nhanh full-text. Tra ve chuoi rong khi cau hoi khong chua thuat ngu nao, de
+     * khong lam phong prompt mot cach vo ich.
+     */
+    private String glossaryBlock(String question) {
+        if (!props.getRetrieval().isGlossaryEnabled()) return "";
+        String hint;
+        try {
+            hint = glossary.hintFor(question);
+        } catch (Exception e) {
+            return "";
+        }
+        if (hint == null || hint.isBlank()) return "";
+        return "THUAT NGU NOI BO (dung de hieu dung cau hoi, va nen dung dang day du "
+                + "khi viet lai):\n" + hint + "\n";
+    }
+
     /** Hanh vi cu: chi viet lai, khong danh gia do ro rang (dung khi clarify bi tat). */
     private String rewriteOnly(String question, String formattedHistory) {
-        String prompt = """
+        String prompt = glossaryBlock(question) + """
                 Duoi day la lich su hoi thoai va cau hoi moi nhat cua nguoi dung.
                 Hay viet lai CAU HOI MOI thanh mot cau hoi DOC LAP, day du ngu canh, tu hieu
                 duoc ma khong can doc lich su (thay cac dai tu "no/cai do/vay..." bang doi

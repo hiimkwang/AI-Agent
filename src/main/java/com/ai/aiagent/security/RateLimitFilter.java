@@ -44,10 +44,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.mapper = mapper;
     }
 
+    /**
+     * Bo qua {@code /api/messages}.
+     *
+     * Moi tin nhan Teams deu den tu vai dia chi IP cua Azure Bot Service, nen dem theo IP
+     * o day se gom CA CONG TY vao mot o dem: mot phong hop soi noi la ca to chuc bi chan.
+     * Gioi han cua bot duoc dat theo TUNG NGUOI dung trong
+     * {@link com.ai.aiagent.bot.TeamsBotService}, la don vi dung nghia.
+     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String p = request.getRequestURI();
-        return !p.startsWith("/api/");
+        return !p.startsWith("/api/") || p.startsWith("/api/messages");
     }
 
     @Override

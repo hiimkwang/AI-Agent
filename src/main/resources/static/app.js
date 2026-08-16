@@ -4,6 +4,9 @@
 
 const KEY_STORAGE = 'rag.apiKey';
 
+/* Thong tin phien dang nhap, nap mot lan boi loadAuth(). Null = chua nap. */
+let authState = null;
+
 /** Lay API key da luu trong trinh duyet. */
 function apiKey() {
     return localStorage.getItem(KEY_STORAGE) || '';
@@ -14,19 +17,56 @@ function setApiKey(value) {
     else localStorage.removeItem(KEY_STORAGE);
 }
 
+/** Doc cookie theo ten. Dung cho token CSRF ma server dat o XSRF-TOKEN. */
+function cookie(name) {
+    const hit = document.cookie.split('; ').find(c => c.startsWith(name + '='));
+    return hit ? decodeURIComponent(hit.substring(name.length + 1)) : '';
+}
+
 function authHeaders(extra) {
     const h = Object.assign({}, extra || {});
     const k = apiKey();
     if (k) h['X-API-Key'] = k;
+    // Khi dang nhap bang Entra thi xac thuc dua tren cookie phien, nen server bat CSRF.
+    // Token nam trong cookie XSRF-TOKEN, gui lai o header nay.
+    const csrf = cookie('XSRF-TOKEN');
+    if (csrf) h['X-XSRF-TOKEN'] = csrf;
     return h;
 }
 
 /**
- * Goi API. Tu dong gan API key, tu dong hien hop nhap key khi bi 401,
- * va bao loi bang thong bao tieng Viet thay vi de trang trang.
+ * Hoi server "toi la ai": co bat SSO khong, da dang nhap chua, role gi.
+ * Goi mot lan luc tai trang; ket qua dung cho ca xu ly 401 va hien thi.
+ */
+async function loadAuth() {
+    if (authState) return authState;
+    try {
+        const res = await fetch('/api/v1/rag/me', { credentials: 'same-origin' });
+        authState = res.ok ? await res.json() : { ssoEnabled: false, authenticated: false };
+    } catch (e) {
+        authState = { ssoEnabled: false, authenticated: false };
+    }
+    return authState;
+}
+
+/**
+ * Chuyen sang trang dang nhap cua Microsoft, giu lai duong dan hien tai de quay ve.
+ * Spring Security tu nho trang dich, nen chi can dieu huong.
+ */
+function goToLogin(loginUrl) {
+    window.location.href = loginUrl || '/oauth2/authorization/entra';
+}
+
+/**
+ * Goi API. Tu dong gan API key + token CSRF, gui kem cookie phien, va xu ly 401
+ * theo dung che do dang chay: co SSO thi dua sang trang dang nhap Microsoft,
+ * khong thi hien hop nhap API key.
  */
 async function api(path, options = {}) {
     const opts = Object.assign({}, options);
+    // Bat buoc: khong co dong nay thi cookie phien khong duoc gui kem va
+    // nguoi dung da dang nhap van bi 401.
+    opts.credentials = 'same-origin';
     opts.headers = authHeaders(
         Object.assign(opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
             options.headers));
@@ -40,8 +80,21 @@ async function api(path, options = {}) {
     }
 
     if (response.status === 401) {
-        promptForKey();
-        throw new Error('Thiếu hoặc sai API key');
+        let loginUrl = null;
+        try {
+            loginUrl = (await response.clone().json()).loginUrl || null;
+        } catch (ignored) { /* body khong phai JSON */ }
+        if (loginUrl || (authState && authState.ssoEnabled)) {
+            toast('Phiên đăng nhập đã hết hạn. Đang chuyển tới trang đăng nhập…', 'warn');
+            setTimeout(() => goToLogin(loginUrl), 800);
+        } else {
+            promptForKey();
+        }
+        throw new Error('Chưa xác thực');
+    }
+    if (response.status === 403) {
+        toast('Tài khoản của bạn không có quyền thực hiện thao tác này.', 'error');
+        throw new Error('Khong du quyen');
     }
     if (response.status === 429) {
         toast('Bạn gửi quá nhiều yêu cầu. Chờ một phút rồi thử lại.', 'warn');
@@ -237,6 +290,75 @@ function renderMarkdown(src) {
                 '<a href="$2" target="_blank" rel="noopener">$1</a>');
     }
 }
+
+/* ------------------------------------------------------ Phien dang nhap */
+
+/**
+ * Gan thong tin nguoi dung vao thanh tren.
+ *
+ * Tu chay khi tai trang. Khi CHUA bat SSO thi khong dong gi ca - giao dien giu
+ * nguyen nut "API key" nhu cu, de moi truong dev khong bi anh huong.
+ */
+async function mountAuthBadge() {
+    const bar = document.querySelector('.topbar');
+    if (!bar) return;
+    const auth = await loadAuth();
+    if (!auth.ssoEnabled) return;
+
+    // Da dang nhap bang tai khoan cong ty thi khong con can API key trong trinh duyet.
+    const keyBtn = bar.querySelector('button[onclick="promptForKey()"]');
+    if (keyBtn && auth.authenticated) keyBtn.remove();
+
+    const anchor = document.getElementById('theme-toggle');
+    const box = document.createElement('span');
+    box.className = 'auth-badge';
+    box.style.cssText = 'display:inline-flex;align-items:center;gap:.5rem;margin-right:.5rem';
+
+    if (!auth.authenticated) {
+        const btn = document.createElement('button');
+        btn.className = 'ghost tiny';
+        btn.textContent = 'Đăng nhập';
+        btn.onclick = () => goToLogin(auth.loginUrl);
+        box.appendChild(btn);
+    } else {
+        const who = document.createElement('span');
+        who.className = 'faint';
+        who.style.fontSize = '.82rem';
+        who.textContent = auth.displayName + (auth.admin ? ' · quản trị' : '');
+        who.title = 'Phòng ban đọc được: '
+            + (auth.allDepartments ? 'tất cả' : (auth.departments || []).join(', ') || 'chưa được cấp');
+        box.appendChild(who);
+
+        const out = document.createElement('button');
+        out.className = 'ghost tiny';
+        out.textContent = 'Đăng xuất';
+        // Spring Security yeu cau POST cho /logout khi CSRF dang bat; gui bang form
+        // an de trinh duyet tu dieu huong theo phan hoi.
+        out.onclick = () => {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = auth.logoutUrl || '/logout';
+            const token = cookie('XSRF-TOKEN');
+            if (token) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = '_csrf';
+                input.value = token;
+                form.appendChild(input);
+            }
+            document.body.appendChild(form);
+            form.submit();
+        };
+        box.appendChild(out);
+    }
+
+    if (anchor) bar.insertBefore(box, anchor);
+    else bar.appendChild(box);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    mountAuthBadge().catch(() => { /* thieu badge khong duoc lam hong ca trang */ });
+});
 
 /* ---------------------------------------------------------------- Theme */
 

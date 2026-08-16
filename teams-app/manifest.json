@@ -1,0 +1,53 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "{{BOT_APP_ID}}",
+  "packageName": "vn.com.bsc.rag.assistant",
+
+  "developer": {
+    "name": "BSC",
+    "websiteUrl": "https://www.bsc.com.vn",
+    "privacyUrl": "https://www.bsc.com.vn",
+    "termsOfUseUrl": "https://www.bsc.com.vn"
+  },
+
+  "name": {
+    "short": "Trợ lý tài liệu",
+    "full": "Trợ lý tra cứu tài liệu nội bộ BSC"
+  },
+  "description": {
+    "short": "Hỏi đáp trên tài liệu nội bộ, luôn kèm nguồn.",
+    "full": "Trợ lý tra cứu tài liệu nội bộ. Hỏi bằng tiếng Việt tự nhiên, trợ lý tìm trong kho tài liệu đã được nạp và trả lời kèm trích dẫn nguồn để bạn kiểm chứng. Chỉ trả lời dựa trên tài liệu; không tìm thấy căn cứ thì nói rõ là không tìm thấy. Quyền đọc tài liệu theo đúng nhóm phòng ban của bạn trên Microsoft Entra ID."
+  },
+
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#1F4E79",
+
+  "bots": [
+    {
+      "botId": "{{BOT_APP_ID}}",
+      "scopes": ["personal", "team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupChat"],
+          "commands": [
+            {
+              "title": "hướng dẫn",
+              "description": "Xem cách dùng trợ lý"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+
+  "permissions": ["identity", "messageTeamMembers"],
+
+  "validDomains": ["{{APP_HOST}}"]
+}

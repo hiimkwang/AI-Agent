@@ -12,10 +12,12 @@
         @media (min-width: 62rem) { .shell { grid-template-columns: 16rem 1fr; } }
 
         /* -------------------------------------------------------- Sidebar */
+        /* Cột phụ TỐI hơn, vùng đọc SÁNG hơn. Trước đây ngược lại: khung chat mang nền
+           xám còn mọi thứ quanh nó trắng, nên chỗ cần đọc lại trông như một cái hố. */
         aside {
             display: none;
             border-right: 1px solid var(--rule);
-            background: var(--surface);
+            background: var(--bg);
             flex-direction: column;
             min-height: 0;
         }
@@ -26,62 +28,68 @@
             display: flex; gap: .5rem; align-items: center;
         }
         aside .head span {
-            font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
-            text-transform: uppercase; color: var(--faint); flex: 1;
+            font-size: .8rem; font-weight: 600; color: var(--muted); flex: 1;
         }
-        #conv-list { overflow-y: auto; flex: 1; }
+        #conv-list { overflow-y: auto; flex: 1; padding: .4rem; }
+        /* Mục bo góc, cách nhau bằng khoảng trắng thay vì kẻ ngang: danh sách ngắn
+           mà kẻ đủ đường thì trông như bảng dữ liệu chứ không như chỗ bấm được. */
         .conv {
-            padding: .55rem .8rem;
-            border-bottom: 1px solid var(--rule);
+            padding: .5rem .65rem;
+            border-radius: var(--radius);
             cursor: pointer;
-            display: flex; flex-direction: column; gap: .15rem;
+            display: flex; flex-direction: column; gap: .1rem;
         }
+        .conv + .conv { margin-top: .15rem; }
         .conv:hover { background: var(--surface-2); }
-        .conv.active { background: var(--accent-soft); }
+        .conv.active { background: var(--accent-soft); color: var(--accent-ink); }
         .conv b { font-weight: 600; font-size: .88rem; overflow: hidden;
                   text-overflow: ellipsis; white-space: nowrap; }
         .conv small { color: var(--faint); font-size: .74rem; }
 
         /* ----------------------------------------------------------- Main */
-        main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+        main { display: flex; flex-direction: column; min-height: 0; min-width: 0;
+               background: var(--surface); }
 
         #messages {
             flex: 1;
             overflow-y: auto;
-            padding: 1.2rem clamp(.8rem, 4vw, 2rem);
-            display: flex; flex-direction: column; gap: 1.4rem;
+            padding: 1.6rem clamp(.8rem, 4vw, 2rem) .8rem;
+            display: flex; flex-direction: column; gap: 1.6rem;
         }
-        .msg { max-width: 52rem; width: 100%; margin: 0 auto; display: flex; gap: .7rem; align-items: flex-start; }
+        .msg { max-width: 46rem; width: 100%; margin: 0 auto; display: flex; gap: .8rem; align-items: flex-start; }
         .msg .avatar {
-            flex: none; width: 2rem; height: 2rem; border-radius: 50%;
+            flex: none; width: 1.8rem; height: 1.8rem; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            font-size: .8rem; font-weight: 700; margin-top: 1.1rem;
+            font-size: .78rem; font-weight: 700; margin-top: .1rem;
         }
         .msg.bot .avatar { background: var(--accent-grad); color: #fff; }
+        /* Giao diện tối lật màu accent thành teal SÁNG, nên chữ trắng trên nền accent
+           gần như mất hút. Đổi sang mực sẫm, cùng cách button.primary đang xử lý. */
+        :root[data-theme="dark"] .msg.bot .avatar,
+        :root[data-theme="dark"] #welcome .mark,
+        :root[data-theme="dark"] details.cite .num { color: #06201E; }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) .msg.bot .avatar,
+            :root:not([data-theme="light"]) #welcome .mark,
+            :root:not([data-theme="light"]) details.cite .num { color: #06201E; }
+        }
         .msg.user .avatar { background: var(--surface-2); color: var(--muted); border: 1px solid var(--rule); }
         .msg .content { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
-        .msg .who {
-            font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
-            text-transform: uppercase; color: var(--faint); margin-bottom: .35rem;
-            display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
-        }
         .msg.user { flex-direction: row-reverse; }
         .msg.user .content { align-items: flex-end; }
         .msg.user .bubble {
             background: var(--surface-2);
             border: 1px solid var(--rule);
-            padding: .65rem .95rem;
+            padding: .6rem .9rem;
             border-radius: var(--radius-lg);
             border-top-right-radius: .3rem;
             max-width: 34rem;
         }
+        /* Câu trả lời KHÔNG đóng khung. Câu trả lời ở đây dài — nhiều đoạn, danh sách,
+           đôi khi cả bảng — nhốt trong một cái bong bóng viền tròn thì đọc mệt và phí
+           chiều ngang. Khung chỉ dành cho hai trường hợp cần nổi bật bên dưới. */
         .msg.bot .bubble {
-            background: var(--surface);
-            border: 1px solid var(--rule);
-            border-radius: var(--radius-lg);
-            border-top-left-radius: .3rem;
-            padding: .8rem 1rem;
-            box-shadow: var(--shadow-sm);
+            background: transparent; border: 0; box-shadow: none; padding: 0;
         }
         .msg.bot .bubble > *:first-child { margin-top: 0; }
         .msg.bot .bubble > *:last-child { margin-bottom: 0; }
@@ -97,6 +105,11 @@
             margin: .5rem 0; padding-left: .8rem; border-left: 2px solid var(--rule-strong);
         }
         /* Cau tra loi "khong tim thay" duoc phan biet ro bang mat */
+        .msg.abstained .bubble,
+        .msg.clarifying .bubble {
+            padding: .75rem .95rem;
+            border-radius: var(--radius-lg);
+        }
         .msg.abstained .bubble {
             background: var(--ochre-soft);
             border: 1px solid var(--ochre);
@@ -108,6 +121,47 @@
             border: 1px solid var(--accent);
         }
         .msg.clarifying .avatar { background: var(--accent-soft); color: var(--accent-ink); border: 1px solid var(--accent); }
+
+        /* ------------------------------------------------------ Màn hình chào
+           Trước đây khung chat mở ra là một khoảng trống cao gần cả màn hình với đúng
+           một bong bóng chữ ở góc trên — trông như trang bị lỗi. Người dùng mới cũng
+           không biết hỏi được cái gì, vì họ không biết trong kho có tài liệu nào. */
+        #welcome {
+            max-width: 46rem; width: 100%; margin: auto;
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            padding: 1rem 0 2rem;
+        }
+        #welcome .mark {
+            width: 3rem; height: 3rem; border-radius: 50%;
+            background: var(--accent-grad); color: #fff;
+            display: grid; place-items: center; font-size: 1.3rem;
+            box-shadow: 0 0 0 6px var(--accent-soft);
+        }
+        #welcome h1 { font-size: 1.5rem; margin: 1.1rem 0 .4rem; letter-spacing: -.015em; }
+        #welcome .lede { color: var(--muted); margin: 0; max-width: 34rem; }
+        #welcome .promises {
+            display: flex; flex-wrap: wrap; gap: .45rem; justify-content: center; margin-top: 1rem;
+        }
+        #welcome .promises span {
+            font-size: .8rem; color: var(--muted);
+            border: 1px solid var(--rule); border-radius: var(--radius-pill);
+            padding: .2rem .7rem; background: var(--surface);
+        }
+        #welcome .suggest-label {
+            margin: 1.8rem 0 .6rem; font-size: .78rem; color: var(--faint);
+        }
+        #welcome .suggests { display: grid; gap: .5rem; width: 100%; }
+        @media (min-width: 46rem) { #welcome .suggests { grid-template-columns: 1fr 1fr; } }
+        #welcome .suggests button {
+            text-align: left; border-radius: var(--radius);
+            border: 1px solid var(--rule); background: var(--surface);
+            padding: .6rem .8rem; font-size: .9rem; color: var(--fg);
+            display: flex; align-items: flex-start; gap: .5rem; line-height: 1.4;
+        }
+        #welcome .suggests button:hover { border-color: var(--accent); background: var(--accent-soft); }
+        #welcome .suggests button i {
+            color: var(--accent); font-style: normal; flex: none;
+        }
 
         .status-line {
             display: flex; align-items: center; gap: .5rem;
@@ -171,26 +225,45 @@
         }
         .meta .vote { display: flex; gap: .25rem; margin-left: auto; }
 
-        /* --------------------------------------------------------- Composer */
+        /* --------------------------------------------------------- Composer
+           Thứ tự bị đảo so với bản cũ: Ô NHẬP LÊN TRÊN, tuỳ chọn xuống dưới và thu nhỏ.
+           Trước đây hai hộp chọn model/nhóm tài liệu nằm trên cùng, to ngang ô nhập, nên
+           thứ đập vào mắt trước lại là hai thứ 95% người dùng không bao giờ đụng tới. */
         .composer {
-            border-top: 1px solid var(--rule);
             background: var(--surface);
-            padding: .8rem clamp(.8rem, 4vw, 2rem) 1rem;
+            padding: .2rem clamp(.8rem, 4vw, 2rem) .9rem;
         }
-        .composer .inner { max-width: 52rem; margin: 0 auto; display: flex; flex-direction: column; gap: .55rem; }
-        .composer .controls { display: flex; gap: .5rem; flex-wrap: wrap; align-items: flex-end; }
-        .composer .controls > div { flex: 1 1 130px; }
+        .composer .inner { max-width: 46rem; margin: 0 auto; display: flex; flex-direction: column; gap: .45rem; }
         .composer .send-row {
             display: flex; gap: .5rem; align-items: flex-end;
-            background: var(--surface-2); border: 1px solid var(--rule);
+            background: var(--surface); border: 1px solid var(--rule-strong);
             border-radius: var(--radius-lg); padding: .35rem .4rem .35rem .9rem;
+            box-shadow: var(--shadow);
+            transition: border-color .15s ease, box-shadow .15s ease;
         }
+        .composer .send-row:focus-within { border-color: var(--accent); }
         .composer .send-row textarea {
-            border: none; background: transparent; box-shadow: none !important; padding: .4rem 0;
+            border: none; background: transparent; box-shadow: none !important; padding: .45rem 0;
+            font-size: .98rem;
         }
         .composer textarea { flex: 1; min-height: 2.6rem; max-height: 10rem; resize: none; }
         .composer #send { border-radius: var(--radius-pill); }
-        .hint { font-size: .76rem; color: var(--faint); }
+
+        /* Hàng tuỳ chọn: chữ nhỏ, không viền, nằm ngang cùng dòng gợi ý. */
+        .composer .controls {
+            display: flex; gap: .8rem; flex-wrap: wrap; align-items: center;
+            font-size: .78rem; color: var(--faint);
+        }
+        .composer .controls .opt { display: flex; align-items: center; gap: .3rem; }
+        .composer .controls select {
+            width: auto; font-size: .78rem; padding: .12rem 1.1rem .12rem .35rem;
+            border-color: transparent; background-color: transparent; color: var(--muted);
+            border-radius: var(--radius-pill);
+        }
+        .composer .controls select:hover { border-color: var(--rule-strong); background-color: var(--surface-2); }
+        .composer .controls label.inline { font-size: .78rem; color: var(--faint); }
+        .composer .controls .grow { flex: 1; }
+        .hint { font-size: .78rem; color: var(--faint); }
     </style>
 </head>
 <body>
@@ -217,44 +290,31 @@
     </aside>
 
     <main>
-        <div id="messages">
-            <div class="msg bot">
-                <div class="avatar">✦</div>
-                <div class="content">
-                    <div class="who">Trợ lý</div>
-                    <div class="bubble">
-                        <p>Xin chào. Hãy hỏi tôi bất cứ điều gì về tài liệu nội bộ đã được nạp.</p>
-                        <p class="muted">Tôi chỉ trả lời dựa trên tài liệu, luôn kèm nguồn để bạn kiểm chứng.
-                            Nếu tài liệu không có thông tin, tôi sẽ nói thẳng là không tìm thấy thay vì
-                            đoán — và nếu câu hỏi của bạn còn chung chung, tôi sẽ hỏi lại cho rõ trước.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <div id="messages"></div>
 
         <div class="composer">
             <div class="inner">
-                <div class="controls">
-                    <div>
-                        <label for="provider">Model trả lời</label>
-                        <select id="provider"><option value="">Mặc định hệ thống</option></select>
-                    </div>
-                    <div>
-                        <label for="category">Nhóm tài liệu</label>
-                        <select id="category"><option value="">Tất cả</option></select>
-                    </div>
-                    <div style="flex:0 0 auto">
-                        <label class="inline" title="Tắt để buộc hệ thống tính lại, không lấy từ cache">
-                            <input type="checkbox" id="use-cache" checked> Dùng cache
-                        </label>
-                    </div>
-                </div>
                 <div class="send-row">
                     <textarea id="input" rows="1" placeholder="Nhập câu hỏi… (Enter để gửi, Shift+Enter để xuống dòng)"></textarea>
                     <button class="primary" id="send">Gửi</button>
                 </div>
-                <div class="hint" id="hint">
-                    Trả lời được stream theo từng chữ — nguồn tham khảo hiện ra ngay khi hệ thống chọn xong.
+                <div class="controls">
+                    <span class="hint grow" id="hint">Câu trả lời luôn kèm nguồn để bạn kiểm chứng.</span>
+                    <span class="opt">
+                        <label for="provider" style="display:inline;margin:0">Model</label>
+                        <select id="provider" title="Model dùng để trả lời câu hỏi này">
+                            <option value="">mặc định hệ thống</option>
+                        </select>
+                    </span>
+                    <span class="opt">
+                        <label for="category" style="display:inline;margin:0">Nhóm tài liệu</label>
+                        <select id="category" title="Chỉ tìm trong một nhóm tài liệu">
+                            <option value="">tất cả</option>
+                        </select>
+                    </span>
+                    <label class="inline" title="Tắt để buộc hệ thống tính lại, không lấy từ cache">
+                        <input type="checkbox" id="use-cache" checked> Dùng cache
+                    </label>
                 </div>
             </div>
         </div>
@@ -309,8 +369,27 @@
             renderConversations(convs.conversations || []);
         } catch (e) {
             console.warn('boot', e);
+        } finally {
+            // Dựng SAU khi nạp xong nhóm tài liệu để gợi ý bám theo kho thật; chạy trong
+            // finally để lỗi mạng lúc khởi động không để lại một khung chat trống trơn.
+            showWelcome();
+            openFromHash();
         }
     }
+
+    /**
+     * Mở thẳng một hội thoại từ địa chỉ: {@code /#c=<id>}.
+     *
+     * Để người dùng gửi được đường dẫn tới đúng câu trả lời cho đồng nghiệp — trước đây
+     * chỉ có cách bảo nhau "vào trang rồi tự tìm trong danh sách bên trái".
+     */
+    function openFromHash() {
+        const id = (location.hash || '').startsWith('#c=')
+            ? decodeURIComponent(location.hash.substring(3)) : '';
+        if (id) openConversation(id).catch(() => toast('Không mở được hội thoại này.', 'warn'));
+    }
+
+    window.addEventListener('hashchange', openFromHash);
 
     /* -------------------------------------------------------- Hoi thoai */
 
@@ -334,6 +413,7 @@
     async function openConversation(id) {
         const data = await api('/api/v1/rag/conversations/' + encodeURIComponent(id));
         conversationId = id;
+        if (location.hash !== '#c=' + id) location.hash = 'c=' + id;
         const host = document.getElementById('messages');
         host.innerHTML = '';
         (data.messages || []).forEach(m => {
@@ -357,22 +437,84 @@
 
     function newConversation() {
         conversationId = null;
-        document.getElementById('messages').innerHTML =
-            '<div class="msg bot"><div class="avatar">✦</div><div class="content">'
-            + '<div class="who">Trợ lý</div><div class="bubble">'
-            + '<p>Hội thoại mới. Bạn muốn hỏi gì?</p></div></div></div>';
-        renderConversations([]);
+        // Bỏ #c=... khỏi địa chỉ, nếu không tải lại trang sẽ nhảy về hội thoại cũ.
+        history.replaceState(null, '', location.pathname);
+        showWelcome();
         api('/api/v1/rag/conversations?limit=40').then(r => renderConversations(r.conversations || []));
+    }
+
+    /* --------------------------------------------------------- Màn hình chào */
+
+    /**
+     * Gợi ý mặc định. Cố tình là câu hỏi ĐẦY ĐỦ chứ không phải từ khoá: người dùng bấm
+     * vào là gửi được ngay, và họ học luôn cách hỏi mà hệ thống trả lời tốt nhất.
+     */
+    const DEFAULT_SUGGESTIONS = [
+        'Nghỉ phép hằng năm được bao nhiêu ngày?',
+        'Quy trình xin nghỉ phép gồm những bước nào?',
+        'Chi phí công tác được thanh toán thế nào?',
+        'Nội quy về giờ làm việc quy định ra sao?'
+    ];
+
+    function showWelcome() {
+        const host = document.getElementById('messages');
+        host.innerHTML = '';
+        const el = document.createElement('div');
+        el.id = 'welcome';
+        el.innerHTML =
+            '<div class="mark">✦</div>'
+            + '<h1>Bạn cần tra cứu điều gì?</h1>'
+            + '<p class="lede">Hỏi bằng tiếng Việt tự nhiên. Tôi tìm trong tài liệu nội bộ đã được nạp '
+            + 'và trả lời kèm trích dẫn để bạn kiểm chứng.</p>'
+            + '<div class="promises">'
+            + '<span>Luôn kèm nguồn</span>'
+            + '<span>Không có tài liệu thì nói thẳng, không đoán</span>'
+            + '<span>Câu hỏi chung chung sẽ được hỏi lại</span>'
+            + '</div>'
+            + '<p class="suggest-label">Thử một câu hỏi</p>'
+            + '<div class="suggests"></div>';
+
+        const box = el.querySelector('.suggests');
+        suggestions().forEach(q => {
+            const b = document.createElement('button');
+            b.innerHTML = '<i>→</i><span></span>';
+            b.querySelector('span').textContent = q;
+            b.onclick = () => {
+                document.getElementById('input').value = q;
+                send();
+            };
+            box.appendChild(b);
+        });
+        host.appendChild(el);
+    }
+
+    /**
+     * Luôn trả về ĐỦ 4 gợi ý: hai câu bám theo nhóm tài liệu thật (nếu có) rồi bù bằng
+     * câu mẫu. Không lấy toàn bộ theo nhóm — kho mới nạp thường chỉ có một nhóm, và một
+     * ô gợi ý lẻ loi giữa màn hình còn khó coi hơn là không có gợi ý nào.
+     */
+    function suggestions() {
+        const cats = Array.from(document.getElementById('category').options)
+            .filter(o => o.value)
+            .map(o => o.value);
+        const fromCats = cats.slice(0, 2).map(c => 'Tài liệu nhóm "' + c + '" quy định những gì?');
+        return [...fromCats, ...DEFAULT_SUGGESTIONS].slice(0, 4);
+    }
+
+    function clearWelcome() {
+        const el = document.getElementById('welcome');
+        if (el) el.remove();
     }
 
     /* ---------------------------------------------------------- Render */
 
     function appendUser(text) {
         const host = document.getElementById('messages');
+        clearWelcome();
         const el = document.createElement('div');
         el.className = 'msg user';
         el.innerHTML = '<div class="avatar">B</div><div class="content">'
-            + '<div class="who">Bạn</div><div class="bubble">'
+            + '<div class="bubble">'
             + escapeHtml(text).replace(/\n/g, '<br>') + '</div></div>';
         host.appendChild(el);
         host.scrollTop = host.scrollHeight;
@@ -381,10 +523,11 @@
 
     function appendBot() {
         const host = document.getElementById('messages');
+        clearWelcome();
         const el = document.createElement('div');
         el.className = 'msg bot';
         el.innerHTML = '<div class="avatar">✦</div><div class="content">'
-            + '<div class="who">Trợ lý</div><div class="bubble"></div></div>';
+            + '<div class="bubble"></div></div>';
         host.appendChild(el);
         host.scrollTop = host.scrollHeight;
         return el;

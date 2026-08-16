@@ -153,6 +153,50 @@ public class ChunkRepository {
         return rows.size() > topK ? new ArrayList<>(rows.subList(0, topK)) : rows;
     }
 
+    /**
+     * Tim theo VECTOR tren bang THU NGHIEM (model embedding ung vien).
+     *
+     * Bang thu nghiem chi chua {@code chunk_id + embedding}; moi thu khac lay bang JOIN
+     * nguoc ve {@code rag_chunks}. Nho vay khong nhan ban noi dung, va - quan trong hon -
+     * dieu kien loc ACL DUNG Y HET duong chinh, nen phep so sanh chi khac dung mot bien:
+     * model embedding.
+     *
+     * @param trialTable ten bang, lay tu CAU HINH (khong phai input nguoi dung) va da
+     *                   duoc kiem tra dinh dang - xem {@link #requireValidTableName}
+     */
+    public List<RetrievedChunk> trialVectorSearch(String trialTable, float[] queryVector,
+                                                  int topK, SearchFilter filter) {
+        requireValidTableName(trialTable);
+        String vector = Vectors.toLiteral(queryVector);
+        List<Object> args = new ArrayList<>();
+
+        StringBuilder sql = new StringBuilder("SELECT ").append(SELECT_COLUMNS)
+                .append(", 1 - (t.embedding <=> ?::vector) AS score FROM ").append(trialTable)
+                .append(" t JOIN ").append(table).append(" c ON c.id = t.chunk_id ")
+                .append(" LEFT JOIN rag_documents d ON d.id = c.document_id ");
+        args.add(vector);
+
+        appendWhere(sql, args, filter);
+
+        sql.append(" ORDER BY t.embedding <=> ?::vector LIMIT ?");
+        args.add(vector);
+        args.add(effectiveLimit(topK, filter));
+
+        List<RetrievedChunk> rows = jdbc.query(sql.toString(), ROW_MAPPER, args.toArray());
+        rows.forEach(r -> r.setMatchedBy("VECTOR"));
+        return rows.size() > topK ? new ArrayList<>(rows.subList(0, topK)) : rows;
+    }
+
+    /**
+     * Ten bang den tu cau hinh chu khong phai nguoi dung, nhung van kiem tra truoc khi
+     * noi vao SQL - cung nguyen tac voi {@link #validateTableName}.
+     */
+    public static void requireValidTableName(String name) {
+        if (name == null || !name.matches("[A-Za-z_][A-Za-z0-9_]{0,62}")) {
+            throw new IllegalArgumentException("Ten bang khong hop le: " + name);
+        }
+    }
+
     /** Tim theo FULL-TEXT (tu khoa), OR giua cac tu, xep hang bang ts_rank_cd. */
     public List<RetrievedChunk> fullTextSearch(String queryText, int topK, SearchFilter filter) {
         String tsQuery = TsQueryBuilder.orQuery(queryText);

@@ -87,6 +87,12 @@ public class EvalRepository {
     // -------------------------------------------------------------- Runs
 
     public long createRun(String suite, String provider, String model, int total, Object params) {
+        return createRun(suite, provider, model, total, params, "ANSWER");
+    }
+
+    /** @param kind {@code ANSWER} (co giam khao LLM) hoac {@code RETRIEVAL} (chi do truy xuat) */
+    public long createRun(String suite, String provider, String model, int total, Object params,
+                          String kind) {
         String paramsJson;
         try {
             paramsJson = params == null ? null : mapper.writeValueAsString(params);
@@ -96,19 +102,42 @@ public class EvalRepository {
         final String json = paramsJson;
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(connection -> {
+            // Postgres tra ve MOI cot voi RETURN_GENERATED_KEYS => phai chi dinh ro "id".
             PreparedStatement ps = connection.prepareStatement("""
-                    INSERT INTO rag_eval_runs (suite, provider, model, total, params)
-                    VALUES (?, ?, ?, ?, ?::jsonb)
+                    INSERT INTO rag_eval_runs (suite, provider, model, total, params, kind)
+                    VALUES (?, ?, ?, ?, ?::jsonb, ?)
                     """, new String[]{"id"});
             ps.setString(1, suite);
             ps.setString(2, provider);
             ps.setString(3, model);
             ps.setInt(4, total);
             ps.setString(5, json);
+            ps.setString(6, kind);
             return ps;
         }, keys);
         Number id = keys.getKey();
         return id == null ? -1 : id.longValue();
+    }
+
+    /**
+     * Ghi ket qua mot lan do TRUY XUAT.
+     *
+     * @param recall   ty le tai lieu dung nam trong top 1/3/5/10, theo dung thu tu do
+     * @param mrrAfter MRR sau rerank; null khi lan chay khong bat rerank
+     */
+    public void completeRetrievalRun(long runId, int measured, int skipped, double[] recall,
+                                     Double mrr, Double mrrAfter, Integer avgLatencyMs) {
+        jdbc.update("""
+                UPDATE rag_eval_runs
+                   SET judged = ?, skipped = ?, recall_at_1 = ?, recall_at_3 = ?,
+                       recall_at_5 = ?, recall_at_10 = ?, mrr = ?, mrr_reranked = ?,
+                       context_recall = ?, avg_latency_ms = ?
+                 WHERE id = ?
+                """, measured, skipped, recall[0], recall[1], recall[2], recall[3],
+                mrr, mrrAfter,
+                // context_recall giu dung nghia cu "co truy xuat duoc nguon mong doi
+                // khong", bang recall@10 - de so sanh duoc voi cac lan chay ANSWER cu.
+                recall[3], avgLatencyMs, runId);
     }
 
     public void completeRun(long runId, int judged, int skipped, Double faithfulness,

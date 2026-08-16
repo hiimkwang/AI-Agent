@@ -3,15 +3,11 @@ package com.ai.aiagent.llm;
 import com.ai.aiagent.config.RagProperties;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.embedding.AllMiniLmL6V2EmbeddingModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.ollama.OllamaEmbeddingModel;
-import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -50,67 +46,36 @@ public class EmbeddingService {
 
     @PostConstruct
     void init() {
-        String provider = props.getEmbedding().getProvider();
-        provider = provider == null ? "OPENAI" : provider.trim().toUpperCase();
+        RagProperties.Embedding cfg = props.getEmbedding();
+        String provider = cfg.getProvider() == null
+                ? "OPENAI" : cfg.getProvider().trim().toUpperCase();
 
-        try {
-            switch (provider) {
-                case "LOCAL" -> {
-                    // all-MiniLM-L6-v2: 384 chieu, chay ONNX trong tien trinh
-                    this.model = new AllMiniLmL6V2EmbeddingModel();
-                    this.activeProvider = "LOCAL";
-                    warnIfDimensionMismatch(384);
-                    log.warn("Embedding dang dung model LOCAL (all-MiniLM-L6-v2, 384 chieu). "
-                            + "Khong can API key nhung CHAT LUONG TIENG VIET KEM - "
-                            + "chi nen dung de thu nghiem pipeline.");
-                }
-                case "OLLAMA" -> {
-                    this.model = OllamaEmbeddingModel.builder()
-                            .baseUrl(props.getOllama().getBaseUrl())
-                            .modelName(props.getEmbedding().getOllamaModel())
-                            .timeout(Duration.ofMinutes(3))
-                            .build();
-                    this.activeProvider = "OLLAMA";
-                    log.info("Embedding: Ollama {} tai {} ({} chieu)",
-                            props.getEmbedding().getOllamaModel(),
-                            props.getOllama().getBaseUrl(),
-                            props.getEmbedding().getDimensions());
-                }
-                default -> {
-                    String key = props.getOpenai().getApiKey();
-                    if (key == null || key.isBlank()) {
-                        log.error("""
-                                ============================================================
-                                THIEU OPENAI_API_KEY - embedding chua san sang, chuc nang nap
-                                tai lieu va hoi dap se KHONG hoat dong.
-                                Cach xu ly, chon mot trong ba:
-                                  1) dat bien moi truong OPENAI_API_KEY
-                                  2) rag.embedding.provider=OLLAMA (can Ollama chay local)
-                                  3) rag.embedding.provider=LOCAL + rag.embedding.dimensions=384
-                                     (khong can API key, chi dung de thu nghiem)
-                                ============================================================""");
-                        return;
-                    }
-                    OpenAiEmbeddingModel.OpenAiEmbeddingModelBuilder builder =
-                            OpenAiEmbeddingModel.builder()
-                                    .apiKey(key)
-                                    .modelName(props.getEmbedding().getOpenaiModel())
-                                    .dimensions(props.getEmbedding().getDimensions())
-                                    .timeout(Duration.ofMinutes(2));
-                    if (props.getOpenai().getBaseUrl() != null
-                            && !props.getOpenai().getBaseUrl().isBlank()) {
-                        builder.baseUrl(props.getOpenai().getBaseUrl());
-                    }
-                    this.model = builder.build();
-                    this.activeProvider = "OPENAI";
-                    log.info("Embedding: OpenAI {} ({} chieu), batch={}",
-                            props.getEmbedding().getOpenaiModel(),
-                            props.getEmbedding().getDimensions(),
-                            props.getIngestion().getEmbedBatchSize());
-                }
+        EmbeddingModelFactory.Spec spec = new EmbeddingModelFactory.Spec(
+                provider, cfg.modelName(), cfg.getDimensions());
+        this.model = EmbeddingModelFactory.build(spec, props, "chinh");
+
+        if (this.model == null) {
+            if ("OPENAI".equals(provider)) {
+                log.error("""
+                        ============================================================
+                        THIEU OPENAI_API_KEY - embedding chua san sang, chuc nang nap
+                        tai lieu va hoi dap se KHONG hoat dong.
+                        Cach xu ly, chon mot trong ba:
+                          1) dat bien moi truong OPENAI_API_KEY
+                          2) rag.embedding.provider=OLLAMA (can Ollama chay local)
+                          3) rag.embedding.provider=LOCAL + rag.embedding.dimensions=384
+                             (khong can API key, chi dung de thu nghiem)
+                        ============================================================""");
             }
-        } catch (Exception e) {
-            log.error("Khong khoi tao duoc model embedding ({}): {}", provider, e.getMessage());
+            return;
+        }
+
+        this.activeProvider = provider;
+        if ("LOCAL".equals(provider)) {
+            warnIfDimensionMismatch(384);
+            log.warn("Embedding dang dung model LOCAL (all-MiniLM-L6-v2, 384 chieu). "
+                    + "Khong can API key nhung CHAT LUONG TIENG VIET KEM - "
+                    + "chi nen dung de thu nghiem pipeline.");
         }
     }
 

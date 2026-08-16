@@ -89,9 +89,17 @@ public class RagChatService {
     // ================================================== Ban dong bo
 
     public ChatResponse answer(ChatRequest request, AccessScope scope) {
+        return answer(request, scope, BotProfile.none());
+    }
+
+    /**
+     * @param bot cau hinh rieng cua bot dang tra loi (giong dieu, model). Duong web va cac
+     *            loi goi noi bo truyen {@link BotProfile#none()}.
+     */
+    public ChatResponse answer(ChatRequest request, AccessScope scope, BotProfile bot) {
         long start = System.currentTimeMillis();
-        metrics.recordQuestion();
-        Prepared prepared = prepare(request, scope, null);
+        metrics.recordQuestion(bot.label());
+        Prepared prepared = prepare(request, scope, null, bot);
 
         if (prepared.cached() != null) {
             return finishFromCache(prepared, start);
@@ -104,7 +112,7 @@ public class RagChatService {
         LlmClient client = clients.get(prepared.provider(), prepared.model());
         LlmResponse generated = client.complete(
                 new LlmRequest(prepared.prompt().system(), prepared.prompt().user(), null));
-        metrics.recordGeneration(System.currentTimeMillis() - genStart);
+        metrics.recordGeneration(System.currentTimeMillis() - genStart, bot.label());
 
         return finishGenerated(prepared, generated.text(), generated.usage(), start, null);
     }
@@ -121,12 +129,14 @@ public class RagChatService {
      */
     public void streamAnswer(ChatRequest request, AccessScope scope, ChatStreamListener listener) {
         long start = System.currentTimeMillis();
-        metrics.recordQuestion();
+        // Duong stream chi phuc vu giao dien web: khong co bot nao, nhan la "web".
+        BotProfile bot = BotProfile.none();
+        metrics.recordQuestion(bot.label());
         Prepared prepared;
         try {
-            prepared = prepare(request, scope, listener);
+            prepared = prepare(request, scope, listener, bot);
         } catch (Exception e) {
-            metrics.recordError();
+            metrics.recordError(bot.label());
             log.error("Loi khi chuan bi cau tra loi", e);
             listener.onError(safeMessage(e));
             return;
@@ -154,7 +164,7 @@ public class RagChatService {
         try {
             client = clients.get(prepared.provider(), prepared.model());
         } catch (Exception e) {
-            metrics.recordError();
+            metrics.recordError(bot.label());
             log.error("Khong khoi tao duoc model sinh cau tra loi", e);
             listener.onError(e instanceof IllegalStateException
                     ? e.getMessage()
@@ -174,7 +184,7 @@ public class RagChatService {
 
                     @Override
                     public void onComplete(LlmResponse response) {
-                        metrics.recordGeneration(System.currentTimeMillis() - genStart);
+                        metrics.recordGeneration(System.currentTimeMillis() - genStart, bot.label());
                         String text = response.text() == null || response.text().isEmpty()
                                 ? buffer.toString() : response.text();
                         listener.onDone(finishGenerated(prepared, text, response.usage(), start, null));
@@ -182,7 +192,7 @@ public class RagChatService {
 
                     @Override
                     public void onError(Throwable error) {
-                        metrics.recordError();
+                        metrics.recordError(bot.label());
                         log.error("Loi khi sinh cau tra loi", error);
                         // Da gui mot phan cho nguoi dung thi van luu lai phan do
                         if (buffer.length() > 0) {
@@ -206,6 +216,7 @@ public class RagChatService {
     private record Prepared(
             ChatRequest request,
             AccessScope scope,
+            BotProfile bot,
             String conversationId,
             LlmProvider provider,
             String model,
@@ -220,7 +231,8 @@ public class RagChatService {
     ) {
     }
 
-    private Prepared prepare(ChatRequest request, AccessScope scope, ChatStreamListener listener) {
+    private Prepared prepare(ChatRequest request, AccessScope scope, ChatStreamListener listener,
+                             BotProfile bot) {
         String question = request.getQuestion() == null ? "" : request.getQuestion().strip();
         if (question.isEmpty()) {
             throw new IllegalArgumentException("Cau hoi khong duoc de trong.");
@@ -230,11 +242,15 @@ public class RagChatService {
             throw new IllegalArgumentException("Cau hoi qua dai (toi da " + max + " ky tu).");
         }
 
+        // Thu tu uu tien model: request cu the -> cau hinh cua bot -> mac dinh he thong.
+        // Bot dat o giua co y: quan tri vien chon model cho bot Phap che, nhung nguoi
+        // debug van de tam duoc model khac cho mot cau hoi.
         RagSettingsService.ModelSelection defaults = settings.current();
-        LlmProvider provider = Optional.ofNullable(LlmProvider.fromString(request.getProvider()))
-                .orElse(defaults.provider());
-        String model = request.getModel() != null && !request.getModel().isBlank()
-                ? request.getModel().trim() : defaults.model();
+        LlmProvider provider = firstNonNull(
+                LlmProvider.fromString(request.getProvider()),
+                LlmProvider.fromString(bot.provider()),
+                defaults.provider());
+        String model = firstNonBlank(request.getModel(), bot.model(), defaults.model());
         // Khong tao LlmClient o day - xem ghi chu tren record Prepared.
 
         if (props.getObservability().isLogQuestions()) {
@@ -263,8 +279,8 @@ public class RagChatService {
             Optional<AnswerCacheService.CachedAnswer> hit = cache.lookup(
                     question, scope, request.getCategory(), provider.name(), model, queryEmbedding);
             if (hit.isPresent()) {
-                metrics.recordCacheHit(hit.get().kind());
-                return new Prepared(request, scope, conversationId, provider, model,
+                metrics.recordCacheHit(hit.get().kind(), bot.label());
+                return new Prepared(request, scope, bot, conversationId, provider, model,
                         queryEmbedding, null, null, null, RelevanceGate.Decision.proceed(),
                         null, hit.get().citations(), hit.get());
             }
@@ -283,7 +299,7 @@ public class RagChatService {
             // Cau hoi mo ho: bo qua hoan toan retrieval/rerank, hoi lai nguoi dung ngay
             RelevanceGate.Decision decision =
                     RelevanceGate.Decision.abstain("CLARIFICATION_NEEDED", plan.clarifyingQuestion());
-            return new Prepared(request, scope, conversationId, provider, model,
+            return new Prepared(request, scope, bot, conversationId, provider, model,
                     queryEmbedding, plan, null, null, decision, null, List.of(), null);
         }
 
@@ -292,7 +308,7 @@ public class RagChatService {
         long retrievalStart = System.currentTimeMillis();
         HybridRetriever.RetrievalResult retrieval =
                 retriever.retrieve(plan.variants(), scope, request.getCategory());
-        metrics.recordRetrieval(System.currentTimeMillis() - retrievalStart);
+        metrics.recordRetrieval(System.currentTimeMillis() - retrievalStart, bot.label());
 
         if (props.getObservability().isLogCandidates()) {
             logCandidates(retrieval.candidates());
@@ -310,37 +326,39 @@ public class RagChatService {
             long rerankStart = System.currentTimeMillis();
             rerank = reranker.rerank(plan.rewritten(), retrieval.candidates(),
                     props.getRetrieval().getTopK());
-            metrics.recordRerank(System.currentTimeMillis() - rerankStart);
+            metrics.recordRerank(System.currentTimeMillis() - rerankStart, bot.label());
         }
 
         // [5] Cong tu choi
         RelevanceGate.Decision decision = gate.evaluate(retrieval, rerank);
         if (decision.abstain()) {
-            return new Prepared(request, scope, conversationId, provider, model,
+            return new Prepared(request, scope, bot, conversationId, provider, model,
                     queryEmbedding, plan, retrieval, rerank, decision, null, List.of(), null);
         }
 
         // [6] Prompt + trich dan
-        PromptBuilder.BuiltPrompt prompt = prompts.build(question, rerank.chunks());
+        PromptBuilder.BuiltPrompt prompt =
+                prompts.build(question, rerank.chunks(), bot.personaPrompt());
         // Cong tac cua admin: tat thi khong tra danh sach trich dan ra client (van giu
         // nguyen cach LLM tu neu nguon trong van ban - do la chat luong cau tra loi,
         // khong phai tinh nang UI).
         List<Citation> citations = props.getChat().isCitationsEnabled()
                 ? toCitations(prompt.sources()) : List.of();
 
-        return new Prepared(request, scope, conversationId, provider, model,
+        return new Prepared(request, scope, bot, conversationId, provider, model,
                 queryEmbedding, plan, retrieval, rerank, decision, prompt, citations, null);
     }
 
     // ================================================== Ket thuc
 
-    private ChatResponse finishGenerated(Prepared p, String answer, LlmUsage usage,
+    private ChatResponse finishGenerated(Prepared p, String rawAnswer, LlmUsage usage,
                                          long start, String cacheHit) {
+        String answer = verifyCitations(p, rawAnswer);
         long latency = System.currentTimeMillis() - start;
-        metrics.recordTotal(latency);
+        metrics.recordTotal(latency, p.bot().label());
         if (usage != null) {
             metrics.recordUsage(p.provider().name(), p.model(),
-                    usage.inputTokens(), usage.outputTokens(), usage.costUsd());
+                    usage.inputTokens(), usage.outputTokens(), usage.costUsd(), p.bot().label());
         }
         if (props.getObservability().isLogAnswers()) {
             log.info("<<< TRA LOI: {}", answer);
@@ -360,8 +378,8 @@ public class RagChatService {
 
     private ChatResponse finishAbstain(Prepared p, long start) {
         long latency = System.currentTimeMillis() - start;
-        metrics.recordTotal(latency);
-        metrics.recordAbstained(p.decision().reason());
+        metrics.recordTotal(latency, p.bot().label());
+        metrics.recordAbstained(p.decision().reason(), p.bot().label());
 
         String message = p.decision().message();
         Long messageId = persist(p, message, LlmUsage.EMPTY, latency, true, null);
@@ -373,7 +391,7 @@ public class RagChatService {
 
     private ChatResponse finishFromCache(Prepared p, long start) {
         long latency = System.currentTimeMillis() - start;
-        metrics.recordTotal(latency);
+        metrics.recordTotal(latency, p.bot().label());
         AnswerCacheService.CachedAnswer cached = p.cached();
         Long messageId = persist(p, cached.answer(), LlmUsage.EMPTY, latency, false, cached.kind());
 
@@ -387,20 +405,49 @@ public class RagChatService {
                          boolean abstained, String cacheHit) {
         try {
             conversations.ensureConversation(p.conversationId(), p.scope().clientId(),
-                    p.request().getCategory());
+                    p.request().getCategory(), p.bot().id());
             String question = p.request().getQuestion().strip();
             conversations.updateTitleIfEmpty(p.conversationId(), question);
             conversations.appendUserMessage(p.conversationId(), question,
-                    p.plan() == null ? null : (p.plan().wasRewritten() ? p.plan().rewritten() : null));
+                    p.plan() == null ? null : (p.plan().wasRewritten() ? p.plan().rewritten() : null),
+                    p.bot().slug());
 
             long messageId = conversations.appendAssistantMessage(p.conversationId(), answer,
-                    p.provider().name(), p.model(), usage, (int) latency, abstained, cacheHit);
+                    p.provider().name(), p.model(), usage, (int) latency, abstained, cacheHit,
+                    p.bot().slug());
             conversations.updateLatency(messageId, (int) latency);
             conversations.saveCitations(messageId, p.citations());
             return messageId;
         } catch (Exception e) {
             log.warn("Khong luu duoc hoi thoai (cau tra loi van duoc tra ve): {}", e.getMessage());
             return null;
+        }
+    }
+
+    /**
+     * Bo cac moc trich dan tro toi nguon khong ton tai.
+     *
+     * Voi tai lieu noi quy, mot can cu SAI nguy hiem hon khong co can cu: nguoi doc thay
+     * so hieu thi tin va se khong di kiem chung. Dem so lan xay ra vao metrics vi ty le
+     * nay tang la dau hieu prompt hoac model dang xuong cap.
+     *
+     * Fallback im lang theo dung quy uoc chung: loi o buoc phu tro khong duoc lam mat
+     * cau tra loi.
+     */
+    private String verifyCitations(Prepared p, String answer) {
+        if (p.prompt() == null || answer == null) return answer;
+        try {
+            PromptBuilder.CitationCheck check =
+                    PromptBuilder.verifyCitations(answer, p.prompt().sources().size());
+            if (check.hadInvalid()) {
+                metrics.recordInvalidCitation(p.bot().label());
+                log.warn("Cau tra loi dan {} nguon khong ton tai (chi co {} nguon) -> da bo moc.",
+                        check.invalid(), p.prompt().sources().size());
+            }
+            return check.answer();
+        } catch (Exception e) {
+            log.warn("Kiem tra trich dan loi ({}) -> giu nguyen cau tra loi.", e.getMessage());
+            return answer;
         }
     }
 
@@ -462,6 +509,21 @@ public class RagChatService {
      * Khong bao gio de chi tiet loi noi bo ra ngoai - truoc day tra thang
      * {@code e.getMessage()} lam lo cau SQL, ten bang va host DB.
      */
+    @SafeVarargs
+    private static <T> T firstNonNull(T... values) {
+        for (T v : values) {
+            if (v != null) return v;
+        }
+        return null;
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v.strip();
+        }
+        return null;
+    }
+
     private String safeMessage(Throwable e) {
         if (e instanceof IllegalArgumentException || e instanceof SecurityException) {
             return e.getMessage();

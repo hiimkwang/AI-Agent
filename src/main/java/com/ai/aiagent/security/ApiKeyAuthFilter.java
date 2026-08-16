@@ -91,9 +91,25 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         if (scope != null) {
             authenticate(scope);
         } else {
-            SecurityContextHolder.clearContext();
+            clearStaleApiKeyContext();
         }
         chain.doFilter(request, response);
+    }
+
+    /**
+     * Khong co API key hop le tren request nay.
+     *
+     * CHI duoc xoa context do CHINH filter nay dat truoc do. Truoc day o day goi thang
+     * {@code SecurityContextHolder.clearContext()}, nghia la moi request khong kem API key
+     * deu xoa sach xac thuc - ke ca PHIEN DANG NHAP ENTRA vua duoc
+     * {@code SecurityContextHolderFilter} nap tu session. Hau qua: bat dau ho tro SSO thi
+     * nguoi dung dang nhap xong van bi 401 o moi loi goi API.
+     */
+    private void clearStaleApiKeyContext() {
+        var existing = SecurityContextHolder.getContext().getAuthentication();
+        if (existing == null || existing.getPrincipal() instanceof AccessScope) {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     private String header(HttpServletRequest request) {

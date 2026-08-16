@@ -42,6 +42,36 @@ public class MarkdownChunker {
     private static final Pattern SETEXT_UNDERLINE = Pattern.compile("^(={2,}|-{2,})\\s*$");
     private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?;:])\\s+(?=\\p{Lu}|\\d|-)");
 
+    /**
+     * Cau truc van ban phap quy Viet Nam, nhan dien tren chuoi DA BO DAU.
+     *
+     * TAI SAO CAN: quy che/quy trinh/quyet dinh chuyen tu PDF hay Word gan nhu khong bao
+     * gio co heading Markdown - "Dieu 7. Nghi phep hang nam" chi la mot doan van thuong.
+     * Khong nhan ra thi ca tai lieu la MOT section, parent duoc dong thuan theo so ky tu,
+     * va chunk bi cat ngang giua mot Dieu. Tra loi "theo Dieu 12" ma chi co nua Dieu 12
+     * la kieu sai nghiem trong hon han viec khong tra loi.
+     *
+     * Nhan ra roi thi tan dung duoc TOAN BO co che san co: moi Dieu thanh mot section,
+     * duong dan heading tu dong thanh "Chuong II > Dieu 7. Nghi phep hang nam", va parent
+     * khong bao gio vuot qua ranh gioi Dieu.
+     *
+     * KHONG nhan "Khoan"/"Diem": chung danh so ngay trong than Dieu ("1.", "a)"), tach ra
+     * se lam vun chunk den muc mat ngu canh - dung dieu ma parent-child sinh ra de tranh.
+     */
+    private static final Pattern LEGAL_PART = Pattern.compile(
+            "^phan\\s+(thu\\s+)?[\\p{L}\\d]+\\b.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEGAL_CHAPTER = Pattern.compile(
+            "^chuong\\s+([ivxlcdm]+|\\d+)\\b.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEGAL_SECTION = Pattern.compile(
+            "^muc\\s+([ivxlcdm]+|\\d+|[a-z])\\b.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEGAL_ARTICLE = Pattern.compile(
+            "^dieu\\s+\\d+\\b.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEGAL_APPENDIX = Pattern.compile(
+            "^phu\\s+luc\\b.*", Pattern.CASE_INSENSITIVE);
+
+    /** Dong qua dai thi khong phai tieu de ma la mot cau co chua tu do. */
+    private static final int MAX_LEGAL_HEADING_CHARS = 200;
+
     private final RagProperties props;
 
     public MarkdownChunker(RagProperties props) {
@@ -56,9 +86,24 @@ public class MarkdownChunker {
      */
     public record Chunk(int index, String headingPath, String content, String parentContent) {
 
-        /** Van ban dung de nhung / index full-text: co ca duong dan heading. */
         public String embedText(String generatedContext) {
+            return embedText(null, generatedContext);
+        }
+
+        /**
+         * Van ban dung de nhung.
+         *
+         * @param documentIdentity ten tai lieu + so hieu + ngay hieu luc, vi du
+         *        {@code [Quy che nghi phep - QD-123/2026/QD-BSC - hieu luc 01/01/2026]}.
+         *        Khong co no thi nhung thong tin do KHONG nam trong vector cua chunk, nen
+         *        cau hoi dang "quy dinh so bao nhieu", "van ban nao quy dinh nghi phep"
+         *        gan nhu chac chan truot - du tai lieu dung nam ngay do.
+         */
+        public String embedText(String documentIdentity, String generatedContext) {
             StringBuilder sb = new StringBuilder();
+            if (documentIdentity != null && !documentIdentity.isBlank()) {
+                sb.append(documentIdentity).append('\n');
+            }
             if (headingPath != null && !headingPath.isBlank()) {
                 sb.append(headingPath).append('\n');
             }
@@ -68,6 +113,21 @@ public class MarkdownChunker {
             sb.append(content);
             return sb.toString();
         }
+    }
+
+    /**
+     * Dong dinh danh tai lieu gan vao dau van ban dem di nhung.
+     *
+     * Tra ve chuoi rong khi khong co thong tin nao dang gia - de khong them mot dong
+     * nhieu vao moi chunk.
+     */
+    public static String documentIdentity(String title, String docNumber,
+                                          java.time.LocalDate effectiveDate) {
+        List<String> parts = new ArrayList<>();
+        if (title != null && !title.isBlank()) parts.add(title.strip());
+        if (docNumber != null && !docNumber.isBlank()) parts.add(docNumber.strip());
+        if (effectiveDate != null) parts.add("hiệu lực từ " + effectiveDate);
+        return parts.isEmpty() ? "" : "[" + String.join(" — ", parts) + "]";
     }
 
     private enum BlockType { HEADING, TABLE, CODE, TEXT }
@@ -165,6 +225,16 @@ public class MarkdownChunker {
                 continue;
             }
 
+            // Cau truc phap quy: coi nhu heading tong hop, tan dung toan bo co che section
+            int legalLevel = props.getChunking().isLegalStructureEnabled()
+                    ? legalHeadingLevel(trimmed) : 0;
+            if (legalLevel > 0) {
+                flush(blocks, buffer, bufferType, 0);
+                blocks.add(new Block(BlockType.HEADING, legalLevel, trimmed));
+                bufferType = BlockType.TEXT;
+                continue;
+            }
+
             boolean tableLine = trimmed.startsWith("|");
             if (tableLine && bufferType != BlockType.TABLE) {
                 flush(blocks, buffer, bufferType, 0);
@@ -184,6 +254,28 @@ public class MarkdownChunker {
         }
         flush(blocks, buffer, bufferType, 0);
         return blocks;
+    }
+
+    /**
+     * @return cap heading tuong ung neu dong nay la mot moc cau truc phap quy, 0 neu khong.
+     *         Cap duoc chon de {@code Phan > Chuong > Muc > Dieu} long dung thu tu, va deu
+     *         SAU cap 1 de heading Markdown that (neu tai lieu co) van la goc.
+     */
+    static int legalHeadingLevel(String line) {
+        String trimmed = line == null ? "" : line.strip();
+        if (trimmed.isEmpty() || trimmed.length() > MAX_LEGAL_HEADING_CHARS) return 0;
+
+        // Bo dinh dang dam cua Markdown: "**Dieu 7. ...**" van la mot moc cau truc
+        String text = trimmed.replaceAll("^[*_#\\s]+", "").replaceAll("[*_\\s]+$", "");
+        String plain = com.ai.aiagent.store.TsQueryBuilder.stripDiacritics(text)
+                .toLowerCase().strip();
+
+        if (LEGAL_PART.matcher(plain).matches()) return 2;
+        if (LEGAL_CHAPTER.matcher(plain).matches()) return 3;
+        if (LEGAL_APPENDIX.matcher(plain).matches()) return 3;
+        if (LEGAL_SECTION.matcher(plain).matches()) return 4;
+        if (LEGAL_ARTICLE.matcher(plain).matches()) return 5;
+        return 0;
     }
 
     private void flush(List<Block> blocks, StringBuilder buffer, BlockType type, int level) {
@@ -247,7 +339,13 @@ public class MarkdownChunker {
             if (!out.isEmpty()) {
                 Section previous = out.get(out.size() - 1);
                 boolean sameBranch = sharePrefix(previous.headingPath(), section.headingPath());
-                if (previous.length() < min && sameBranch) {
+                // KHONG gop qua ranh gioi phap quy. Mot "Dieu" la don vi ngu nghia tron
+                // ven; gop hai Dieu lai vua tao ra parent bat qua hai Dieu (dung dieu ma
+                // legal-structure sinh ra de tranh), vua GAN NHAM NHAN: buoc chon duong
+                // dan cu the hon ben duoi se dan noi dung Dieu 1 duoi ten Dieu 2.
+                boolean legalBoundary = isLegalUnit(previous.headingPath())
+                        || isLegalUnit(section.headingPath());
+                if (previous.length() < min && sameBranch && !legalBoundary) {
                     List<Block> merged = new ArrayList<>(previous.blocks());
                     merged.addAll(section.blocks());
                     // Giu duong dan CU THE HON de chunk khong mat vi tri
@@ -260,6 +358,16 @@ public class MarkdownChunker {
             out.add(section);
         }
         return out;
+    }
+
+    /** Section nay ket thuc bang mot moc cau truc phap quy (Dieu/Chuong/Muc/Phu luc)? */
+    private boolean isLegalUnit(String headingPath) {
+        if (!props.getChunking().isLegalStructureEnabled()
+                || headingPath == null || headingPath.isBlank()) {
+            return false;
+        }
+        String[] parts = headingPath.split(" > ");
+        return legalHeadingLevel(parts[parts.length - 1]) > 0;
     }
 
     private boolean sharePrefix(String a, String b) {

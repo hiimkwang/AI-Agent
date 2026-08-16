@@ -1,0 +1,160 @@
+package com.ai.aiagent.observability;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Kiem tra viec tach so lieu theo bot.
+ *
+ * Diem de sai nhat khong phai viec gan the, ma la viec TONG HOP sau khi gan: tach the
+ * xong ma van doc {@code count()} cua mot chuoi duy nhat thi trang quan tri se hien so
+ * cua dung mot bot va goi do la so lieu toan he.
+ */
+class RagMetricsTest {
+
+    private SimpleMeterRegistry registry;
+    private RagMetrics metrics;
+
+    @BeforeEach
+    void setUp() {
+        registry = new SimpleMeterRegistry();
+        metrics = new RagMetrics(registry);
+    }
+
+    @Test
+    @DisplayName("Cau hoi cua tung bot vao tung chuoi so lieu rieng")
+    void questionsAreSplitPerBot() {
+        metrics.recordQuestion("nhan-su");
+        metrics.recordQuestion("nhan-su");
+        metrics.recordQuestion("phap-che");
+
+        assertThat(counter("rag.questions", "nhan-su")).isEqualTo(2.0);
+        assertThat(counter("rag.questions", "phap-che")).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("Bot rong/null duoc ghi la 'web' chu khong phai the rong")
+    void missingBotBecomesWeb() {
+        metrics.recordQuestion(null);
+        metrics.recordQuestion("");
+
+        assertThat(counter("rag.questions", RagMetrics.WEB)).isEqualTo(2.0);
+        // Mot the rong lam vo chuoi so lieu ben Prometheus, khong duoc phep ton tai.
+        assertThat(registry.find("rag.questions").tag("bot", "").counter()).isNull();
+    }
+
+    @Test
+    @DisplayName("Snapshot cong don MOI bot, khong phai chi bot dau tien")
+    void snapshotSumsAcrossBots() {
+        metrics.recordQuestion("nhan-su");
+        metrics.recordQuestion("phap-che");
+        metrics.recordQuestion(RagMetrics.WEB);
+        metrics.recordAbstained("NO_RELEVANT_CHUNK", "phap-che");
+
+        Map<String, Object> snapshot = metrics.snapshot();
+
+        assertThat(snapshot.get("questions")).isEqualTo(3L);
+        assertThat(snapshot.get("abstained")).isEqualTo(1L);
+        assertThat(snapshot.get("abstainRate")).isEqualTo(33.3);
+    }
+
+    @Test
+    @DisplayName("Cache hit van tach duoc exact/semantic sau khi them the bot")
+    void cacheHitsKeepTheirKind() {
+        metrics.recordCacheHit("EXACT", "nhan-su");
+        metrics.recordCacheHit("SEMANTIC", "nhan-su");
+        metrics.recordCacheHit("SEMANTIC", "phap-che");
+
+        Map<String, Object> snapshot = metrics.snapshot();
+
+        assertThat(snapshot.get("cacheHitsExact")).isEqualTo(1L);
+        assertThat(snapshot.get("cacheHitsSemantic")).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("Ly do tu choi giu ca the reason lan the bot")
+    void abstainReasonKeepsBothTags() {
+        metrics.recordAbstained("LOW_SCORE", "phap-che");
+
+        Counter c = registry.find("rag.abstain.reason")
+                .tag("reason", "LOW_SCORE").tag("bot", "phap-che").counter();
+        assertThat(c).isNotNull();
+        assertThat(c.count()).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("Chi phi vua cong vao tong, vua tach duoc theo bot")
+    void costIsBothAggregatedAndSplit() {
+        metrics.recordUsage("ANTHROPIC", "claude", 100, 50, 0.002, "nhan-su");
+        metrics.recordUsage("ANTHROPIC", "claude", 200, 20, 0.003, "phap-che");
+
+        Map<String, Object> snapshot = metrics.snapshot();
+        assertThat(snapshot.get("inputTokens")).isEqualTo(300L);
+        assertThat((Double) snapshot.get("costUsd")).isEqualTo(0.005);
+
+        assertThat(counter("rag.cost.usd", "nhan-su")).isEqualTo(0.002);
+        assertThat(counter("rag.cost.usd", "phap-che")).isEqualTo(0.003);
+    }
+
+    @Test
+    @DisplayName("Do tre toan luot: p50 la trung binh co trong so, khong phai cua mot bot")
+    void totalLatencyIsWeightedAcrossBots() {
+        metrics.recordTotal(100, "nhan-su");
+        metrics.recordTotal(100, "nhan-su");
+        metrics.recordTotal(400, "phap-che");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latency = (Map<String, Object>) metrics.snapshot().get("latencyMs");
+
+        assertThat(latency.get("totalP50")).isEqualTo(200L);   // (100+100+400)/3
+        assertThat(latency.get("totalP95")).isEqualTo(400L);
+    }
+
+    /**
+     * Loi da xay ra that: {@code stage=total} duoc gan them the {@code bot} con ba buoc
+     * kia thi khong, va Prometheus LOAI BO IM LANG chuoi total - khong mot dong log nao.
+     * Micrometer khong tu bat loi nay (SimpleMeterRegistry chap nhan tuot), nen phai
+     * kiem tra bang chinh dieu kien cua Prometheus: cung ten metric => cung bo khoa tag.
+     */
+    @Test
+    @DisplayName("Moi chuoi rag.latency dung CHUNG mot bo khoa tag")
+    void everyLatencySeriesHasTheSameTagKeys() {
+        metrics.recordTotal(100, "nhan-su");
+        metrics.recordRetrieval(30, "nhan-su");
+        metrics.recordRerank(20, "nhan-su");
+        metrics.recordGeneration(50, null);
+
+        var keySets = registry.find("rag.latency").timers().stream()
+                .map(t -> t.getId().getTags().stream()
+                        .map(io.micrometer.core.instrument.Tag::getKey)
+                        .sorted().toList())
+                .distinct().toList();
+
+        assertThat(registry.find("rag.latency").timers()).hasSize(4);
+        assertThat(keySets).containsExactly(java.util.List.of("bot", "stage"));
+    }
+
+    @Test
+    @DisplayName("Trung binh tung buoc cung cong don qua moi bot")
+    void stageMeansAreAggregated() {
+        metrics.recordRetrieval(100, "nhan-su");
+        metrics.recordRetrieval(300, "phap-che");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latency = (Map<String, Object>) metrics.snapshot().get("latencyMs");
+
+        assertThat(latency.get("retrievalMean")).isEqualTo(200L);
+    }
+
+    private double counter(String name, String bot) {
+        Counter c = registry.find(name).tag("bot", bot).counter();
+        return c == null ? -1 : c.count();
+    }
+}

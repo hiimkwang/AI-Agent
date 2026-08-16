@@ -133,10 +133,17 @@ public class IngestionService {
         // 5) Ngu canh (tuy chon)
         List<String> contexts = enricher.buildContexts(fileName, parts);
 
-        // 6) Nhung theo lo, co retry
+        // 6) Nhung theo lo, co retry.
+        // Gan dinh danh tai lieu (ten + so hieu + ngay hieu luc) vao dau moi chunk: neu
+        // khong, nhung thong tin do khong nam trong vector va cau hoi dang "quy dinh so
+        // bao nhieu" se truot du tai lieu dung nam ngay do.
+        String identity = props.getChunking().isPrefixDocumentIdentity()
+                ? MarkdownChunker.documentIdentity(meta.title(), meta.docNumber(),
+                        meta.effectiveDate())
+                : null;
         List<String> embedTexts = new ArrayList<>(parts.size());
         for (int i = 0; i < parts.size(); i++) {
-            embedTexts.add(parts.get(i).embedText(contexts.get(i)));
+            embedTexts.add(parts.get(i).embedText(identity, contexts.get(i)));
         }
         List<float[]> vectors = embeddings.embedAll(embedTexts);
         if (vectors.size() != parts.size()) {

@@ -35,6 +35,14 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+        <!-- Dang nhap bang tai khoan cong ty (Microsoft Entra ID, OIDC authorization code).
+             CHI duoc dung khi rag.entra.enabled=true; khong cau hinh ENTRA_CLIENT_ID thi
+             Spring Boot khong tao ClientRegistrationRepository va he thong chay y nhu cu
+             bang API key. Xem SecurityConfig. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>

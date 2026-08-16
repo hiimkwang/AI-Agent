@@ -37,12 +37,20 @@ public class ConversationRepository {
         this.jdbc = jdbc;
     }
 
-    public void ensureConversation(String conversationId, String userId, String category) {
+    /**
+     * @param botId bot phuc vu hoi thoai; null o duong web. Chi dat khi con TRONG:
+     *              hoi thoai da thuoc ve mot bot thi giu nguyen bot do, de mot lan doi
+     *              rang buoc channel khong viet lai lich su thanh cua bot moi
+     */
+    public void ensureConversation(String conversationId, String userId, String category,
+                                   Long botId) {
         jdbc.update("""
-                INSERT INTO rag_conversations (id, user_id, category, created_at, last_active_at)
-                VALUES (?, ?, ?, now(), now())
-                ON CONFLICT (id) DO UPDATE SET last_active_at = now()
-                """, conversationId, userId, category);
+                INSERT INTO rag_conversations (id, user_id, category, bot_id, created_at, last_active_at)
+                VALUES (?, ?, ?, ?, now(), now())
+                ON CONFLICT (id) DO UPDATE
+                   SET last_active_at = now(),
+                       bot_id = COALESCE(rag_conversations.bot_id, EXCLUDED.bot_id)
+                """, conversationId, userId, category, botId);
     }
 
     public void updateTitleIfEmpty(String conversationId, String title) {
@@ -52,25 +60,31 @@ public class ConversationRepository {
                 trimmed, conversationId);
     }
 
-    public long appendUserMessage(String conversationId, String content, String rewrittenQuery) {
+    /**
+     * @param botSlug ghi ca vao tin nhan CUA NGUOI DUNG, khong chi tin nhan tra loi:
+     *                {@code /eval/cases/harvest} thu hoach cau hoi that tu chinh cac dong
+     *                nay, va thu hoach duoc theo tung bot moi danh gia duoc rieng bot do
+     */
+    public long appendUserMessage(String conversationId, String content, String rewrittenQuery,
+                                  String botSlug) {
         return insertMessage(conversationId, "user", content, rewrittenQuery,
-                null, null, null, null, null, false, null);
+                null, null, null, null, null, false, null, botSlug);
     }
 
     public long appendAssistantMessage(String conversationId, String content, String provider,
                                        String model, LlmUsage usage, Integer latencyMs,
-                                       boolean abstained, String cacheHit) {
+                                       boolean abstained, String cacheHit, String botSlug) {
         return insertMessage(conversationId, "assistant", content, null, provider, model,
                 usage == null ? null : usage.inputTokens(),
                 usage == null ? null : usage.outputTokens(),
                 usage == null ? null : usage.costUsd(),
-                abstained, cacheHit);
+                abstained, cacheHit, botSlug);
     }
 
     private long insertMessage(String conversationId, String role, String content,
                                String rewrittenQuery, String provider, String model,
                                Integer inputTokens, Integer outputTokens, Double costUsd,
-                               boolean abstained, String cacheHit) {
+                               boolean abstained, String cacheHit, String botSlug) {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(connection -> {
             // Phai chi RO ten cot khoa. Voi RETURN_GENERATED_KEYS, Postgres tra ve
@@ -79,8 +93,9 @@ public class ConversationRepository {
             PreparedStatement ps = connection.prepareStatement("""
                     INSERT INTO rag_messages
                         (conversation_id, role, content, rewritten_query, provider, model,
-                         input_tokens, output_tokens, cost_usd, latency_ms, abstained, cache_hit)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         input_tokens, output_tokens, cost_usd, latency_ms, abstained, cache_hit,
+                         bot_slug)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, new String[]{"id"});
             ps.setString(1, conversationId);
             ps.setString(2, role);
@@ -95,6 +110,7 @@ public class ConversationRepository {
             ps.setNull(10, java.sql.Types.INTEGER);
             ps.setBoolean(11, abstained);
             ps.setString(12, cacheHit);
+            ps.setString(13, botSlug);
             return ps;
         }, keys);
 
@@ -146,7 +162,7 @@ public class ConversationRepository {
     public List<Map<String, Object>> messages(String conversationId) {
         List<Map<String, Object>> messages = jdbc.query("""
                 SELECT id, role, content, provider, model, input_tokens, output_tokens,
-                       cost_usd, latency_ms, abstained, cache_hit, created_at
+                       cost_usd, latency_ms, abstained, cache_hit, bot_slug, created_at
                   FROM rag_messages
                  WHERE conversation_id = ?
                  ORDER BY id
@@ -163,6 +179,7 @@ public class ConversationRepository {
             m.put("latencyMs", rs.getObject("latency_ms"));
             m.put("abstained", rs.getBoolean("abstained"));
             m.put("cacheHit", rs.getString("cache_hit"));
+            m.put("bot", rs.getString("bot_slug"));
             m.put("createdAt", rs.getTimestamp("created_at"));
             return m;
         }, conversationId);
@@ -194,8 +211,11 @@ public class ConversationRepository {
     public List<Map<String, Object>> listConversations(String userId, int limit) {
         StringBuilder sql = new StringBuilder("""
                 SELECT c.id, c.title, c.category, c.user_id, c.created_at, c.last_active_at,
+                       b.slug AS bot_slug,
                        (SELECT count(*) FROM rag_messages m WHERE m.conversation_id = c.id) AS message_count
-                  FROM rag_conversations c WHERE 1 = 1
+                  FROM rag_conversations c
+                  LEFT JOIN rag_bots b ON b.id = c.bot_id
+                 WHERE 1 = 1
                 """);
         List<Object> args = new ArrayList<>();
         if (userId != null && !userId.isBlank()) {
@@ -213,6 +233,7 @@ public class ConversationRepository {
             m.put("userId", rs.getString("user_id"));
             m.put("createdAt", rs.getTimestamp("created_at"));
             m.put("lastActiveAt", rs.getTimestamp("last_active_at"));
+            m.put("bot", rs.getString("bot_slug"));
             m.put("messageCount", rs.getLong("message_count"));
             return m;
         }, args.toArray());

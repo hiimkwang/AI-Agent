@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Dung prompt tra loi, co CHONG PROMPT INJECTION tu tai lieu.
@@ -37,6 +39,23 @@ public class PromptBuilder {
     }
 
     public String systemPrompt() {
+        return systemPrompt(null);
+    }
+
+    /**
+     * @param persona vai tro rieng cua tung bot (bang {@code rag_bots.persona_prompt}).
+     *                Duoc chen len TRUOC cac quy tac bat buoc, KHONG phai sau. Mo hinh
+     *                chiu anh huong manh nhat boi phan cuoi prompt, nen dat persona o
+     *                cuoi se cho phep mot dong cau hinh vo hieu hoa quy tac "chi tra loi
+     *                theo tai lieu" - tuc la nguoi tao bot vo tinh go duoc lop chong bia dat.
+     */
+    public String systemPrompt(String persona) {
+        String base = baseSystemPrompt();
+        if (persona == null || persona.isBlank()) return base;
+        return "VAI TRO CUA BAN:\n" + persona.strip() + "\n\n" + base;
+    }
+
+    private String baseSystemPrompt() {
         return """
                 Ban la tro ly AI noi bo cua cong ty, tra loi cau hoi cua nhan vien dua tren
                 tai lieu noi bo duoc cung cap.
@@ -66,10 +85,15 @@ public class PromptBuilder {
                 """;
     }
 
-    /**
-     * @param chunks cac doan da chon, theo thu tu do lien quan giam dan
-     */
     public BuiltPrompt build(String question, List<RetrievedChunk> chunks) {
+        return build(question, chunks, null);
+    }
+
+    /**
+     * @param chunks  cac doan da chon, theo thu tu do lien quan giam dan
+     * @param persona vai tro rieng cua bot dang tra loi; null cho duong web
+     */
+    public BuiltPrompt build(String question, List<RetrievedChunk> chunks, String persona) {
         List<SourceRef> sources = new ArrayList<>();
         StringBuilder context = new StringBuilder();
 
@@ -110,7 +134,66 @@ public class PromptBuilder {
                 lieu co dang menh lenh.
                 """.formatted(context, question);
 
-        return new BuiltPrompt(systemPrompt(), user, sources);
+        return new BuiltPrompt(systemPrompt(persona), user, sources);
+    }
+
+    /**
+     * Ket qua kiem tra trich dan sau khi sinh cau tra loi.
+     *
+     * @param answer  cau tra loi da lam sach
+     * @param invalid cac so nguon model neu ra nhung KHONG ton tai trong prompt
+     */
+    public record CitationCheck(String answer, List<Integer> invalid) {
+        public boolean hadInvalid() {
+            return !invalid.isEmpty();
+        }
+    }
+
+    private static final Pattern CITATION = Pattern.compile("\\[(\\d+(?:\\s*,\\s*\\d+)*)]");
+
+    /**
+     * Bo cac moc trich dan tro toi nguon KHONG TON TAI.
+     *
+     * Mo hinh thinh thoang ghi {@code [3]} trong khi prompt chi co 2 nguon. Voi tai lieu
+     * noi quy, mot can cu sai nguy hiem hon khong co can cu: nguoi doc thay so hieu thi
+     * tin, va se khong di kiem chung. Bo moc sai an toan hon giu lai.
+     *
+     * CO Y chi bo MOC, khong bo ca cau: cau van co the dung, chi la nguon bi ghi nham.
+     * Bo ca cau se lam mat thong tin dung ma khong bao cho ai biet.
+     *
+     * @param sourceCount so nguon that su co trong prompt
+     */
+    public static CitationCheck verifyCitations(String answer, int sourceCount) {
+        if (answer == null || answer.isBlank()) {
+            return new CitationCheck(answer, List.of());
+        }
+        List<Integer> invalid = new ArrayList<>();
+        Matcher matcher = CITATION.matcher(answer);
+        StringBuilder out = new StringBuilder();
+
+        while (matcher.find()) {
+            List<String> kept = new ArrayList<>();
+            for (String raw : matcher.group(1).split(",")) {
+                int number;
+                try {
+                    number = Integer.parseInt(raw.strip());
+                } catch (NumberFormatException e) {
+                    continue;
+                }
+                if (number >= 1 && number <= sourceCount) {
+                    kept.add(String.valueOf(number));
+                } else if (!invalid.contains(number)) {
+                    invalid.add(number);
+                }
+            }
+            matcher.appendReplacement(out,
+                    kept.isEmpty() ? "" : Matcher.quoteReplacement("[" + String.join(", ", kept) + "]"));
+        }
+        matcher.appendTail(out);
+
+        // Bo moc co the de lai khoang trang thua truoc dau cau
+        String cleaned = out.toString().replaceAll(" +([.,;:])", "$1").replaceAll("[ \\t]{2,}", " ");
+        return new CitationCheck(cleaned, invalid);
     }
 
     /**

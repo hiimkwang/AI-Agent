@@ -25,17 +25,21 @@
         .sub { color: var(--muted); font-size: .9rem; margin: 0 0 1rem; max-width: 60ch; }
         section + section { margin-top: 1.6rem; }
 
-        /* ------------------------------------------------------- Stat tiles */
-        .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1px;
-                 background: var(--rule); border: 1px solid var(--rule);
-                 border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+        /* ------------------------------------------------------- Stat tiles
+           Ô rời nhau, KHÔNG dùng thủ thuật "khe 1px trên nền kẻ": số ô thay đổi
+           theo dữ liệu, nên hàng cuối gần như luôn thiếu ô — và phần thiếu đó
+           hiện ra thành một mảng xám to đúng giữa trang. Lưới có khoảng cách
+           thật thì hàng thiếu ô chỉ đơn giản là kết thúc sớm. */
+        .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+                 gap: .6rem; margin: 0; }
         .tile {
-            background: var(--surface); padding: .8rem .9rem .8rem 1.05rem;
-            border-left: 3px solid transparent; transition: border-color .15s ease;
+            background: var(--surface); padding: .75rem .9rem .8rem 1rem;
+            border: 1px solid var(--rule); border-left: 3px solid var(--rule-strong);
+            border-radius: var(--radius); box-shadow: var(--shadow-sm);
+            transition: border-color .15s ease;
         }
         .tile dt {
-            font-family: var(--mono); font-size: .66rem; letter-spacing: .1em;
-            text-transform: uppercase; color: var(--faint);
+            font-size: .74rem; letter-spacing: .01em; color: var(--muted);
         }
         .tile dd {
             margin: .25rem 0 0; font-size: 1.6rem; line-height: 1.1; font-weight: 600;
@@ -49,9 +53,30 @@
         .tile.good { border-left-color: var(--good); }
         .tile.good dd { color: var(--good); }
 
-        .kv { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .9rem; font-size: .88rem; }
+        /* Cung bang mau voi tile, de bang bao cao va o so lieu khong "noi" khac nhau. */
+        td.warn { color: var(--ochre); }
+        td.bad  { color: var(--crimson); }
+        td.good { color: var(--good); }
+        td .sub { font-size: .8rem; }
+
+        /* Giá trị dùng font chữ thường, KHÔNG mono. Trước đây mọi giá trị đều mono nên
+           "bật"/"tắt"/"có" trông như mã lệnh, và cả trang bị nặng vì chữ đẳng khoảng
+           chiếm phần lớn diện tích. Mono chỉ dành cho thứ thật sự là định danh — nơi
+           gọi tự bọc .mono. */
+        .kv { display: grid; grid-template-columns: max-content 1fr; gap: .38rem .9rem; font-size: .88rem;
+              align-items: baseline; }
         .kv dt { color: var(--muted); }
-        .kv dd { margin: 0; font-family: var(--mono); font-size: .84rem; }
+        .kv dd { margin: 0; color: var(--fg); }
+
+        /* Lưới thật, không phải flex-wrap. Hai chục ô có bề rộng khác nhau xếp bằng
+           flex-wrap thì mỗi hàng lại lệch một kiểu và để lại những khoảng hở giữa dòng —
+           đúng cái làm tab Cấu hình trông lộn xộn. */
+        #settings-form {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+            gap: 1rem 1.3rem; align-items: start;
+        }
+        #settings-form .field { flex: none; }
+        .setting-key { font-size: .72rem; margin-top: .15rem; }
 
         .drop {
             border: 2px dashed var(--rule-strong);
@@ -119,10 +144,12 @@
         <button data-tab="overview" class="active">Tổng quan</button>
         <button data-tab="ingest">Nạp tài liệu</button>
         <button data-tab="documents">Tài liệu</button>
+        <button data-tab="platform">Bot &amp; phân quyền</button>
         <button data-tab="jobs">Job</button>
         <button data-tab="providers">Nhà cung cấp &amp; API key</button>
         <button data-tab="settings">Cấu hình</button>
         <button data-tab="eval">Đánh giá</button>
+        <button data-tab="reports">Báo cáo</button>
         <button data-tab="feedback">Phản hồi</button>
     </div>
 
@@ -134,7 +161,9 @@
 
         <dl class="tiles" id="tiles"></dl>
 
-        <section class="row" style="align-items:stretch; margin-top:1.2rem">
+        <!-- flex-start chứ không stretch: ba thẻ có lượng nội dung rất khác nhau, kéo
+             bằng chiều cao thẻ dài nhất chỉ tạo ra hai mảng trắng to dưới hai thẻ kia. -->
+        <section class="row" style="align-items:flex-start; margin-top:1.2rem">
             <div class="card" style="flex:1 1 320px">
                 <h3>Pipeline đang chạy</h3>
                 <dl class="kv" id="pipeline-kv"></dl>
@@ -258,6 +287,68 @@
     </div>
 
     <!-- ================================================================ JOB -->
+    <div class="panel" id="tab-platform">
+        <h2>Bot &amp; phân quyền</h2>
+        <p class="sub">Nhóm tài liệu quyết định <em>ai đọc được gì</em>; bot quyết định
+            <em>ai hỏi được ở đâu</em>. Phạm vi trả lời cuối cùng luôn là <strong>giao</strong>
+            của hai thứ đó — và trong kênh Teams còn giao thêm với danh sách được phép trả lời
+            công khai.</p>
+
+        <div id="platform-warnings"></div>
+
+        <section class="card" style="margin-bottom:1.2rem">
+            <h3>Nhóm tài liệu</h3>
+            <p class="faint" style="margin-top:0;font-size:.84rem">
+                Mã nhóm phải trùng <span class="mono">category</span> của tài liệu khi nạp.
+                Nhóm chưa gán nhóm Entra nào thì <strong>không ai đọc được</strong> (trừ quản trị) —
+                đây là mặc định có chủ ý.
+            </p>
+            <div class="row" style="margin-bottom:.8rem">
+                <div class="field"><label for="col-slug">Mã nhóm</label>
+                    <input id="col-slug" placeholder="nhan-su"></div>
+                <div class="field"><label for="col-name">Tên hiển thị</label>
+                    <input id="col-name" placeholder="Nhân sự"></div>
+                <button class="primary" onclick="createCollection()">Tạo nhóm</button>
+            </div>
+            <div class="scroll"><table id="collections-table"></table></div>
+        </section>
+
+        <section class="card" style="margin-bottom:1.2rem">
+            <h3>Bot</h3>
+            <p class="faint" style="margin-top:0;font-size:.84rem">
+                Bot không gán nhóm tài liệu nào sẽ từ chối mọi câu hỏi.
+                Để trống <em>đối tượng sử dụng</em> nghĩa là mọi người đã xác thực đều dùng được —
+                ngược với nhóm tài liệu, vì dữ liệu đã được nhóm tài liệu bảo vệ rồi.
+            </p>
+            <div class="row" style="margin-bottom:.8rem">
+                <div class="field"><label for="bot-slug">Mã bot</label>
+                    <input id="bot-slug" placeholder="nhan-su-bot"></div>
+                <div class="field"><label for="bot-name">Tên hiển thị</label>
+                    <input id="bot-name" placeholder="Trợ lý Nhân sự"></div>
+                <button class="primary" onclick="createBot()">Tạo bot</button>
+            </div>
+            <div class="grid" id="bots-list" style="grid-template-columns:1fr"></div>
+        </section>
+
+        <section class="card">
+            <h3>Gán bot cho Team trên Teams</h3>
+            <p class="faint" style="margin-top:0;font-size:.84rem">
+                Lấy <span class="mono">aadGroupId</span> của Team trong Teams admin center.
+                Team chưa gán sẽ dùng bot mặc định. Để trống mã kênh = áp dụng cho mọi kênh của Team.
+            </p>
+            <div class="row" style="margin-bottom:.8rem">
+                <div class="field"><label for="bind-bot">Bot</label>
+                    <select id="bind-bot"></select></div>
+                <div class="field"><label for="bind-team">Team aadGroupId</label>
+                    <input id="bind-team" placeholder="00000000-0000-0000-0000-000000000000"></div>
+                <div class="field"><label for="bind-channel">Mã kênh (tuỳ chọn)</label>
+                    <input id="bind-channel" placeholder="19:..."></div>
+                <button class="primary" onclick="bindChannel()">Gán</button>
+            </div>
+            <div class="scroll"><table id="bindings-table"></table></div>
+        </section>
+    </div>
+
     <div class="panel" id="tab-jobs">
         <h2>Job nạp liệu</h2>
         <p class="sub">Trạng thái job lưu trong DB nên không mất khi khởi động lại, và job đang chạy
@@ -424,7 +515,7 @@
             bộ đánh giá → so điểm. Provider/model trả lời mặc định cấu hình ở tab
             <b>Nhà cung cấp &amp; API key</b>.</p>
         <div class="card">
-            <div id="settings-form" class="row" style="align-items:flex-end"></div>
+            <div id="settings-form"></div>
             <div class="row" style="margin-top:1rem">
                 <button class="primary" onclick="saveSettings()">Áp dụng</button>
                 <button onclick="loadSettings()">Hoàn tác thay đổi chưa lưu</button>
@@ -490,6 +581,57 @@
         </section>
     </div>
 
+    <!-- ============================================================ BÁO CÁO -->
+    <div class="panel" id="tab-reports">
+        <h2>Báo cáo theo bot</h2>
+        <p class="sub">Số liệu đọc từ lịch sử hội thoại trong DB nên <b>không mất khi khởi động lại</b>
+            (khác với tab Tổng quan). Hai cột cần nhìn trước: <b>Từ chối</b> cao nghĩa là nhóm tài liệu
+            của bot đó còn thiếu; <b>👎</b> cao mà từ chối thấp nghĩa là bot trả lời tự tin nhưng sai —
+            nguy hiểm hơn nhiều.</p>
+
+        <section class="row" style="margin-bottom:.8rem">
+            <div class="field" style="flex:0 0 11rem">
+                <label for="rep-days">Khoảng thời gian</label>
+                <select id="rep-days" onchange="loadReports()">
+                    <option value="7">7 ngày</option>
+                    <option value="30" selected>30 ngày</option>
+                    <option value="90">90 ngày</option>
+                    <option value="365">1 năm</option>
+                </select>
+            </div>
+            <button onclick="loadReports()">Làm mới</button>
+        </section>
+
+        <dl class="tiles" id="rep-tiles"></dl>
+
+        <section style="margin-top:1.2rem">
+            <h3 style="font-size:1rem">Từng bot</h3>
+            <div class="card scroll" style="padding:0">
+                <table>
+                    <thead><tr>
+                        <th>Bot</th><th class="num">Câu hỏi</th><th class="num">Người dùng</th>
+                        <th class="num">Từ chối</th><th class="num">👍</th><th class="num">👎</th>
+                        <th class="num">Hài lòng</th><th class="num">Cache</th>
+                        <th class="num">p95</th><th class="num">Chi phí</th><th>Gần nhất</th>
+                    </tr></thead>
+                    <tbody id="rep-bots"><tr><td colspan="11" class="empty">Chưa có dữ liệu.</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section style="margin-top:1.2rem">
+            <h3 style="font-size:1rem">Câu hỏi bị từ chối nhiều nhất</h3>
+            <p class="sub">Đây là danh sách <b>tài liệu cần nạp</b>, xếp theo số lần bị hỏi. Người dùng
+                hỏi mà hệ thống không có căn cứ để trả lời — mỗi dòng là một khoảng trống trong kho.</p>
+            <div class="card scroll" style="padding:0">
+                <table>
+                    <thead><tr><th>Câu hỏi</th><th class="num">Số lần</th><th>Gần nhất</th></tr></thead>
+                    <tbody id="rep-gaps"><tr><td colspan="3" class="empty">Chưa có dữ liệu.</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
     <!-- =========================================================== PHẢN HỒI -->
     <div class="panel" id="tab-feedback">
         <h2>Phản hồi người dùng</h2>
@@ -508,7 +650,8 @@
     const tabLoaders = {
         overview: loadOverview, documents: loadDocuments, jobs: loadJobs,
         settings: loadSettings, eval: loadEval, feedback: loadFeedback,
-        ingest: loadAllowedRoots, providers: loadProviders
+        ingest: loadAllowedRoots, providers: loadProviders, platform: loadPlatform,
+        reports: loadReports
     };
 
     function activateTab(name, push) {
@@ -531,6 +674,263 @@
         activateTab(initialTab, false);
     }
 
+    /* ------------------------------------------------- Bot & phân quyền */
+
+    let platformState = { collections: [], bots: [], channelBindings: [] };
+
+    async function loadPlatform() {
+        platformState = await api('/api/v1/rag/admin/platform');
+        renderPlatformWarnings();
+        renderCollections();
+        renderBots();
+        renderBindings();
+    }
+
+    /**
+     * Ba trạng thái làm hệ thống "chạy nhưng không trả lời được gì", và triệu chứng của
+     * cả ba đều giống nhau ("hỏi không ra"). Nói thẳng ra đây thay vì để người dùng đoán.
+     */
+    function renderPlatformWarnings() {
+        const host = document.getElementById('platform-warnings');
+        const items = [];
+        if (!platformState.aclConfigured) {
+            items.push('Chưa nhóm tài liệu nào được cấp quyền đọc — hệ thống đang tạm dùng cấu hình '
+                + '<span class="mono">rag.entra.group-departments</span> trong application.properties. '
+                + 'Cấp quyền ở bảng dưới để chuyển hẳn sang quản lý bằng giao diện.');
+        }
+        (platformState.botsWithoutCollections || []).forEach(slug => {
+            items.push('Bot <strong>' + escapeHtml(slug) + '</strong> chưa được gán nhóm tài liệu nào '
+                + 'nên sẽ từ chối mọi câu hỏi.');
+        });
+        (platformState.orphanCategories || []).forEach(cat => {
+            items.push('Có tài liệu thuộc <span class="mono">' + escapeHtml(cat) + '</span> nhưng chưa '
+                + 'khai báo nhóm tài liệu tương ứng — không ai đọc được số tài liệu này.');
+        });
+
+        host.innerHTML = items.length === 0 ? '' :
+            '<div class="card" style="border-left:3px solid var(--ochre);margin-bottom:1.2rem">'
+            + '<h3 style="margin-bottom:.4rem">Cần xử lý</h3><ul style="margin:0;padding-left:1.1rem">'
+            + items.map(t => '<li style="margin:.25rem 0">' + t + '</li>').join('') + '</ul></div>';
+    }
+
+    function renderCollections() {
+        const rows = platformState.collections.map(c => `
+            <tr>
+              <td class="mono">${escapeHtml(c.slug)}</td>
+              <td>${escapeHtml(c.name || '')}</td>
+              <td class="tabular">${fmtInt(c.documentCount)}</td>
+              <td>
+                <label class="faint" style="font-size:.82rem;display:flex;gap:.35rem;align-items:center">
+                  <input type="checkbox" style="width:auto" ${c.channelAllowed ? 'checked' : ''}
+                         onchange="toggleChannel(${c.id}, this.checked)">
+                  trả lời trong kênh
+                </label>
+              </td>
+              <td>
+                <input class="mono" style="font-size:.78rem" value="${escapeHtml((c.aclGroups || []).join(', '))}"
+                       placeholder="objectId nhóm Entra, cách nhau dấu phẩy"
+                       onchange="saveAcl(${c.id}, this.value)">
+              </td>
+              <td style="text-align:right">
+                <button class="ghost tiny danger" onclick="deleteCollection(${c.id}, '${escapeHtml(c.slug)}')">Xoá</button>
+              </td>
+            </tr>`).join('');
+
+        document.getElementById('collections-table').innerHTML = platformState.collections.length
+            ? `<thead><tr><th>Mã nhóm</th><th>Tên</th><th>Tài liệu</th><th>Kênh Teams</th>
+                 <th>Nhóm Entra được đọc</th><th></th></tr></thead><tbody>${rows}</tbody>`
+            : '<tbody><tr><td class="empty">Chưa có nhóm tài liệu nào.</td></tr></tbody>';
+    }
+
+    function renderBots() {
+        const slugs = platformState.collections.map(c => c.slug);
+        document.getElementById('bots-list').innerHTML = platformState.bots.map(b => `
+          <div class="card">
+            <h3 style="display:flex;align-items:center;gap:.5rem">
+              ${escapeHtml(b.displayName)}
+              <span class="mono faint" style="font-size:.8rem">${escapeHtml(b.slug)}</span>
+              ${b.isDefault ? '<span class="chip accent">mặc định</span>' : ''}
+              ${b.status !== 'ACTIVE' ? '<span class="chip bad">tạm tắt</span>' : ''}
+            </h3>
+            <div class="row">
+              <div class="field">
+                <label>Nhóm tài liệu bot được đọc</label>
+                <select multiple size="${Math.min(5, Math.max(2, slugs.length))}"
+                        id="bot-cols-${b.id}" onchange="saveBotCollections(${b.id})">
+                  ${slugs.map(s => `<option value="${escapeHtml(s)}"
+                     ${b.collectionSlugs.includes(s) ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label>Đối tượng sử dụng (objectId nhóm Entra, để trống = mọi người)</label>
+                <input class="mono" style="font-size:.78rem" value="${escapeHtml(b.audienceGroups.join(', '))}"
+                       onchange="saveAudience(${b.id}, this.value)">
+              </div>
+            </div>
+            <div class="row" style="margin-top:.6rem">
+              <div class="field" style="flex:1 1 100%">
+                <label>Vai trò / giọng điệu riêng (chèn vào đầu prompt, không ghi đè được quy tắc bắt buộc)</label>
+                <textarea rows="2" id="bot-persona-${b.id}"
+                          placeholder="Bạn phụ trách mảng nhân sự…">${escapeHtml(b.personaPrompt || '')}</textarea>
+              </div>
+            </div>
+            <div class="row" style="margin-top:.6rem">
+              <div class="field"><label>Lời chào</label>
+                <input id="bot-greeting-${b.id}" value="${escapeHtml(b.greeting || '')}"></div>
+              <div class="field"><label>Model riêng (để trống = mặc định hệ thống)</label>
+                <input id="bot-model-${b.id}" class="mono" value="${escapeHtml(b.llmModel || '')}"></div>
+              <div class="field"><label>Teams app id riêng (tuỳ chọn)</label>
+                <input id="bot-appid-${b.id}" class="mono" style="font-size:.78rem"
+                       value="${escapeHtml(b.teamsAppId || '')}"></div>
+              <button class="primary" onclick="saveBot(${b.id})">Lưu</button>
+              ${b.isDefault ? '' : `<button class="ghost tiny" onclick="makeDefault(${b.id})">Đặt mặc định</button>`}
+              ${b.isDefault ? '' : `<button class="ghost tiny danger" onclick="deleteBot(${b.id}, '${escapeHtml(b.slug)}')">Xoá</button>`}
+            </div>
+          </div>`).join('');
+
+        document.getElementById('bind-bot').innerHTML = platformState.bots
+            .map(b => `<option value="${b.id}">${escapeHtml(b.displayName)}</option>`).join('');
+    }
+
+    function renderBindings() {
+        const rows = (platformState.channelBindings || []).map(b => `
+            <tr>
+              <td>${escapeHtml(b.botSlug)}</td>
+              <td class="mono" style="font-size:.8rem">${escapeHtml(b.teamAadGroupId)}</td>
+              <td class="mono" style="font-size:.8rem">${escapeHtml(b.channelId || 'mọi kênh')}</td>
+              <td style="text-align:right">
+                <button class="ghost tiny danger" onclick="unbindChannel(${b.id})">Bỏ gán</button></td>
+            </tr>`).join('');
+        document.getElementById('bindings-table').innerHTML = (platformState.channelBindings || []).length
+            ? `<thead><tr><th>Bot</th><th>Team</th><th>Kênh</th><th></th></tr></thead><tbody>${rows}</tbody>`
+            : '<tbody><tr><td class="empty">Chưa gán Team nào — tất cả dùng bot mặc định.</td></tr></tbody>';
+    }
+
+    function idList(value) {
+        return value.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    async function createCollection() {
+        const slug = document.getElementById('col-slug').value.trim();
+        if (!slug) return toast('Nhập mã nhóm.', 'warn');
+        const r = await api('/api/v1/rag/admin/collections', {
+            method: 'POST',
+            body: JSON.stringify({ slug, name: document.getElementById('col-name').value.trim() })
+        });
+        toast(r.message);
+        document.getElementById('col-slug').value = '';
+        document.getElementById('col-name').value = '';
+        loadPlatform();
+    }
+
+    async function toggleChannel(id, checked) {
+        const c = platformState.collections.find(x => x.id === id);
+        const r = await api('/api/v1/rag/admin/collections/' + id, {
+            method: 'PUT',
+            body: JSON.stringify({ slug: c.slug, name: c.name, description: c.description,
+                                   channelAllowed: checked, status: c.status })
+        });
+        toast(checked
+            ? 'Nhóm "' + c.slug + '" đã được phép trả lời trong kênh Teams — câu trả lời sẽ hiện cho mọi thành viên kênh.'
+            : r.message);
+        loadPlatform();
+    }
+
+    async function saveAcl(id, value) {
+        const r = await api('/api/v1/rag/admin/collections/' + id + '/acl', {
+            method: 'PUT', body: JSON.stringify({ groupIds: idList(value) })
+        });
+        toast(r.message);
+        loadPlatform();
+    }
+
+    async function deleteCollection(id, slug) {
+        if (!confirm('Xoá cấu hình nhóm "' + slug + '"?\n\nTài liệu KHÔNG bị xoá, nhưng sẽ không ai '
+            + 'đọc được cho tới khi khai báo lại nhóm này.')) return;
+        toast((await api('/api/v1/rag/admin/collections/' + id, { method: 'DELETE' })).message);
+        loadPlatform();
+    }
+
+    async function createBot() {
+        const slug = document.getElementById('bot-slug').value.trim();
+        if (!slug) return toast('Nhập mã bot.', 'warn');
+        const r = await api('/api/v1/rag/admin/bots', {
+            method: 'POST',
+            body: JSON.stringify({ slug, displayName: document.getElementById('bot-name').value.trim() })
+        });
+        toast(r.message);
+        document.getElementById('bot-slug').value = '';
+        document.getElementById('bot-name').value = '';
+        loadPlatform();
+    }
+
+    async function saveBot(id) {
+        const b = platformState.bots.find(x => x.id === id);
+        const r = await api('/api/v1/rag/admin/bots/' + id, {
+            method: 'PUT',
+            body: JSON.stringify({
+                slug: b.slug,
+                displayName: b.displayName,
+                description: b.description,
+                teamsAppId: document.getElementById('bot-appid-' + id).value.trim(),
+                personaPrompt: document.getElementById('bot-persona-' + id).value,
+                greeting: document.getElementById('bot-greeting-' + id).value,
+                llmModel: document.getElementById('bot-model-' + id).value.trim(),
+                status: b.status
+            })
+        });
+        toast(r.message);
+        loadPlatform();
+    }
+
+    async function saveBotCollections(id) {
+        const select = document.getElementById('bot-cols-' + id);
+        const slugs = Array.from(select.selectedOptions).map(o => o.value);
+        toast((await api('/api/v1/rag/admin/bots/' + id + '/collections', {
+            method: 'PUT', body: JSON.stringify(slugs)
+        })).message);
+        loadPlatform();
+    }
+
+    async function saveAudience(id, value) {
+        toast((await api('/api/v1/rag/admin/bots/' + id + '/audience', {
+            method: 'PUT', body: JSON.stringify({ groupIds: idList(value) })
+        })).message);
+        loadPlatform();
+    }
+
+    async function makeDefault(id) {
+        toast((await api('/api/v1/rag/admin/bots/' + id + '/default', { method: 'POST' })).message);
+        loadPlatform();
+    }
+
+    async function deleteBot(id, slug) {
+        if (!confirm('Xoá bot "' + slug + '"?')) return;
+        toast((await api('/api/v1/rag/admin/bots/' + id, { method: 'DELETE' })).message);
+        loadPlatform();
+    }
+
+    async function bindChannel() {
+        const team = document.getElementById('bind-team').value.trim();
+        if (!team) return toast('Nhập aadGroupId của Team.', 'warn');
+        toast((await api('/api/v1/rag/admin/bot-channels', {
+            method: 'POST',
+            body: JSON.stringify({
+                botId: Number(document.getElementById('bind-bot').value),
+                teamAadGroupId: team,
+                channelId: document.getElementById('bind-channel').value.trim()
+            })
+        })).message);
+        document.getElementById('bind-team').value = '';
+        document.getElementById('bind-channel').value = '';
+        loadPlatform();
+    }
+
+    async function unbindChannel(id) {
+        toast((await api('/api/v1/rag/admin/bot-channels/' + id, { method: 'DELETE' })).message);
+        loadPlatform();
+    }
+
     /* --------------------------------------------------------- Tổng quan */
     async function loadOverview() {
         const o = await api('/api/v1/rag/admin/overview');
@@ -541,7 +941,10 @@
             ['Đoạn (chunk)', fmtInt(c.chunksInIndex)],
             ['Câu hỏi', fmtInt(m.questions)],
             ['Tỷ lệ từ chối', fmtPercent(m.abstainRate), m.abstainRate > 40 ? 'warn' : ''],
-            ['Cache hit', fmtInt((m.cacheHitsExact || 0) + (m.cacheHitsSemantic || 0)), 'good'],
+            // Chỉ tô xanh khi thật sự có cache hit. Tô xanh cho số 0 là báo "ổn" cho một
+            // con số chưa nói lên điều gì.
+            ['Cache hit', fmtInt((m.cacheHitsExact || 0) + (m.cacheHitsSemantic || 0)),
+                (m.cacheHitsExact || 0) + (m.cacheHitsSemantic || 0) > 0 ? 'good' : ''],
             ['Chi phí ước tính', fmtMoney(m.costUsd), 'warn'],
             ['Token vào/ra', fmtInt(m.inputTokens) + ' / ' + fmtInt(m.outputTokens)],
             ['Hài lòng', fb.satisfactionRate == null ? '—' : fmtPercent(fb.satisfactionRate),
@@ -579,9 +982,82 @@
     function bool(v) { return v ? 'bật' : 'tắt'; }
 
     function tiles(items) {
-        document.getElementById('tiles').innerHTML = items.map(([label, value, cls]) =>
+        tilesInto('tiles', items);
+    }
+
+    function tilesInto(id, items) {
+        document.getElementById(id).innerHTML = items.map(([label, value, cls]) =>
             '<div class="tile ' + (cls || '') + '"><dt>' + escapeHtml(label) + '</dt><dd>'
             + escapeHtml(String(value)) + '</dd></div>').join('');
+    }
+
+    /* ------------------------------------------------------------ Báo cáo */
+
+    async function loadReports() {
+        const days = document.getElementById('rep-days').value;
+        const [report, gaps] = await Promise.all([
+            api('/api/v1/rag/admin/reports/bots?days=' + days),
+            api('/api/v1/rag/admin/reports/gaps?days=' + days + '&limit=20')
+        ]);
+        renderReportTiles(report.total || {});
+        renderReportBots(report.bots || []);
+        renderReportGaps(gaps.items || []);
+    }
+
+    function renderReportTiles(t) {
+        tilesInto('rep-tiles', [
+            ['Bot có hoạt động', fmtInt(t.bots)],
+            ['Câu hỏi', fmtInt(t.questions)],
+            ['Tỷ lệ từ chối', t.abstainRate == null ? '—' : fmtPercent(t.abstainRate),
+                t.abstainRate > 40 ? 'warn' : ''],
+            ['👍 / 👎', fmtInt(t.thumbsUp) + ' / ' + fmtInt(t.thumbsDown)],
+            ['Hài lòng', t.satisfactionRate == null ? '—' : fmtPercent(t.satisfactionRate),
+                t.satisfactionRate != null && t.satisfactionRate < 70 ? 'bad' : 'good'],
+            ['Chi phí', fmtMoney(t.costUsd), 'warn']
+        ]);
+    }
+
+    function renderReportBots(rows) {
+        const host = document.getElementById('rep-bots');
+        if (!rows.length) {
+            host.innerHTML = '<tr><td colspan="11" class="empty">Chưa có câu hỏi nào trong khoảng này.</td></tr>';
+            return;
+        }
+        host.innerHTML = rows.map(b => {
+            // Ngưỡng cảnh báo giống tab Tổng quan để hai chỗ không "nói" khác nhau.
+            const abstainCls = b.abstainRate > 40 ? 'bad' : (b.abstainRate > 20 ? 'warn' : '');
+            const satCls = b.satisfactionRate == null ? ''
+                : (b.satisfactionRate < 70 ? 'bad' : 'good');
+            return '<tr>'
+                + '<td><b>' + escapeHtml(b.bot) + '</b></td>'
+                + '<td class="num">' + fmtInt(b.questions) + '</td>'
+                + '<td class="num">' + fmtInt(b.users) + '</td>'
+                + '<td class="num ' + abstainCls + '">' + (b.abstainRate == null ? '—' : fmtPercent(b.abstainRate))
+                + ' <span class="sub">(' + fmtInt(b.abstained) + ')</span></td>'
+                + '<td class="num">' + fmtInt(b.thumbsUp) + '</td>'
+                + '<td class="num">' + fmtInt(b.thumbsDown) + '</td>'
+                + '<td class="num ' + satCls + '">'
+                + (b.satisfactionRate == null ? '—' : fmtPercent(b.satisfactionRate)) + '</td>'
+                + '<td class="num">' + (b.cacheHitRate == null ? '—' : fmtPercent(b.cacheHitRate)) + '</td>'
+                + '<td class="num">' + fmtMs(b.p95LatencyMs) + '</td>'
+                + '<td class="num">' + fmtMoney(b.costUsd) + '</td>'
+                + '<td>' + fmtDate(b.lastAt) + '</td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    function renderReportGaps(items) {
+        const host = document.getElementById('rep-gaps');
+        if (!items.length) {
+            host.innerHTML = '<tr><td colspan="3" class="empty">Không có câu hỏi nào bị từ chối — '
+                + 'kho tài liệu đang phủ được câu hỏi của người dùng.</td></tr>';
+            return;
+        }
+        host.innerHTML = items.map(g => '<tr>'
+            + '<td>' + escapeHtml(g.question || '') + '</td>'
+            + '<td class="num">' + fmtInt(g.times) + '</td>'
+            + '<td>' + fmtDate(g.lastAt) + '</td>'
+            + '</tr>').join('');
     }
 
     function kv(id, obj) {
@@ -859,23 +1335,31 @@
             'ingestion.contextualEnabled': 'Sinh ngữ cảnh cho từng chunk (tốn LLM)',
             'queryRewrite.enabled': 'Bật viết lại câu hỏi',
             'retrieval.clarifyAmbiguousEnabled': 'Hỏi lại khi câu hỏi mơ hồ (trước khi tìm tài liệu)',
+            'retrieval.glossaryEnabled': 'Mở rộng truy vấn bằng từ điển thuật ngữ',
             'chat.citationsEnabled': 'Hiện trích dẫn nguồn (giống NotebookLM)'
         };
+        // Danh sách tham số do SERVER quyết định, còn nhãn tiếng Việt nằm ở đây — thêm
+        // tham số mới bên Java là bảng nhãn này lệch ngay, và giao diện lặng lẽ hiện ra
+        // một cái tên khoá thô giữa các nhãn tiếng Việt. Kêu ra console để người thêm
+        // tham số thấy, thay vì đợi ai đó tình cờ nhìn thấy trên màn hình.
+        const missing = Object.keys(settingsSnapshot)
+            .filter(k => !HIDDEN_SETTINGS_KEYS.has(k) && !labels[k]);
+        if (missing.length) console.warn('Thiếu nhãn tiếng Việt cho tham số:', missing);
+
         document.getElementById('settings-form').innerHTML =
             Object.entries(settingsSnapshot).filter(([k]) => !HIDDEN_SETTINGS_KEYS.has(k)).map(([k, v]) => {
                 const label = labels[k] || k;
+                const key = '<div class="faint mono setting-key">' + k + '</div>';
                 if (typeof v === 'boolean') {
-                    return '<div class="field" style="flex:1 1 240px"><label class="inline">'
+                    return '<div class="field"><label class="inline">'
                         + '<input type="checkbox" data-key="' + k + '"' + (v ? ' checked' : '') + '> '
-                        + escapeHtml(label) + '</label>'
-                        + '<div class="faint mono" style="font-size:.72rem">' + k + '</div></div>';
+                        + escapeHtml(label) + '</label>' + key + '</div>';
                 }
                 const type = typeof v === 'number' ? 'number' : 'text';
                 const step = (typeof v === 'number' && !Number.isInteger(v)) ? ' step="0.01"' : '';
-                return '<div class="field" style="flex:1 1 200px"><label>' + escapeHtml(label) + '</label>'
+                return '<div class="field"><label>' + escapeHtml(label) + '</label>'
                     + '<input type="' + type + '"' + step + ' data-key="' + k + '" value="'
-                    + escapeHtml(String(v)) + '">'
-                    + '<div class="faint mono" style="font-size:.72rem">' + k + '</div></div>';
+                    + escapeHtml(String(v)) + '">' + key + '</div>';
             }).join('');
     }
 

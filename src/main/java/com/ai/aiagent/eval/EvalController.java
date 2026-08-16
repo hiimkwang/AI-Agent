@@ -21,10 +21,15 @@ import java.util.Map;
 public class EvalController {
 
     private final EvalService evalService;
+    private final RetrievalEvalService retrievalEvalService;
+    private final EvalCaseBuilder caseBuilder;
     private final EvalRepository repository;
 
-    public EvalController(EvalService evalService, EvalRepository repository) {
+    public EvalController(EvalService evalService, RetrievalEvalService retrievalEvalService,
+                          EvalCaseBuilder caseBuilder, EvalRepository repository) {
         this.evalService = evalService;
+        this.retrievalEvalService = retrievalEvalService;
+        this.caseBuilder = caseBuilder;
         this.repository = repository;
     }
 
@@ -39,6 +44,33 @@ public class EvalController {
     }
 
     public record RunRequest(String suite, String provider, String model, String category) {
+    }
+
+    /**
+     * Chi do CHAT LUONG TRUY XUAT: recall@k va MRR, khong sinh cau tra loi, khong giam
+     * khao LLM.
+     *
+     * Day la phep do nen chay sau MOI lan doi tham so truy xuat (chunking, trong so tsv,
+     * model embedding, top-k, tu dien thuat ngu). No re va deterministic, khac han
+     * {@code /run} - von ton mot lan goi LLM giam khao cho moi case nen tren thuc te
+     * khong ai chay thuong xuyen.
+     *
+     * Bat {@code includeRerank} de so sanh thu tu TRUOC va SAU rerank; do la cach duy
+     * nhat de biet bo rerank dang lam tot len hay dang lam hong thu tu.
+     */
+    @PostMapping("/retrieval")
+    public RetrievalEvalService.RetrievalReport runRetrieval(
+            @RequestBody(required = false) RetrievalRunRequest request) {
+        RetrievalRunRequest r = request == null
+                ? new RetrievalRunRequest(null, null, null, false) : request;
+        return retrievalEvalService.run(
+                new RetrievalEvalService.RetrievalEvalRequest(
+                        r.suite(), r.category(), r.topK(), r.includeRerank()),
+                CurrentScope.get());
+    }
+
+    public record RetrievalRunRequest(String suite, String category, Integer topK,
+                                      boolean includeRerank) {
     }
 
     // ------------------------------------------------------------ Cases
@@ -85,6 +117,66 @@ public class EvalController {
     public Map<String, Object> deleteCase(@PathVariable long id) {
         int deleted = repository.deleteCase(id);
         return Map.of("deleted", deleted > 0);
+    }
+
+    // -------------------------------------------- Tao bo cau hoi khong can gan nhan tay
+
+    /**
+     * Sinh bo cau hoi tu CHINH kho tai lieu: moi doan tai lieu -> mot cau hoi ma doan do
+     * tra loi duoc, nguon dung chinh la file chua doan do.
+     *
+     * Dung duoc NGAY NGAY DAU, truoc khi co nguoi dung nao - go bo dieu kien "phai co bo
+     * cau hoi that truoc khi do duoc bat cu thu gi".
+     *
+     * Cau hoi sinh ra DE HON cau hoi that (dung chung tu vung voi doan tai lieu), nen con
+     * so tuyet doi cao hon thuc te. Nhung do lech do tac dong nhu nhau len moi cau hinh
+     * duoc dem ra so, nen dung tot cho viec CHON cau hinh.
+     */
+    @PostMapping("/cases/generate")
+    public Map<String, Object> generateCases(@RequestBody(required = false) GenerateRequest request) {
+        GenerateRequest r = request == null ? new GenerateRequest(null, null, null) : request;
+        String suite = r.suite() == null || r.suite().isBlank() ? "sinh-tu-tai-lieu" : r.suite();
+        int perDocument = r.perDocument() == null || r.perDocument() < 1 ? 5 : r.perDocument();
+
+        EvalCaseBuilder.BuildStatus status =
+                caseBuilder.startGenerate(suite, perDocument, r.category());
+        return Map.of(
+                "message", "Đang sinh câu hỏi từ kho tài liệu. Theo dõi ở GET /eval/cases/build-status.",
+                "suite", suite,
+                "status", status);
+    }
+
+    public record GenerateRequest(String suite, Integer perDocument, String category) {
+    }
+
+    @GetMapping("/cases/build-status")
+    public EvalCaseBuilder.BuildStatus buildStatus() {
+        return caseBuilder.status();
+    }
+
+    /**
+     * Thu hoach cau hoi THAT tu lich su hoi thoai - bo do tu lon len theo thoi gian
+     * van hanh, dung nhu cach no phai hinh thanh.
+     *
+     * @param negative {@code true} thi lay cac cau bi danh gia xau vao mot bo rieng, CHUA
+     *                 co nguon dung - do la danh sach viec can nguoi xem lai
+     */
+    @PostMapping("/cases/harvest")
+    public Map<String, Object> harvest(@RequestBody(required = false) HarvestRequest request) {
+        HarvestRequest r = request == null
+                ? new HarvestRequest(null, null, null, false) : request;
+        int sinceDays = r.sinceDays() == null || r.sinceDays() < 1 ? 90 : r.sinceDays();
+        int limit = r.limit() == null || r.limit() < 1 ? 200 : r.limit();
+
+        if (Boolean.TRUE.equals(r.negative())) {
+            String suite = r.suite() == null || r.suite().isBlank() ? "can-xem-lai" : r.suite();
+            return caseBuilder.harvestNegative(suite, sinceDays, limit);
+        }
+        String suite = r.suite() == null || r.suite().isBlank() ? "thuc-te" : r.suite();
+        return caseBuilder.harvest(suite, sinceDays, limit);
+    }
+
+    public record HarvestRequest(String suite, Integer sinceDays, Integer limit, Boolean negative) {
     }
 
     // ------------------------------------------------------------- Runs
