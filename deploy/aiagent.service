@@ -1,0 +1,71 @@
+# =====================================================================
+# systemd unit cho AI-Agent chay truc tiep bang jar (khong qua Docker).
+#
+# Cai dat:
+#   sudo cp deploy/aiagent.service /etc/systemd/system/
+#   sudo cp deploy/aiagent.env     /etc/aiagent.env
+#   sudo chmod 600 /etc/aiagent.env      # chua secret - KHONG de 644
+#   sudo chown aiagent:aiagent /etc/aiagent.env
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now aiagent
+#
+# Xem log:      journalctl -u aiagent -f
+# Khoi dong lai: sudo systemctl restart aiagent
+# =====================================================================
+
+[Unit]
+Description=AI-Agent - Tro ly tra cuu tai lieu noi bo (RAG)
+Documentation=file:///opt/aiagent/docs/OPERATIONS.md
+After=network-online.target
+Wants=network-online.target
+# Neu Postgres chay cung may thi doi no len truoc. Postgres o may khac thi bo dong nay.
+After=postgresql.service
+
+[Service]
+Type=simple
+User=aiagent
+Group=aiagent
+WorkingDirectory=/opt/aiagent
+
+# Secret nam trong file rieng, KHONG nam trong unit nay: unit file thuong duoc
+# commit vao git con secret thi khong bao gio duoc.
+EnvironmentFile=/etc/aiagent.env
+
+# MaxRAMPercentage thay vi -Xmx co dinh: doi RAM cua may khong phai sua lai unit.
+Environment="JAVA_OPTS=-XX:MaxRAMPercentage=70 -XX:+UseG1GC -Dfile.encoding=UTF-8"
+ExecStart=/bin/sh -c 'exec /usr/bin/java $JAVA_OPTS -jar /opt/aiagent/app.jar'
+
+# Khoi dong lai khi chet, nhung co tran: neu ung dung chet ngay lap tuc vi sai cau
+# hinh (vd thieu ENTRA_TENANT_ID nen tu choi khoi dong) thi vong lap restart vo tan
+# se lam day log va che mat nguyen nhan that.
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# Dung ky truoc khi bi giet: dang ghi not nhat ky kiem toan trong hang doi.
+KillSignal=SIGTERM
+TimeoutStopSec=45
+
+# --------------------------------------------------- Gioi han quyen
+# Ung dung nay MO FILE DO NGUOI DUNG TAI LEN bang POI/PDFBox - dung thu loai thu
+# vien tung co lo hong doc file. Cac gioi han duoi day khong sua duoc lo hong nao
+# nhung thu hep han thiet hai neu co.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# Chi hai thu muc nay duoc ghi.
+ReadWritePaths=/opt/aiagent/logs /var/backups/aiagent
+# Kho tai lieu goc mount chi doc - ung dung khong bao gio can ghi vao do.
+ReadOnlyPaths=/data/tai-lieu
+
+# So file mo: moi luot nap tai lieu lon mo kha nhieu file tam.
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

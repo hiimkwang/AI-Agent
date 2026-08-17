@@ -39,6 +39,10 @@ public class RagProperties {
     private final Cache cache = new Cache();
     private final Observability observability = new Observability();
     private final Chat chat = new Chat();
+    private final Audit audit = new Audit();
+    private final Retention retention = new Retention();
+    private final Ocr ocr = new Ocr();
+    private final Antivirus antivirus = new Antivirus();
 
     @Getter @Setter
     public static class Llm {
@@ -267,5 +271,93 @@ public class RagProperties {
     public static class Chat {
         /** Hien danh sach trich dan nguon (giong NotebookLM) kem cau tra loi. */
         private boolean citationsEnabled = true;
+    }
+
+    /** Nhat ky thao tac quan tri - xem {@code com.ai.aiagent.audit.AuditFilter}. */
+    @Getter @Setter
+    public static class Audit {
+        private boolean enabled = true;
+        /**
+         * Ghi ca cac luot DOC (GET). Mac dinh tat vi luot doc nhieu gap hang chuc lan
+         * va lam loang nhung dong thuc su quan trong. Bat khi quy dinh noi bo yeu cau
+         * chung minh "ai da xem gi".
+         */
+        private boolean includeRead = false;
+        /** Do dai toi da cua than request duoc luu lai. */
+        private int maxPayloadChars = 2000;
+        /**
+         * Chi bat khi ung dung THUC SU dung sau reverse proxy. Neu khong, bat ky ai
+         * cung tu dat duoc {@code X-Forwarded-For} va lam sai lech nhat ky.
+         */
+        private boolean trustForwardedFor = false;
+    }
+
+    /**
+     * Vong doi du lieu. Truoc day chi co endpoint xoa THU CONG, nghia la tren thuc te
+     * cau hoi cua nguoi dung duoc luu vo thoi han.
+     */
+    @Getter @Setter
+    public static class Retention {
+        private boolean enabled = true;
+        /** Gio chay hang ngay (0-23). Dat ngoai gio lam viec. */
+        private int runAtHour = 2;
+        /** Hoi thoai khong hoat dong qua so ngay nay se bi xoa. {@code <= 0} = giu mai. */
+        private int conversationDays = 180;
+        /**
+         * Nhat ky kiem toan giu lau hon HAN nhieu so voi hoi thoai: day la thu de giai
+         * trinh voi kiem toan, khong phai du lieu van hanh. Mac dinh 2 nam.
+         */
+        private int auditDays = 730;
+        /** Ban ghi job nap lieu da ket thuc. */
+        private int jobDays = 90;
+    }
+
+    /**
+     * OCR cho PDF ban scan.
+     *
+     * MAC DINH TAT: moi trang la mot loi goi model thi giac, nen bat len ma nap ca kho
+     * tai lieu la mot khoan chi phi that su - phai la quyet dinh co y thuc.
+     */
+    @Getter @Setter
+    public static class Ocr {
+        private boolean enabled = false;
+        /** OPENAI | ANTHROPIC. Ca hai deu nhan anh base64. */
+        private String provider = "OPENAI";
+        private String model = "gpt-4o-mini";
+        /** DPI khi ket xuat trang PDF thanh anh. 150 la diem can bang net/dung luong. */
+        private int dpi = 150;
+        /**
+         * Tran so trang moi tai lieu. Mot cong van 5 trang thi khong sao, nhung mot ban
+         * scan 800 trang lot vao se lang le tieu het han muc API.
+         */
+        private int maxPages = 60;
+        private int concurrency = 4;
+        private int timeoutSeconds = 120;
+        /**
+         * Chay OCR ca khi PDF CO text nhung qua it (chu yeu la trang bia scan kem vai
+         * dong metadata). Nguong tinh bang ky tu tren mot trang; 0 = chi OCR khi khong
+         * boc duoc chu nao.
+         */
+        private int minCharsPerPage = 80;
+    }
+
+    /**
+     * Quet virus file nap vao (giao thuc clamd INSTREAM).
+     *
+     * Mac dinh TAT de moi truong dev khong phai dung ClamAV. Bat o moi truong that.
+     */
+    @Getter @Setter
+    public static class Antivirus {
+        private boolean enabled = false;
+        private String host = "127.0.0.1";
+        private int port = 3310;
+        private int timeoutSeconds = 30;
+        /**
+         * Khi khong ket noi duoc toi clamd: {@code true} = TU CHOI nap file.
+         *
+         * Mac dinh dong, cung nguyen tac voi {@code EntraScopeService} khi Graph loi -
+         * "khong kiem tra duoc" phai co nghia la "khong cho qua", khong phai "cho qua".
+         */
+        private boolean failClosed = true;
     }
 }

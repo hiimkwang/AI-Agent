@@ -1,5 +1,6 @@
 package com.ai.aiagent.security;
 
+import com.ai.aiagent.audit.AuditFilter;
 import com.ai.aiagent.config.EntraProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.ExceptionTranslationFilter;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -53,6 +55,7 @@ public class SecurityConfig {
 
     private final ApiKeyAuthFilter apiKeyAuthFilter;
     private final RateLimitFilter rateLimitFilter;
+    private final AuditFilter auditFilter;
     private final EntraProperties entraProps;
     /** Vang mat khi {@code rag.entra.enabled=false} - xem {@link EntraScopeFilter}. */
     private final ObjectProvider<EntraScopeFilter> entraScopeFilter;
@@ -62,6 +65,7 @@ public class SecurityConfig {
 
     public SecurityConfig(ApiKeyAuthFilter apiKeyAuthFilter,
                           RateLimitFilter rateLimitFilter,
+                          AuditFilter auditFilter,
                           EntraProperties entraProps,
                           ObjectProvider<EntraScopeFilter> entraScopeFilter,
                           ObjectProvider<EntraOidcUserService> entraUserService,
@@ -69,6 +73,7 @@ public class SecurityConfig {
                           ObjectMapper mapper) {
         this.apiKeyAuthFilter = apiKeyAuthFilter;
         this.rateLimitFilter = rateLimitFilter;
+        this.auditFilter = auditFilter;
         this.entraProps = entraProps;
         this.entraScopeFilter = entraScopeFilter;
         this.entraUserService = entraUserService;
@@ -132,6 +137,10 @@ public class SecurityConfig {
 
         applyCsrf(http);
         applyAuthFilters(http);
+        // Nhat ky kiem toan chi gan vao chuoi API: chuoi [2] chi phuc vu trang tinh.
+        // Dat NGAY TRUOC ExceptionTranslationFilter de cac thao tac bi tu choi (401/403)
+        // cung duoc ghi - do moi la thu can nhat khi dieu tra su co. Xem AuditFilter.
+        http.addFilterBefore(auditFilter, ExceptionTranslationFilter.class);
         return http.build();
     }
 

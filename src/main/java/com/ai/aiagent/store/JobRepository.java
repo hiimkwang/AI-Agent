@@ -107,6 +107,20 @@ public class JobRepository {
                 """);
     }
 
+    /**
+     * Xoa lich su job DA KET THUC cu hon N ngay.
+     *
+     * Chi dong toi job da ket thuc: mot job dang chay ma bi xoa ban ghi thi worker van
+     * chay tiep nhung khong con cho bao tien do, va nguoi dung se thay job "bien mat".
+     */
+    public int purgeFinishedOlderThanDays(int days) {
+        return jdbc.update("""
+                DELETE FROM rag_ingest_jobs
+                 WHERE state <> 'RUNNING'
+                   AND COALESCE(finished_at, started_at) < now() - (? || ' days')::interval
+                """, String.valueOf(Math.max(1, days)));
+    }
+
     private static final RowMapper<JobStatus> ROW_MAPPER = (rs, n) -> {
         List<String> errors = new ArrayList<>();
         String raw = rs.getString("errors");

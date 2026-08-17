@@ -101,7 +101,20 @@ public class SystemController {
         ingest.put("allowedRoots", allowlist.configuredRoots());
         ingest.put("supportedExtensions", DocumentFormat.allExtensions());
         ingest.put("skipUnchanged", props.getIngestion().isSkipUnchanged());
+        ingest.put("ocrEnabled", props.getOcr().isEnabled());
+        ingest.put("ocrModel", props.getOcr().getProvider() + "/" + props.getOcr().getModel());
+        ingest.put("antivirusEnabled", props.getAntivirus().isEnabled());
         out.put("ingest", ingest);
+
+        // Tuan thu: hai thu kiem toan noi bo hoi dau tien. Dua len man tong quan de
+        // khong ai phai di tim xem chung co dang bat khong.
+        Map<String, Object> compliance = new LinkedHashMap<>();
+        compliance.put("auditEnabled", props.getAudit().isEnabled());
+        compliance.put("auditIncludeRead", props.getAudit().isIncludeRead());
+        compliance.put("retentionEnabled", props.getRetention().isEnabled());
+        compliance.put("conversationDays", props.getRetention().getConversationDays());
+        compliance.put("auditDays", props.getRetention().getAuditDays());
+        out.put("compliance", compliance);
 
         return out;
     }

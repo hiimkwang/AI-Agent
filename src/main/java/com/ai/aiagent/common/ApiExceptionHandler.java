@@ -53,6 +53,21 @@ public class ApiExceptionHandler {
         return body(HttpStatus.NOT_FOUND, e.getMessage(), null);
     }
 
+    /**
+     * File nhiem ma doc: 422, KHONG phai 500.
+     *
+     * Thong diep o day duoc tra nguyen van cho nguoi dung - day la ngoai le co y voi
+     * quy tac "khong tra getMessage()": noi dung do la ten chu ky ma doc va ten file
+     * do chinh he thong dung nen, khong lo gi ve ha tang, va nguoi nap file can biet
+     * chinh xac vi sao file bi tu choi de con bao lai cho bo phan an ninh thong tin.
+     */
+    @ExceptionHandler(com.ai.aiagent.security.AntivirusScanner.InfectedFileException.class)
+    public ResponseEntity<Map<String, Object>> infected(
+            com.ai.aiagent.security.AntivirusScanner.InfectedFileException e) {
+        log.error("Nap lieu bi chan boi bo quet virus: {}", e.getMessage());
+        return body(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage(), null);
+    }
+
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, Object>> tooLarge(MaxUploadSizeExceededException e) {
         return body(HttpStatus.PAYLOAD_TOO_LARGE,

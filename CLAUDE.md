@@ -95,6 +95,9 @@ com.ai.aiagent
 │                 (ảnh chụp trong bộ nhớ + định tuyến bot), PlatformAdminController
 ├── settings/     RagSettingsService (đổi cấu hình lúc runtime), Controller
 ├── eval/         EvalService, EvalController
+├── audit/        AuditFilter (ghi TỰ ĐỘNG mọi thao tác đổi dữ liệu/cấu hình, kể cả
+│                 401/403), AuditService (ghi nền), AuditRepository, AuditController
+├── retention/    RetentionService (@Scheduled dọn hội thoại/nhật ký/job quá hạn)
 └── observability/RagMetrics
 resources/
 ├── db/migration/V1__rag_core_schema.sql   ← placeholder ${embeddingDim}
@@ -112,6 +115,8 @@ Mô tả kiến trúc đầy đủ: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 Thiết kế nền tảng nhiều bot + tích hợp Teams + phân quyền Entra:
 [docs/BOT-PLATFORM.md](docs/BOT-PLATFORM.md).
 Hướng dẫn bật đăng nhập bằng tài khoản công ty: [docs/ENTRA-SETUP.md](docs/ENTRA-SETUP.md).
+Triển khai, sao lưu/khôi phục, nhật ký kiểm toán, vòng đời dữ liệu, OCR, quét virus:
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Bất biến — phá là hỏng dữ liệu
 
@@ -174,6 +179,17 @@ Hướng dẫn bật đăng nhập bằng tài khoản công ty: [docs/ENTRA-SET
   dùng `min-section-chars` mặc định, đặt 0 là làm test mất khả năng bắt lỗi.
 - Đổi `rag.chunking.*` (kể cả `legal-structure-enabled`, `prefix-document-identity`)
   ⇒ phải **nạp lại tài liệu** mới có tác dụng. Chỉ `rag.retrieval.*` mới áp dụng ngay.
+- **Nhật ký kiểm toán ghi bằng FILTER, không bằng lời gọi trong từng controller.**
+  `AuditFilter` nằm ngay trước `ExceptionTranslationFilter` nên bắt được cả thao tác
+  **bị từ chối** (401/403) — đó mới là thứ cần nhất khi điều tra. Thêm endpoint quản
+  trị mới thì **không phải làm gì**; đừng "cải tiến" thành gọi tay ở từng nơi, vì chỗ
+  bị quên chính là chỗ cần nhất. Nhật ký **chỉ có đường đọc**.
+- **Quét virus đặt ở `IngestionService.ingest`, không ở controller.** Đó là điểm nghẽn
+  duy nhất của cả ba đường nạp; đặt ở controller thì đường nạp thêm sau sẽ bị bỏ sót.
+  `fail-closed=true` là cố ý: không kết nối được clamd ⇒ **từ chối** file.
+- **PDF bản scan không nạp được nếu `rag.ocr.enabled=false`** — job tính là *thất bại*
+  kèm cảnh báo chứ không im lặng bỏ qua. OCR tốn **một lời gọi model mỗi trang**, nên
+  `rag.ocr.max-pages` là cái chặn thật, đừng gỡ.
 
 ## Quy ước code
 

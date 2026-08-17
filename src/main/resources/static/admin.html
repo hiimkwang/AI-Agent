@@ -151,6 +151,7 @@
         <button data-tab="eval">Đánh giá</button>
         <button data-tab="reports">Báo cáo</button>
         <button data-tab="feedback">Phản hồi</button>
+        <button data-tab="audit">Nhật ký</button>
     </div>
 
     <!-- ============================================================ TỔNG QUAN -->
@@ -640,6 +641,40 @@
         <div class="row" style="margin-bottom:.8rem"><button onclick="loadFeedback()">Làm mới</button></div>
         <div class="grid" id="feedback-list" style="grid-template-columns:1fr"></div>
     </div>
+
+    <div class="panel" id="tab-audit">
+        <h2>Nhật ký thao tác</h2>
+        <p class="sub">Mọi thao tác làm <b>thay đổi</b> dữ liệu hoặc cấu hình đều được ghi lại tự động,
+            kể cả các thao tác <b>bị từ chối</b> (401/403) — đó mới là thứ cần nhất khi điều tra sự cố.
+            Nhật ký chỉ đọc, không sửa/xoá được qua giao diện.</p>
+
+        <dl class="tiles" id="audit-summary" style="margin-bottom:1rem"></dl>
+
+        <div class="row" style="margin-bottom:.8rem;flex-wrap:wrap;gap:.5rem">
+            <input id="audit-actor" placeholder="Người thực hiện (email hoặc id)" style="max-width:280px">
+            <input id="audit-action" placeholder="Hành động (vd: DELETE, /collections)" style="max-width:280px">
+            <select id="audit-days" style="max-width:150px">
+                <option value="1">1 ngày</option>
+                <option value="7">7 ngày</option>
+                <option value="30" selected>30 ngày</option>
+                <option value="90">90 ngày</option>
+                <option value="730">2 năm</option>
+            </select>
+            <label class="faint" style="font-size:.82rem;display:flex;gap:.35rem;align-items:center">
+                <input type="checkbox" id="audit-denied" style="width:auto"> chỉ thao tác bị từ chối
+            </label>
+            <button onclick="loadAudit()">Tìm</button>
+        </div>
+
+        <table id="audit-table" class="mono" style="font-size:.8rem"></table>
+
+        <h3 style="margin-top:1.6rem">Vòng đời dữ liệu</h3>
+        <p class="sub">Chạy tự động hằng ngày. Xoá hội thoại, nhật ký và job cũ hơn thời hạn đã đặt.</p>
+        <div id="retention-status"></div>
+        <div class="row" style="margin-top:.6rem">
+            <button class="ghost" onclick="runRetention()">Chạy dọn ngay</button>
+        </div>
+    </div>
 </div>
 
 <div id="toasts"></div>
@@ -651,7 +686,7 @@
         overview: loadOverview, documents: loadDocuments, jobs: loadJobs,
         settings: loadSettings, eval: loadEval, feedback: loadFeedback,
         ingest: loadAllowedRoots, providers: loadProviders, platform: loadPlatform,
-        reports: loadReports
+        reports: loadReports, audit: loadAudit
     };
 
     function activateTab(name, push) {
@@ -972,10 +1007,21 @@
         });
         kv('providers-kv', Object.fromEntries(
             Object.entries(o.providers).map(([k, v]) => [k, v ? 'có API key' : 'chưa cấu hình'])));
+        const comp = o.compliance || {};
         kv('ingest-kv', {
             'Thư mục cho phép': (o.ingest.allowedRoots || []).join(', ') || '(chưa cấu hình)',
             'Bỏ qua file không đổi': bool(o.ingest.skipUnchanged),
-            'Định dạng hỗ trợ': (o.ingest.supportedExtensions || []).join(' ')
+            'Định dạng hỗ trợ': (o.ingest.supportedExtensions || []).join(' '),
+            // PDF bản scan không nạp được nếu OCR tắt — nói rõ ở đây thay vì để người
+            // dùng tự đoán khi thấy job báo "thất bại".
+            'OCR cho PDF scan': o.ingest.ocrEnabled
+                ? 'bật (' + o.ingest.ocrModel + ')' : 'tắt — PDF bản scan sẽ không nạp được',
+            'Quét virus': o.ingest.antivirusEnabled ? 'bật' : 'tắt',
+            'Nhật ký thao tác': bool(comp.auditEnabled)
+                + (comp.auditIncludeRead ? ' (ghi cả lượt đọc)' : ''),
+            'Vòng đời dữ liệu': comp.retentionEnabled
+                ? 'hội thoại ' + comp.conversationDays + ' ngày · nhật ký ' + comp.auditDays + ' ngày'
+                : 'TẮT — dữ liệu giữ vô thời hạn'
         });
     }
 
@@ -1625,6 +1671,81 @@
                 + escapeHtml(i.comment) + '</div>' : '')
             + '</div>').join('') : '<div class="empty">Chưa có phản hồi xấu nào. '
             + 'Người dùng bấm 👎 ở màn hỏi đáp thì sẽ hiện ở đây.</div>';
+    }
+
+    /* ------------------------------------------------------- Nhật ký */
+
+    async function loadAudit() {
+        await Promise.all([loadAuditEntries(), loadAuditSummary(), loadRetention()]);
+    }
+
+    async function loadAuditEntries() {
+        const params = new URLSearchParams({
+            days: document.getElementById('audit-days').value,
+            limit: '150'
+        });
+        const actor = document.getElementById('audit-actor').value.trim();
+        const action = document.getElementById('audit-action').value.trim();
+        if (actor) params.set('actor', actor);
+        if (action) params.set('action', action);
+        if (document.getElementById('audit-denied').checked) params.set('deniedOnly', 'true');
+
+        const r = await api('/api/v1/rag/admin/audit?' + params.toString());
+        const rows = (r.entries || []).map(e => `
+            <tr>
+              <td class="faint" style="white-space:nowrap">${fmtDate(e.createdAt)}</td>
+              <td>${escapeHtml(e.actor || '(không rõ)')}
+                  <span class="faint" style="font-size:.72rem">${escapeHtml(e.source || '')}</span></td>
+              <td>${escapeHtml(e.action || '')}</td>
+              <td class="tabular">${e.succeeded
+                  ? '<span class="chip">' + e.status + '</span>'
+                  : '<span class="chip bad">' + e.status + '</span>'}</td>
+              <td class="faint" style="max-width:340px;overflow:hidden;text-overflow:ellipsis">
+                  ${escapeHtml((e.payload || e.query || '').slice(0, 200))}</td>
+            </tr>`).join('');
+
+        document.getElementById('audit-table').innerHTML = (r.entries || []).length
+            ? `<thead><tr><th>Thời điểm</th><th>Người thực hiện</th><th>Hành động</th>
+                 <th>Kết quả</th><th>Nội dung</th></tr></thead><tbody>${rows}</tbody>`
+            : '<tbody><tr><td class="empty">Không có thao tác nào khớp bộ lọc.</td></tr></tbody>';
+    }
+
+    async function loadAuditSummary() {
+        const s = await api('/api/v1/rag/admin/audit/summary?days='
+            + document.getElementById('audit-days').value);
+        const topActor = (s.byActor || [])[0];
+
+        tilesInto('audit-summary', [
+            ['Tổng thao tác', fmtInt(s.total)],
+            // Chỉ tô đỏ khi thật sự có: tô đỏ cho số 0 là báo động giả.
+            ['Bị từ chối', fmtInt(s.denied), (s.denied || 0) > 0 ? 'bad' : ''],
+            ['Thao tác nhiều nhất', topActor
+                ? (topActor.actor || '(không rõ)') + ' — ' + fmtInt(topActor.n) : '—'],
+            ['Đang chờ ghi', fmtInt(s.pendingWrites), (s.pendingWrites || 0) > 100 ? 'warn' : '']
+        ]);
+    }
+
+    async function loadRetention() {
+        const r = await api('/api/v1/rag/admin/retention');
+        const p = r.policy || {};
+        const last = r.lastRun || {};
+        document.getElementById('retention-status').innerHTML =
+            '<table class="mono" style="font-size:.8rem"><tbody>'
+            + '<tr><td>Trạng thái</td><td>' + (p.enabled
+                ? '<span class="chip">đang bật</span>' : '<span class="chip bad">đã tắt</span>')
+            + ' — chạy lúc ' + p.runAtHour + ' giờ hằng ngày</td></tr>'
+            + '<tr><td>Hội thoại</td><td>giữ ' + p.conversationDays + ' ngày</td></tr>'
+            + '<tr><td>Nhật ký kiểm toán</td><td>giữ ' + p.auditDays + ' ngày</td></tr>'
+            + '<tr><td>Job nạp liệu</td><td>giữ ' + p.jobDays + ' ngày</td></tr>'
+            + '<tr><td>Lần chạy gần nhất</td><td>' + escapeHtml(JSON.stringify(last)) + '</td></tr>'
+            + '</tbody></table>';
+    }
+
+    async function runRetention() {
+        const r = await api('/api/v1/rag/admin/retention/run', { method: 'POST' });
+        toast('Đã dọn: ' + r.conversations + ' hội thoại, ' + r.auditEntries
+            + ' dòng nhật ký, ' + r.jobs + ' job.');
+        loadAudit();
     }
 
     loadOverview();

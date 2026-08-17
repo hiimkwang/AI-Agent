@@ -1,0 +1,53 @@
+# =====================================================================
+# CI: build + chay toan bo test, KE CA cac test cham DB that.
+#
+# Runner cua GitHub Actions co san Docker, nen cac lop *IT (Testcontainers)
+# se chay THAT o day - khac voi may ca nhan khong bat Docker, noi chung tu
+# bo qua. Nghia la: du ai do quen bat Docker, PR van duoc kiem tra day du.
+# =====================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cai dat JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build + test
+        run: ./mvnw -B clean verify
+
+      - name: Bao cao ket qua test
+        if: always()
+        run: |
+          echo "### Ket qua test" >> $GITHUB_STEP_SUMMARY
+          if ls target/surefire-reports/*.txt > /dev/null 2>&1; then
+            grep -h "Tests run" target/surefire-reports/*.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "(khong co bao cao)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Luu bao cao khi that bai
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+
+      - name: Kiem tra Dockerfile build duoc
+        run: docker build -t aiagent:ci .

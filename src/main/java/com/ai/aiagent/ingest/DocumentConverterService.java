@@ -2,6 +2,7 @@ package com.ai.aiagent.ingest;
 
 import com.ai.aiagent.config.RagProperties;
 import com.ai.aiagent.ingest.converter.HtmlToMarkdown;
+import com.ai.aiagent.ingest.converter.OcrService;
 import com.ai.aiagent.ingest.converter.OfficeToMarkdown;
 import com.ai.aiagent.ingest.converter.PdfToMarkdown;
 import lombok.extern.slf4j.Slf4j;
@@ -40,15 +41,18 @@ public class DocumentConverterService {
     private final HtmlToMarkdown htmlConverter;
     private final PdfToMarkdown pdfConverter;
     private final OfficeToMarkdown officeConverter;
+    private final OcrService ocr;
 
     public DocumentConverterService(RagProperties props,
                                     HtmlToMarkdown htmlConverter,
                                     PdfToMarkdown pdfConverter,
-                                    OfficeToMarkdown officeConverter) {
+                                    OfficeToMarkdown officeConverter,
+                                    OcrService ocr) {
         this.props = props;
         this.htmlConverter = htmlConverter;
         this.pdfConverter = pdfConverter;
         this.officeConverter = officeConverter;
+        this.ocr = ocr;
     }
 
     public Result convert(byte[] bytes, String fileName) {
@@ -67,11 +71,7 @@ public class DocumentConverterService {
             }
             case PDF -> {
                 requireEnabled(props.getConvert().isPdfEnabled(), "PDF", fileName);
-                String md = pdfConverter.convert(bytes, fileName);
-                if (md.isBlank()) {
-                    warnings.add("PDF khong chua text (co the la ban scan) - can OCR truoc khi nap.");
-                }
-                yield md;
+                yield fromPdf(bytes, fileName, warnings);
             }
             case DOCX, DOC, XLSX, XLS, PPTX, PPT -> {
                 requireEnabled(props.getConvert().isOfficeEnabled(), "Office", fileName);
@@ -86,6 +86,63 @@ public class DocumentConverterService {
         }
         log.debug("Chuyen doi '{}' ({}) -> {} ky tu Markdown", fileName, format, markdown.length());
         return new Result(markdown, format, warnings);
+    }
+
+    /**
+     * PDF: boc text truoc, chi OCR khi that su can.
+     *
+     * Hai truong hop can OCR, va truong hop thu hai moi la cai hay bi bo sot:
+     *   1) Khong boc duoc chu nao  -> ban scan thuan tuy, ro rang.
+     *   2) Boc duoc RAT IT chu     -> file "lai": vai trang dau la ban danh may (co
+     *      text), phan con lai la ban scan dinh kem. Tinh theo so ky tu TREN MOT TRANG
+     *      chu khong theo tong so: mot cong van scan 30 trang van co the co vai tram
+     *      ky tu tu trang bia, du de vuot moi nguong tinh theo tong.
+     *
+     * Neu OCR khong bat hoac that bai thi giu nguyen hanh vi cu: tra ve thu boc duoc
+     * (co the rong) kem canh bao, va {@code IngestionJobService} se tinh file do la
+     * that bai chu khong am tham bo qua.
+     */
+    private String fromPdf(byte[] bytes, String fileName, List<String> warnings) {
+        String md = pdfConverter.convert(bytes, fileName);
+        if (!needsOcr(md)) return md;
+
+        if (!ocr.isEnabled()) {
+            warnings.add("PDF khong co text (co the la ban scan) - bat rag.ocr.enabled=true "
+                    + "hoac OCR truoc khi nap.");
+            return md;
+        }
+
+        String scanned = ocr.ocrPdf(bytes, fileName);
+        if (scanned.isBlank()) {
+            warnings.add("PDF khong co text va OCR khong doc duoc noi dung nao.");
+            return md;
+        }
+        warnings.add("Noi dung PDF nay duoc doc bang OCR - nen kiem tra lai ban Markdown "
+                + "o man Tai lieu truoc khi tin dung.");
+        // Uu tien ban OCR: khi da roi vao nhanh nay thi phan text boc duoc chi la vai
+        // dong bia, gop vao chi lam nhieu.
+        return scanned;
+    }
+
+    /** @return true khi so ky tu tren mot trang thap hon nguong cau hinh. */
+    private boolean needsOcr(String markdown) {
+        if (markdown == null || markdown.isBlank()) return true;
+
+        int minPerPage = props.getOcr().getMinCharsPerPage();
+        if (minPerPage <= 0) return false;
+
+        // PdfToMarkdown danh dau moi trang bang mot comment; dem chung la cach re nhat
+        // de biet tai lieu co bao nhieu trang ma khong phai mo lai file.
+        int pages = 0;
+        int from = 0;
+        while ((from = markdown.indexOf("<!-- page ", from)) >= 0) {
+            pages++;
+            from += 10;
+        }
+        if (pages == 0) pages = 1;
+
+        String textOnly = markdown.replaceAll("<!-- page \\d+ -->", "").strip();
+        return textOnly.length() / pages < minPerPage;
     }
 
     /** File .txt/.csv: bao heading tu ten file; CSV duoc chuyen thanh bang Markdown. */

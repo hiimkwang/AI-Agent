@@ -31,5 +31,54 @@ services:
       - "-c"
       - "max_connections=100"
 
+  # -------------------------------------------------------------------
+  # Ung dung. Nam trong profile "app" nen `docker compose up -d` van chi
+  # dung Postgres nhu truoc - luong dev (chay bang ./mvnw spring-boot:run)
+  # khong doi gi.
+  #
+  # Chay ca cum:  docker compose --profile app up -d --build
+  # -------------------------------------------------------------------
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+    container_name: rag-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      # Trong mang cua compose, host cua DB la ten dich vu chu khong phai localhost.
+      DB_URL: jdbc:postgresql://postgres:5432/rag_db
+      DB_USERNAME: admin
+      DB_PASSWORD: ${DB_PASSWORD:-admin}
+      RAG_ADMIN_API_KEY: ${RAG_ADMIN_API_KEY:-}
+      RAG_USER_API_KEY: ${RAG_USER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
+      # Dang nhap Entra (de trong = tat, he thong chay bang API key nhu cu)
+      ENTRA_ENABLED: ${ENTRA_ENABLED:-false}
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
+      # Bot Teams (de trong = tat, khong co endpoint /api/messages)
+      BOT_ENABLED: ${BOT_ENABLED:-false}
+      BOT_APP_ID: ${BOT_APP_ID:-}
+      BOT_APP_PASSWORD: ${BOT_APP_PASSWORD:-}
+      # Dung sau reverse proxy: bat buoc, neu khong redirect_uri se la http://
+      # va Microsoft tra AADSTS50011.
+      SERVER_FORWARD_HEADERS_STRATEGY: ${FORWARD_HEADERS:-NATIVE}
+      RAG_TRUST_PROXY: ${RAG_TRUST_PROXY:-true}
+    volumes:
+      - rag_logs:/app/logs
+      # Thu muc tai lieu tren may chu de dung /admin/ingest-folder.
+      # Chi doc: ung dung khong bao gio can ghi vao kho tai lieu goc.
+      - ${RAG_DOCS_DIR:-./docs}:/data/docs:ro
+
 volumes:
   rag_pgdata:
+  rag_logs:

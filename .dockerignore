@@ -1,0 +1,10 @@
+target/
+logs/
+.git/
+.idea/
+.vscode/
+.claude/
+*.iml
+*.zip
+teams-app/*.png
+docs/

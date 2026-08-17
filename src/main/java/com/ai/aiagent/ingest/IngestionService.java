@@ -3,6 +3,7 @@ package com.ai.aiagent.ingest;
 import com.ai.aiagent.common.Hashes;
 import com.ai.aiagent.config.RagProperties;
 import com.ai.aiagent.llm.EmbeddingService;
+import com.ai.aiagent.security.AntivirusScanner;
 import com.ai.aiagent.store.ChunkRepository;
 import com.ai.aiagent.store.DocumentRepository;
 import com.ai.aiagent.store.StoreModels.ChunkToInsert;
@@ -75,6 +76,7 @@ public class IngestionService {
     private final ChunkRepository chunks;
     private final RagProperties props;
     private final TransactionTemplate transactions;
+    private final AntivirusScanner antivirus;
 
     public IngestionService(DocumentConverterService converter,
                             MarkdownChunker chunker,
@@ -83,7 +85,8 @@ public class IngestionService {
                             DocumentRepository documents,
                             ChunkRepository chunks,
                             RagProperties props,
-                            TransactionTemplate transactions) {
+                            TransactionTemplate transactions,
+                            AntivirusScanner antivirus) {
         this.converter = converter;
         this.chunker = chunker;
         this.enricher = enricher;
@@ -92,11 +95,17 @@ public class IngestionService {
         this.chunks = chunks;
         this.props = props;
         this.transactions = transactions;
+        this.antivirus = antivirus;
     }
 
     public IngestResult ingest(byte[] content, String fileName, IngestOptions options) {
         long start = System.currentTimeMillis();
         List<String> warnings = new ArrayList<>();
+
+        // 0) Quet virus TRUOC moi thu khac. Day la diem nghen duy nhat cua ca ba duong
+        //    nap (/upload, /upload-batch, /ingest-folder) nen dat o day la du - dat o
+        //    tung controller thi duong nao them sau se bi bo sot.
+        antivirus.scan(content, fileName);
 
         // 1) Chuyen sang Markdown
         DocumentConverterService.Result converted = converter.convert(content, fileName);

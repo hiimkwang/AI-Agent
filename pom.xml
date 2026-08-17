@@ -152,10 +152,56 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!--
+            Testcontainers: dung Postgres+pgvector THAT trong test.
+
+            Truoc day toan bo SQL tim kiem (ChunkRepository) va ca 7 migration Flyway
+            khong co mot test tu dong nao cham toi - vi test nap context can DB nen bi
+            @Disabled. Do dung la phan de hong nhat khi sua ma lai khong duoc bao ve.
+
+            Cac test nay TU BO QUA khi may khong co Docker (xem DockerAvailable), nen
+            `mvn test` van xanh tren may khong chay Docker.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!--
+                Chay CA cac lop *IT trong `mvn test`, khong tach sang failsafe.
+
+                Ly do rat thuc dung: `mvn clean package` la lenh build duy nhat duoc
+                dung o day, va no khong goi failsafe. Tach ra thi cac test cham DB se
+                khong bao gio chay trong quy trinh that - tuc la ton cong viet ma
+                khong bao ve duoc gi. Chung tu bo qua khi may khong co Docker (xem
+                PostgresTestBase) nen khong lam do build o may khong chay Docker.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
