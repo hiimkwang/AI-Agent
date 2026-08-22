@@ -13,7 +13,11 @@
       "Bash(git branch*)",
       "Bash(curl -s http://localhost:8080/*)",
       "Bash(psql*-c \"SELECT*)",
-      "Bash(psql*-c \"\\\\d*)"
+      "Bash(psql*-c \"\\\\d*)",
+      "Bash(cd \"e:/BSC Workspace/AI_Agent/AI-Agent\" && grep -n -B2 -A3 \"prometheus\" pom.xml | head -20 && echo \"=== package nao ton tai trong local repo ===\" && find \"$HOME/.m2/repository/io/micrometer\" -maxdepth 1 -type d -name \"micrometer-registry-prometheus*\" 2>/dev/null)",
+      "Read(//c/Users/quangbd/.m2/repository/io/micrometer/**)",
+      "Read(//c/Users/quangbd/.m2/repository/io/micrometer/micrometer-registry-prometheus/1.15.7/**)",
+      "Bash(unzip -l micrometer-registry-prometheus-1.15.7.jar)"
     ],
     "deny": [
       "Read(./logs/**)",

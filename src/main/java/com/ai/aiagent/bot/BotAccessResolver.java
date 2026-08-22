@@ -17,36 +17,11 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
-/**
- * Quyet dinh mot tin nhan Teams do BOT NAO phuc vu va duoc doc nhung tap tai lieu nao.
- *
- * Pham vi cuoi cung la GIAO cua ba thu, chat hon bat ky thu nao trong so do:
- *
- *   (1) bot duoc gan nhung collection nao      - chinh sach, bang rag_bot_collections
- *   (2) nguoi hoi doc duoc nhung collection nao - danh tinh, tu nhom Entra
- *   (3) ngu canh cho phep cong khai den dau     - chi ap dung trong channel
- *
- * (3) la cho de sai nhat. Cau tra loi trong channel hien ra cho MOI thanh vien channel.
- * Neu bot dung quyen ca nhan cua nguoi hoi thi mot can bo Nhan su @mention bot trong
- * channel cong khai se phat tan tai lieu Nhan su cho ca channel - trong khi bot lam
- * hoan toan dung ACL cua nguoi hoi. Vi vay trong channel con phai giao them voi tap
- * collection co {@code channel_allowed = true}.
- *
- * Ngoai ra trong channel phai HA quyen ADMIN xuong USER. Chi thu hep danh sach collection
- * la CHUA DU: {@code HybridRetriever} loc {@code allowed_roles} bang
- * {@code isAdmin() ? Set.of() : roles()}, tuc ADMIN bo qua ACL muc tai lieu, va mot quan
- * tri vien hoi trong channel se keo tai lieu han che ra cho ca kenh.
- */
 @Component
 @ConditionalOnProperty(prefix = "rag.bot", name = "enabled", havingValue = "true")
 @Slf4j
 public class BotAccessResolver {
 
-    /**
-     * @param scope  pham vi da tinh; null khi bi tu choi
-     * @param bot    bot phuc vu cuoc tro chuyen; null khi bi tu choi
-     * @param denial ly do tu choi de hien cho nguoi dung; null khi duoc phep
-     */
     public record Resolution(AccessScope scope, BotDef bot, String denial) {
         public boolean allowed() {
             return scope != null;
@@ -63,7 +38,6 @@ public class BotAccessResolver {
 
     private final BotProperties props;
     private final PlatformService platform;
-    /** Vang mat khi {@code rag.entra.enabled=false} - khi do khong dinh danh duoc ai. */
     private final ObjectProvider<EntraScopeService> entraScopes;
 
     public BotAccessResolver(BotProperties props, PlatformService platform,
@@ -74,21 +48,27 @@ public class BotAccessResolver {
     }
 
     public Resolution resolve(BotActivity activity) {
+        // Danh tinh truoc, roi moi chon bot: chat rieng khong co Team lan kenh, nen cach duy nhat
+        // de moi phong co tro ly rieng ma khong phai tao Azure Bot moi la chon theo nhom Entra
+        // cua nguoi hoi. Chi ap dung cho chat rieng - trong kenh, cau tra loi hien cho moi nguoi
+        // nen bot phai do CHO HOI quyet dinh, khong phai do ai vua go.
+        Identity identity = identityOf(activity);
+        if (identity.denial() != null) {
+            return Resolution.deny(identity.denial());
+        }
+
         Optional<BotDef> bot = platform.resolveBot(
-                activity.recipientId(), activity.teamAadGroupId(), activity.channelId());
+                activity.recipientId(), activity.teamAadGroupId(), activity.channelId(),
+                activity.isPersonal() ? identity.groups() : Set.of(),
+                activity.isPersonal() ? identity.objectId() : null);
         if (bot.isEmpty()) {
             return Resolution.deny("""
                     Hệ thống chưa cấu hình trợ lý nào đang hoạt động.
                     Vui lòng liên hệ quản trị hệ thống.""");
         }
 
-        Identity identity = identityOf(activity);
-        if (identity.denial() != null) {
-            return Resolution.deny(identity.denial());
-        }
-
         if (!bot.get().usableBy(identity.groups(), identity.objectId())) {
-            log.info("Bot '{}': {} khong nam trong doi tuong su dung.",
+            log.info("Bot '{}' denied {}: not in the bot audience.",
                     bot.get().slug(), identity.displayId());
             return Resolution.deny("""
                     Bạn chưa nằm trong nhóm được sử dụng trợ lý này.
@@ -103,8 +83,6 @@ public class BotAccessResolver {
             return Resolution.allow(scope(identity, readable, identity.admin()), bot.get());
         }
 
-        // Channel / group chat: thu hep them bang tap duoc phep tra loi cong khai,
-        // va ha quyen ADMIN.
         Set<String> publicSlugs = platform.channelAllowedSlugs();
         if (publicSlugs.isEmpty()) {
             return Resolution.deny("""
@@ -122,23 +100,29 @@ public class BotAccessResolver {
     }
 
     /**
-     * Loi chao cua bot phuc vu cuoc tro chuyen nay.
-     *
-     * Tach rieng khoi {@link #resolve} vi loi chao duoc gui khi bot vua duoc cai, luc do
-     * chua can (va chua nen) tinh quyen doc tai lieu.
+     * Lời chào phải đến từ đúng trợ lý sẽ trả lời người đó. Nếu vẫn lấy bot mặc định thì người
+     * phòng Nhân sự được chào bằng lời của trợ lý chung rồi lại nói chuyện với trợ lý Nhân sự.
      */
-    public Optional<String> greetingFor(BotActivity activity) {
+    public Optional<BotDef> botForGreeting(BotActivity activity) {
+        Set<String> groups = Set.of();
+        String objectId = null;
+        if (activity.isPersonal()) {
+            // Loi chao la thu tu te, khong duoc phu thuoc Graph: hong thi chao bang bot mac dinh.
+            try {
+                Identity identity = identityOf(activity);
+                if (identity.denial() == null) {
+                    groups = identity.groups();
+                    objectId = identity.objectId();
+                }
+            } catch (Exception e) {
+                log.debug("Could not resolve the greeter's departments ({}), using the default bot.",
+                        e.getMessage());
+            }
+        }
         return platform.resolveBot(activity.recipientId(), activity.teamAadGroupId(),
-                        activity.channelId())
-                .map(BotDef::greeting);
+                activity.channelId(), groups, objectId);
     }
 
-    // ============================================================ Danh tinh
-
-    /**
-     * @param admin        chi co y nghia trong chat rieng - trong channel luon bi ha
-     * @param readableSlugs tap collection nguoi nay doc duoc, TRUOC khi giao voi bot
-     */
     private record Identity(String objectId, String displayId, Set<String> groups,
                             Set<String> readableSlugs, boolean admin, String denial) {
         static Identity denied(String reason) {
@@ -158,11 +142,9 @@ public class BotAccessResolver {
                     scope.displayId(), scope.entraGroups(), readable, scope.isAdmin(), null);
         }
 
-        // Khong xac dinh duoc nguoi dung. MAC DINH TU CHOI: bot khong biet nguoi hoi la ai
-        // thi khong the thuc thi ACL.
         Set<String> fallback = split(props.getUnidentifiedDepartments());
         if (fallback.isEmpty()) {
-            log.debug("Bot: khong xac dinh duoc nguoi dung (aadObjectId={}, entra={}).",
+            log.debug("Could not identify the sender (aadObjectId={}, entraConfigured={}).",
                     activity.aadObjectId(), entra != null);
             return Identity.denied("""
                     Chưa xác định được tài khoản công ty của bạn nên tôi không thể tra cứu
@@ -173,12 +155,14 @@ public class BotAccessResolver {
     }
 
     private String noCollectionMessage(Identity identity) {
-        log.info("Bot: {} khong doc duoc collection nao cua bot.", identity.displayId());
+        log.info("Denied {}: no readable collection in this bot's scope.", identity.displayId());
         return """
                 Tài khoản của bạn chưa được cấp quyền đọc nhóm tài liệu nào mà trợ lý này
                 phục vụ. Vui lòng liên hệ quản trị hệ thống để được cấp quyền.""";
     }
 
+    // In a Teams channel an admin must be downgraded to USER: HybridRetriever skips the
+    // allowed_roles filter for admins, which would leak restricted documents to the channel.
     private AccessScope scope(Identity identity, Set<String> slugs, boolean admin) {
         return new AccessScope(
                 identity.objectId() != null ? identity.objectId() : identity.displayId(),

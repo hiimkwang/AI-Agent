@@ -17,17 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 
-/**
- * Claude (Anthropic) qua SDK chinh thuc {@code com.anthropic:anthropic-java}.
- *
- * Vai luu y rieng cua doi Claude hien tai, khac han OpenAI:
- *   - KHONG co tham so {@code temperature} (Opus 5 tra 400 neu gui) -> dieu khien
- *     bang prompt va {@code effort} thay vi sampling.
- *   - Thinking BAT theo mac dinh tren Opus 5. Voi hoi-dap RAG (ngu canh da co san)
- *     ta tat di cho nhanh; khi tat, {@code effort} phai <= high, neu khong API tra 400.
- *   - Khi tat thinking, model co the lot the XML noi bo ra cau tra loi, nen
- *     {@code PromptBuilder} co san mot chi thi chan viec do.
- */
 @Slf4j
 public class AnthropicLlmClient implements LlmClient {
 
@@ -49,10 +38,6 @@ public class AnthropicLlmClient implements LlmClient {
         this.effort = resolveEffort(effortName, thinkingEnabled);
     }
 
-    /**
-     * Tat thinking chi duoc phep o effort <= high. Neu cau hinh de xhigh/max ma
-     * lai tat thinking thi ha xuong high thay vi de API tra 400.
-     */
     private static OutputConfig.Effort resolveEffort(String name, boolean thinkingEnabled) {
         String v = name == null ? "low" : name.trim().toLowerCase();
         OutputConfig.Effort requested = switch (v) {
@@ -62,9 +47,11 @@ public class AnthropicLlmClient implements LlmClient {
             case "max" -> OutputConfig.Effort.MAX;
             default -> OutputConfig.Effort.LOW;
         };
+        // Claude rejects temperature and enables thinking by default; thinking can only
+        // be turned off when effort is high or below, so drop the effort instead.
         if (!thinkingEnabled
                 && (requested.equals(OutputConfig.Effort.XHIGH) || requested.equals(OutputConfig.Effort.MAX))) {
-            log.warn("Claude: tat thinking khong dung duoc voi effort={} -> ha xuong high.", v);
+            log.warn("Claude cannot disable thinking at effort={}, lowering it to high.", v);
             return OutputConfig.Effort.HIGH;
         }
         return requested;
@@ -107,15 +94,17 @@ public class AnthropicLlmClient implements LlmClient {
         StringBuilder buffer = new StringBuilder();
         try (StreamResponse<RawMessageStreamEvent> response =
                      client.messages().createStreaming(params(request))) {
-            response.stream().forEach(event -> event.contentBlockDelta()
-                    .flatMap(delta -> delta.delta().text())
-                    .ifPresent(textDelta -> {
-                        buffer.append(textDelta.text());
-                        sink.onToken(textDelta.text());
-                    }));
+            // takeWhile thoat som khi bi dung; try-with-resources dong luon ket noi HTTP.
+            response.stream()
+                    .takeWhile(event -> !sink.cancelled())
+                    .forEach(event -> event.contentBlockDelta()
+                            .flatMap(delta -> delta.delta().text())
+                            .ifPresent(textDelta -> {
+                                buffer.append(textDelta.text());
+                                sink.onToken(textDelta.text());
+                            }));
             long ms = (System.nanoTime() - start) / 1_000_000;
             String text = buffer.toString();
-            // Ban stream khong doc usage chinh xac -> uoc tinh, du de theo doi chi phi.
             int in = ModelPricing.estimateTokens(
                     OpenAiLlmClient.nullToEmpty(request.system()) + OpenAiLlmClient.nullToEmpty(request.user()));
             int out = ModelPricing.estimateTokens(text);

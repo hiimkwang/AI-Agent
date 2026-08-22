@@ -1,5 +1,6 @@
 package com.ai.aiagent.security;
 
+import com.ai.aiagent.common.RequestPaths;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,23 +18,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-/**
- * Bien phien dang nhap Entra thanh {@link AccessScope} cho tung request.
- *
- * TAI SAO CAN FILTER NAY: sau khi dang nhap OIDC, principal trong SecurityContext la
- * {@code OidcUser}, con toan bo tang duoi ({@code CurrentScope.get()},
- * {@code HybridRetriever}, {@code AnswerCacheService}) chi biet {@link AccessScope}.
- * Filter nay lam cau noi, nho vay khong mot controller nao phai biet request den tu
- * trinh duyet hay tu API key.
- *
- * TAI SAO TINH LAI MOI REQUEST thay vi lay quyen chup luc dang nhap: phien trinh duyet
- * song hang gio. Neu quyen dong bang theo phien thi nguoi bi go quyen van dung duoc den
- * khi ho tu dang xuat. Tinh lai la re vi phan dat (goi Graph) da co cache 15 phut trong
- * {@link EntraScopeService}.
- *
- * KHONG ghi de nguoc vao session: tu Spring Security 6, {@code SecurityContextHolderFilter}
- * chi doc chu khong luu lai, nen thay principal trong holder chi anh huong request hien tai.
- */
 @Component
 @ConditionalOnProperty(prefix = "rag.entra", name = "enabled", havingValue = "true")
 @Slf4j
@@ -45,17 +29,9 @@ public class EntraScopeFilter extends OncePerRequestFilter {
         this.scopes = scopes;
     }
 
-    /**
-     * Bo qua cac duong cua chinh luong OAuth2.
-     *
-     * Dac biet {@code /logout}: {@code OidcClientInitiatedLogoutSuccessHandler} can dung
-     * {@link OAuth2AuthenticationToken} de tim ra ClientRegistration ma goi endpoint dang
-     * xuat cua Entra. Thay principal o day se lam dang xuat chi con la xoa cookie phia
-     * minh, con phien ben Entra thi van con.
-     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String p = request.getRequestURI();
+        String p = RequestPaths.within(request);
         return p.startsWith("/oauth2/") || p.startsWith("/login") || p.startsWith("/logout");
     }
 
@@ -83,9 +59,7 @@ public class EntraScopeFilter extends OncePerRequestFilter {
                 fresh.setAuthentication(replacement);
                 SecurityContextHolder.setContext(fresh);
             } catch (Exception e) {
-                // Khong suy duoc pham vi thi COI NHU CHUA XAC THUC, khong di tiep voi
-                // quyen cu - de tang duoi tra 401/403 thay vi mo nham du lieu.
-                log.warn("Khong dung duoc AccessScope tu phien Entra: {}", e.getMessage());
+                log.warn("Could not build an AccessScope from the Entra session: {}", e.getMessage());
                 SecurityContextHolder.clearContext();
             }
         }

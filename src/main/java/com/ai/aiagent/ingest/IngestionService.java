@@ -2,6 +2,7 @@ package com.ai.aiagent.ingest;
 
 import com.ai.aiagent.common.Hashes;
 import com.ai.aiagent.config.RagProperties;
+import com.ai.aiagent.platform.PlatformService;
 import com.ai.aiagent.llm.EmbeddingService;
 import com.ai.aiagent.security.AntivirusScanner;
 import com.ai.aiagent.store.ChunkRepository;
@@ -17,25 +18,10 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Nap MOT tai lieu: file bat ky -> Markdown -> chunk theo cau truc -> vector -> DB.
- *
- * Thu tu buoc (moi buoc giai quyet mot van de cu the cua ban truoc):
- *
- *  1) CHUYEN SANG MARKDOWN   - mot dinh dang trung gian duy nhat, giu heading va bang
- *  2) DOC FRONT-MATTER       - lay ngay hieu luc / phong ban / so hieu / phien ban
- *  3) HASH + BO QUA NEU CHUA DOI - nap lai 500 file khong ton tien LLM vo ich
- *  4) BAM CHUNK THEO HEADING - khong con cat ngang dieu/khoan/bang
- *  5) SINH NGU CANH (tuy chon)
- *  6) NHUNG THEO LO + RETRY  - file lon khong con lam hong ca luot nap
- *  7) GHI DE THEO docKey     - docKey = category/fileName nen file cung ten o hai
- *                              nhom khac nhau khong de len nhau nua
- */
 @Service
 @Slf4j
 public class IngestionService {
 
-    /** Tham so nap, thuong den tu form upload; front-matter bo sung phan con lai. */
     @Builder
     public record IngestOptions(
             String category,
@@ -77,6 +63,7 @@ public class IngestionService {
     private final RagProperties props;
     private final TransactionTemplate transactions;
     private final AntivirusScanner antivirus;
+    private final PlatformService platform;
 
     public IngestionService(DocumentConverterService converter,
                             MarkdownChunker chunker,
@@ -86,7 +73,8 @@ public class IngestionService {
                             ChunkRepository chunks,
                             RagProperties props,
                             TransactionTemplate transactions,
-                            AntivirusScanner antivirus) {
+                            AntivirusScanner antivirus,
+                            PlatformService platform) {
         this.converter = converter;
         this.chunker = chunker;
         this.enricher = enricher;
@@ -96,42 +84,38 @@ public class IngestionService {
         this.props = props;
         this.transactions = transactions;
         this.antivirus = antivirus;
+        this.platform = platform;
     }
 
     public IngestResult ingest(byte[] content, String fileName, IngestOptions options) {
         long start = System.currentTimeMillis();
         List<String> warnings = new ArrayList<>();
 
-        // 0) Quet virus TRUOC moi thu khac. Day la diem nghen duy nhat cua ca ba duong
-        //    nap (/upload, /upload-batch, /ingest-folder) nen dat o day la du - dat o
-        //    tung controller thi duong nao them sau se bi bo sot.
+        // Single chokepoint for all three ingestion paths; putting this in a controller
+        // would leave any later path unscanned.
         antivirus.scan(content, fileName);
 
-        // 1) Chuyen sang Markdown
         DocumentConverterService.Result converted = converter.convert(content, fileName);
         warnings.addAll(converted.warnings());
         if (converted.isEmpty()) {
-            log.warn("Tai lieu '{}' khong co noi dung sau khi chuyen doi -> bo qua.", fileName);
+            log.warn("Document '{}' is empty after conversion, skipped.", fileName);
             return new IngestResult(Outcome.EMPTY, -1, null, fileName,
                     converted.format(), 0, 0, warnings);
         }
 
-        // 2) Front-matter -> metadata
         FrontMatter.Parsed front = FrontMatter.parse(converted.markdown());
         String markdown = front.hadBlock() ? front.body() : converted.markdown();
         DocumentMeta meta = buildMeta(fileName, converted, front, options, markdown);
 
-        // 3) Bo qua neu noi dung khong doi
         if (props.getIngestion().isSkipUnchanged() && !options.force()) {
             String previous = documents.findSha(meta.docKey()).orElse(null);
             if (previous != null && previous.equals(meta.contentSha256())) {
-                log.info("Bo qua '{}': noi dung khong doi so voi lan nap truoc.", fileName);
+                log.debug("Skipping '{}': content unchanged since the last ingest.", fileName);
                 return new IngestResult(Outcome.SKIPPED_UNCHANGED, -1, meta.docKey(), fileName,
                         converted.format(), 0, markdown.length(), warnings);
             }
         }
 
-        // 4) Bam chunk theo cau truc
         List<MarkdownChunker.Chunk> parts = chunker.chunk(markdown);
         if (parts.isEmpty()) {
             warnings.add("Khong tao duoc chunk nao tu tai lieu.");
@@ -139,13 +123,8 @@ public class IngestionService {
                     converted.format(), 0, markdown.length(), warnings);
         }
 
-        // 5) Ngu canh (tuy chon)
         List<String> contexts = enricher.buildContexts(fileName, parts);
 
-        // 6) Nhung theo lo, co retry.
-        // Gan dinh danh tai lieu (ten + so hieu + ngay hieu luc) vao dau moi chunk: neu
-        // khong, nhung thong tin do khong nam trong vector va cau hoi dang "quy dinh so
-        // bao nhieu" se truot du tai lieu dung nam ngay do.
         String identity = props.getChunking().isPrefixDocumentIdentity()
                 ? MarkdownChunker.documentIdentity(meta.title(), meta.docNumber(),
                         meta.effectiveDate())
@@ -160,10 +139,20 @@ public class IngestionService {
                     + ") khong khop so chunk (" + parts.size() + ").");
         }
 
-        // 7) Ghi de theo docKey, trong mot transaction
         long documentId = persist(meta, parts, contexts, vectors, markdown);
 
-        log.info("Nap xong '{}' [{}]: {} chunk, {} ky tu Markdown, {} ms",
+        // Same argument as the antivirus scan above: this is the one place all three ingest
+        // paths pass through. A folder scan derives a category per subfolder and used to write
+        // it with no matching collection row, leaving the documents readable by admins only -
+        // and nothing in the UI could repair that afterwards.
+        if (meta.category() != null && !meta.category().isBlank()
+                && platform.ensureCollection(meta.category(), "ingest")) {
+            warnings.add("Đã tự khai nhóm tài liệu '" + meta.category()
+                    + "'. Nhóm này chưa cấp quyền đọc cho ai — vào Quản trị › Bot & phân quyền "
+                    + "để chọn nhóm Entra được đọc.");
+        }
+
+        log.info("Ingested '{}' [{}]: {} chunks, {} chars of Markdown, {} ms",
                 fileName, converted.format(), parts.size(), markdown.length(),
                 System.currentTimeMillis() - start);
 
@@ -171,16 +160,10 @@ public class IngestionService {
                 converted.format(), parts.size(), markdown.length(), warnings);
     }
 
-    /**
-     * Ghi de nguyen tu: xoa chunk cu + ghi chunk moi trong CUNG mot transaction.
-     * Neu khong, mot loi giua duong se de tai lieu o trang thai chi co mot phan chunk.
-     *
-     * Dung {@link TransactionTemplate} chu khong phai {@code @Transactional}: day la
-     * loi goi noi bo cung class nen proxy cua Spring se KHONG chan duoc, transaction
-     * se im lang khong duoc mo.
-     */
     private long persist(DocumentMeta meta, List<MarkdownChunker.Chunk> parts,
                          List<String> contexts, List<float[]> vectors, String markdown) {
+        // TransactionTemplate, not @Transactional: the call below is a self-invocation
+        // and the proxy would not apply the annotation.
         Long id = transactions.execute(status -> persistInTransaction(meta, parts, contexts, vectors, markdown));
         if (id == null) {
             throw new IllegalStateException("Khong ghi duoc tai lieu vao DB.");
@@ -192,7 +175,6 @@ public class IngestionService {
                                       List<String> contexts, List<float[]> vectors, String markdown) {
         long documentId = documents.upsert(meta);
         chunks.deleteByDocumentId(documentId);
-        // Don ca chunk cu duoc nap truoc khi co bang rag_documents (document_id NULL)
         chunks.deleteByDocKey(meta.docKey());
 
         List<ChunkToInsert> rows = new ArrayList<>(parts.size());
@@ -219,11 +201,37 @@ public class IngestionService {
         return documentId;
     }
 
+    /**
+     * A document with no category is readable by admins ONLY, and nothing says so. Retrieval
+     * filters {@code c.category} against the caller's collection slugs, and NULL matches none -
+     * so the bot answers "khong tim thay" for every normal user while an admin sees the document
+     * fine on the web. That happened in production with a document ingested through the upload
+     * path; {@code orphanCategories()} did not catch it either because it skips NULL.
+     *
+     * <p>This is also the only place all three ingest paths pass through, the same reason the
+     * virus scan lives here rather than in each controller.
+     */
+    static void requireCategory(String category, String fileName) {
+        if (category == null || category.isBlank()) {
+            throw new IllegalArgumentException("Thiếu nhóm tài liệu (category) cho '" + fileName
+                    + "'. Tài liệu không có nhóm chỉ quản trị viên đọc được, người dùng thường "
+                    + "và bot Teams sẽ không bao giờ tìm thấy. Cách khai: chọn nhóm khi nạp, "
+                    + "hoặc đặt 'category' trong front matter của file, hoặc nạp thư mục với "
+                    + "categoryFromFolder=true để lấy nhóm theo tên thư mục chứa file.");
+        }
+        // doc_key is "category/fileName", so a slash inside the category would make the key
+        // ambiguous and the overwrite-on-reingest rule stop working.
+        if (category.indexOf('/') >= 0) {
+            throw new IllegalArgumentException("Nhóm tài liệu '" + category
+                    + "' không được chứa dấu '/'.");
+        }
+    }
+
     private DocumentMeta buildMeta(String fileName, DocumentConverterService.Result converted,
                                    FrontMatter.Parsed front, IngestOptions options, String markdown) {
-        // Tham so tu request thang the front-matter; front-matter thang mac dinh.
         String category = firstNonBlank(options.category(), front.text("category"));
         if (category != null) category = category.toLowerCase();
+        requireCategory(category, fileName);
 
         String department = firstNonBlank(options.department(), front.text("department"), category);
         if (department != null) department = department.toLowerCase();
@@ -265,7 +273,6 @@ public class IngestionService {
                 null);
     }
 
-    /** Lay heading cap 1 dau tien lam tieu de tai lieu. */
     private String titleFromMarkdown(String markdown) {
         for (String line : markdown.split("\n", 40)) {
             String trimmed = line.strip();

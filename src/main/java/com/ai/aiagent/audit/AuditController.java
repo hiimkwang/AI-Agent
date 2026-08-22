@@ -10,13 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Tra cuu nhat ky thao tac (chi ADMIN - nam duoi {@code /admin/**}).
- *
- * Chi CO DUONG DOC. Nhat ky kiem toan ma sua/xoa duoc qua API thi khong con la bang
- * chung nua; viec don du lieu qua han do {@code RetentionService} lam theo lich, va
- * chinh no cung khong sua duoc noi dung dong nao.
- */
 @RestController
 @RequestMapping("/api/v1/rag/admin")
 @Slf4j

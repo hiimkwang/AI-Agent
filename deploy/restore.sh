@@ -1,23 +1,16 @@
 #!/usr/bin/env bash
-# =====================================================================
-# Khoi phuc CSDL cua AI-Agent tu mot ban sao luu.
-#
-# Cach dung:
+# Restore the AI-Agent database from a backup. Overwrites the target database.
 #   ./restore.sh /var/backups/aiagent/rag_db-20260817-021500.dump
-#
-# GHI DE toan bo CSDL hien tai. Script hoi lai mot lan truoc khi lam - dat
-# FORCE=1 de bo qua (chi dung trong script tu dong).
-#
-# QUAN TRONG: DUNG ung dung truoc khi khoi phuc. Flyway chay luc khoi dong,
-# va mot ung dung dang chay tren CSDL vua bi thay the se hanh xu kho luong.
-# =====================================================================
+# FORCE=1 skips the confirmation prompt.
+# Stop the application first - Flyway runs at startup.
 set -euo pipefail
 
 DUMP="${1:-}"
 if [ -z "${DUMP}" ] || [ ! -f "${DUMP}" ]; then
     echo "Cach dung: $0 <duong-dan-toi-file.dump>" >&2
     echo "Cac ban sao luu hien co:" >&2
-    ls -lh "${BACKUP_DIR:-/var/backups/aiagent}"/rag_db-*.dump 2>/dev/null >&2 || echo "  (khong co)" >&2
+    APP_DIR="${APP_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+    ls -lh "${BACKUP_DIR:-$APP_DIR/work/backup}"/rag_db-*.dump 2>/dev/null >&2 || echo "  (khong co)" >&2
     exit 1
 fi
 
@@ -27,9 +20,23 @@ DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 DOCKER_CONTAINER="${DOCKER_CONTAINER:-rag-postgres}"
 
-# --------------------------------------------------- Kiem tra truoc
-if ! pg_restore --list "${DUMP}" > /dev/null 2>&1; then
-    echo "LOI: '${DUMP}' khong phai ban dump hop le." >&2
+CONTAINER_CLI="${CONTAINER_CLI:-}"
+if [ -z "${CONTAINER_CLI}" ]; then
+    for _cli in docker podman; do
+        if command -v "${_cli}" >/dev/null 2>&1; then CONTAINER_CLI="${_cli}"; break; fi
+    done
+fi
+
+# Validate before --clean wipes a working database. pg_restore may be absent on
+# a container-only host, so fall back to running it inside the container.
+if command -v pg_restore >/dev/null 2>&1; then
+    pg_restore --list "${DUMP}" > /dev/null 2>&1 \
+        || { echo "LOI: '${DUMP}' khong phai ban dump hop le." >&2; exit 1; }
+elif [ -n "${CONTAINER_CLI}" ]; then
+    "${CONTAINER_CLI}" exec -i "${DOCKER_CONTAINER}" pg_restore --list < "${DUMP}" > /dev/null 2>&1 \
+        || { echo "LOI: '${DUMP}' khong phai ban dump hop le." >&2; exit 1; }
+else
+    echo "LOI: khong co pg_restore tren host lan container de kiem tra ban dump." >&2
     exit 1
 fi
 
@@ -40,16 +47,14 @@ if [ "${FORCE:-0}" != "1" ]; then
     [ "${answer}" = "KHOI PHUC" ] || { echo "Da huy."; exit 1; }
 fi
 
-# --------------------------------------------------- Khoi phuc
-# --clean --if-exists: xoa doi tuong cu truoc khi tao lai, khong loi khi chua co.
-# --no-owner: khoi phuc duoc sang may co ten chu so huu khac.
-# KHONG dung --single-transaction o day: voi CSDL lon co extension va index HNSW,
-# mot transaction duy nhat de vuot gioi han bo nho va do o phut cuoi.
+# No --single-transaction: with extensions and HNSW indexes it can exceed
+# memory limits and fail at the very end.
 RESTORE_ARGS=(--clean --if-exists --no-owner --dbname "${DB_NAME}")
 
-if [ -n "${DOCKER_CONTAINER}" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${DOCKER_CONTAINER}"; then
-    echo "Dich: container Docker '${DOCKER_CONTAINER}'"
-    docker exec -i "${DOCKER_CONTAINER}" \
+if [ -n "${DOCKER_CONTAINER}" ] && [ -n "${CONTAINER_CLI}" ] \
+   && "${CONTAINER_CLI}" ps --format '{{.Names}}' 2>/dev/null | grep -qx "${DOCKER_CONTAINER}"; then
+    echo "Dich: container '${DOCKER_CONTAINER}' (${CONTAINER_CLI})"
+    "${CONTAINER_CLI}" exec -i "${DOCKER_CONTAINER}" \
         pg_restore -U "${DB_USER}" "${RESTORE_ARGS[@]}" < "${DUMP}"
 else
     echo "Dich: Postgres tai ${DB_HOST}:${DB_PORT}"

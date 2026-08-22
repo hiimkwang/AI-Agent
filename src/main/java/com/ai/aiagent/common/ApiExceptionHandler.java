@@ -13,13 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Chuyen exception thanh JSON on dinh.
- *
- * Quan trong: KHONG tra {@code e.getMessage()} cua loi khong luong truoc ra client -
- * truoc day cach lam do lam lo cau SQL, ten bang va host DB. Thay vao do sinh mot
- * {@code traceId}, ghi chi tiet vao log va chi tra traceId cho nguoi dung.
- */
 @RestControllerAdvice
 @Slf4j
 public class ApiExceptionHandler {
@@ -53,18 +46,10 @@ public class ApiExceptionHandler {
         return body(HttpStatus.NOT_FOUND, e.getMessage(), null);
     }
 
-    /**
-     * File nhiem ma doc: 422, KHONG phai 500.
-     *
-     * Thong diep o day duoc tra nguyen van cho nguoi dung - day la ngoai le co y voi
-     * quy tac "khong tra getMessage()": noi dung do la ten chu ky ma doc va ten file
-     * do chinh he thong dung nen, khong lo gi ve ha tang, va nguoi nap file can biet
-     * chinh xac vi sao file bi tu choi de con bao lai cho bo phan an ninh thong tin.
-     */
     @ExceptionHandler(com.ai.aiagent.security.AntivirusScanner.InfectedFileException.class)
     public ResponseEntity<Map<String, Object>> infected(
             com.ai.aiagent.security.AntivirusScanner.InfectedFileException e) {
-        log.error("Nap lieu bi chan boi bo quet virus: {}", e.getMessage());
+        log.error("Ingest blocked by the antivirus scanner: {}", e.getMessage());
         return body(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage(), null);
     }
 
@@ -77,7 +62,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> unexpected(Exception e) {
         String traceId = UUID.randomUUID().toString().substring(0, 8);
-        log.error("Loi khong luong truoc [traceId={}]", traceId, e);
+        log.error("Unhandled exception [traceId={}]", traceId, e);
         return body(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Da xay ra loi he thong. Vui long gui ma tra cuu cho quan tri vien.", traceId);
     }

@@ -14,25 +14,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Truy van bang chunk.
- *
- * Nhung diem da sua so voi ban cu:
- *   - Full-text dung {@code to_tsquery} voi cac tu ghep bang OR (xem
- *     {@link TsQueryBuilder}) va xep hang bang {@code ts_rank_cd}, thay cho
- *     {@code plainto_tsquery} ghep AND lam nhanh nay gan nhu khong bao gio khop.
- *   - Config text search la {@code 'vi'} (co unaccent) nen go khong dau van tim ra.
- *   - Khi CO bo loc (category/ACL), tu dong LAY DU RA (over-fetch) roi cat lai:
- *     pgvector loc SAU khi duyet HNSW, neu khong over-fetch se bi thieu ket qua.
- *   - Khong con ghi cot {@code tsv} tu Java: da co trigger trong DB dam nhiem,
- *     nen {@code tsv} khong the lech voi {@code content}.
- *   - {@code insertBatch} chia lo co dinh thay vi mot lo khong lo.
- */
 @Repository
 @Slf4j
 public class ChunkRepository {
 
-    /** Bo loc ap dung cho moi truy van tim kiem. */
     public record SearchFilter(
             Set<String> categories,
             Set<String> roles,
@@ -74,8 +59,6 @@ public class ChunkRepository {
     @PostConstruct
     void validateTableName() {
         String configured = props.getStore().getChunkTable();
-        // Ten bang lay tu config (khong phai input nguoi dung) nhung van kiem tra
-        // dinh dang truoc khi noi vao SQL.
         if (configured == null || !configured.matches("[A-Za-z_][A-Za-z0-9_]{0,62}")) {
             throw new IllegalStateException(
                     "rag.store.chunk-table khong phai ten bang hop le: " + configured);
@@ -83,9 +66,6 @@ public class ChunkRepository {
         this.table = configured;
     }
 
-    // ------------------------------------------------------------- Ghi
-
-    /** Xoa toan bo chunk cua mot tai lieu (ghi de khi nap lai). */
     public int deleteByDocumentId(long documentId) {
         return jdbc.update("DELETE FROM " + table + " WHERE document_id = ?", documentId);
     }
@@ -95,9 +75,16 @@ public class ChunkRepository {
     }
 
     /**
-     * Ghi chunk theo lo co dinh. Khong ghi cot {@code tsv}: trigger
-     * {@code trg_rag_chunks_tsv} tu sinh.
+     * Follow a document that moved to another category. The category is denormalised onto every
+     * chunk because retrieval filters on it, so leaving the chunks behind would keep the document
+     * invisible under its old collection while the document row says otherwise.
      */
+    public int updateCategory(long documentId, String category, String docKey) {
+        return jdbc.update(
+                "UPDATE " + table + " SET category = ?, doc_id = ? WHERE document_id = ?",
+                category, docKey, documentId);
+    }
+
     public void insertBatch(List<ChunkToInsert> chunks) {
         if (chunks.isEmpty()) return;
         String sql = "INSERT INTO " + table + " "
@@ -127,12 +114,9 @@ public class ChunkRepository {
                 ps.setString(12, Vectors.toLiteral(c.embedding()));
             });
         }
-        log.debug("Da ghi {} chunk vao {}.", chunks.size(), table);
+        log.debug("Wrote {} chunk(s) into {}.", chunks.size(), table);
     }
 
-    // ------------------------------------------------------- Tim kiem
-
-    /** Tim theo VECTOR (ngu nghia). */
     public List<RetrievedChunk> vectorSearch(float[] queryVector, int topK, SearchFilter filter) {
         String vector = Vectors.toLiteral(queryVector);
         List<Object> args = new ArrayList<>();
@@ -153,17 +137,6 @@ public class ChunkRepository {
         return rows.size() > topK ? new ArrayList<>(rows.subList(0, topK)) : rows;
     }
 
-    /**
-     * Tim theo VECTOR tren bang THU NGHIEM (model embedding ung vien).
-     *
-     * Bang thu nghiem chi chua {@code chunk_id + embedding}; moi thu khac lay bang JOIN
-     * nguoc ve {@code rag_chunks}. Nho vay khong nhan ban noi dung, va - quan trong hon -
-     * dieu kien loc ACL DUNG Y HET duong chinh, nen phep so sanh chi khac dung mot bien:
-     * model embedding.
-     *
-     * @param trialTable ten bang, lay tu CAU HINH (khong phai input nguoi dung) va da
-     *                   duoc kiem tra dinh dang - xem {@link #requireValidTableName}
-     */
     public List<RetrievedChunk> trialVectorSearch(String trialTable, float[] queryVector,
                                                   int topK, SearchFilter filter) {
         requireValidTableName(trialTable);
@@ -187,17 +160,12 @@ public class ChunkRepository {
         return rows.size() > topK ? new ArrayList<>(rows.subList(0, topK)) : rows;
     }
 
-    /**
-     * Ten bang den tu cau hinh chu khong phai nguoi dung, nhung van kiem tra truoc khi
-     * noi vao SQL - cung nguyen tac voi {@link #validateTableName}.
-     */
     public static void requireValidTableName(String name) {
         if (name == null || !name.matches("[A-Za-z_][A-Za-z0-9_]{0,62}")) {
             throw new IllegalArgumentException("Ten bang khong hop le: " + name);
         }
     }
 
-    /** Tim theo FULL-TEXT (tu khoa), OR giua cac tu, xep hang bang ts_rank_cd. */
     public List<RetrievedChunk> fullTextSearch(String queryText, int topK, SearchFilter filter) {
         String tsQuery = TsQueryBuilder.orQuery(queryText);
         if (tsQuery == null) {
@@ -221,21 +189,15 @@ public class ChunkRepository {
             rows.forEach(r -> r.setMatchedBy("FULLTEXT"));
             return rows.size() > topK ? new ArrayList<>(rows.subList(0, topK)) : rows;
         } catch (org.springframework.dao.DataAccessException e) {
-            // tsquery khong hop le (tu la ky tu dac biet...) -> bo qua nhanh full-text
-            log.warn("Full-text search loi, bo qua nhanh nay: {}", e.getMessage());
+            log.warn("Full-text search failed, skipping that branch: {}", e.getMessage());
             return List.of();
         }
     }
 
-    /**
-     * Khi co bo loc, lay du ra roi cat lai o tang Java.
-     *
-     * Ly do: pgvector duyet HNSW lay ~ef_search ung vien roi moi ap WHERE, nen voi
-     * category hep ket qua tra ve co the it hon topK, tham chi rong. Tang LIMIT
-     * cung lam pgvector tu tang ef_search tuong ung.
-     */
     private int effectiveLimit(int topK, SearchFilter filter) {
         if (filter == null || !filter.isRestrictive()) return topK;
+        // pgvector applies filters after the HNSW walk, so category/ACL queries must
+        // over-fetch and trim in Java or they come back short.
         int multiplier = Math.max(1, props.getRetrieval().getFilterOverfetchMultiplier());
         return Math.min(props.getRetrieval().getMaxOverfetch(), topK * multiplier);
     }
@@ -244,7 +206,7 @@ public class ChunkRepository {
         StringBuilder conditions = new StringBuilder();
         appendConditions(conditions, args, filter, true);
         if (conditions.length() > 0) {
-            sql.append(" WHERE ").append(conditions.substring(5)); // bo " AND " dau tien
+            sql.append(" WHERE ").append(conditions.substring(5));
         }
     }
 
@@ -257,8 +219,6 @@ public class ChunkRepository {
             args.add(Vectors.toTextArrayLiteral(filter.categories()));
         }
         if (filter.hasRoleFilter()) {
-            // Tai lieu khong khai bao role => moi nguoi da xac thuc deu doc duoc.
-            // Chunk cu chua gan document_id (d.id IS NULL) cung duoc coi la khong ACL.
             sql.append(" AND (d.id IS NULL OR d.allowed_roles IS NULL ")
                     .append(" OR cardinality(d.allowed_roles) = 0 ")
                     .append(" OR d.allowed_roles && ?::text[]) ");
@@ -273,8 +233,6 @@ public class ChunkRepository {
         }
     }
 
-    // ------------------------------------------------------------ Thong ke
-
     public long count() {
         Long c = jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Long.class);
         return c == null ? 0 : c;
@@ -286,10 +244,8 @@ public class ChunkRepository {
         return c == null ? 0 : c;
     }
 
-    /** So chieu that cua cot embedding trong DB, de doi chieu voi cau hinh. */
     public Integer actualEmbeddingDimensions() {
         try {
-            // pgvector luu so chieu truc tiep trong atttypmod (khong tru 4 nhu varchar)
             return jdbc.queryForObject("""
                     SELECT a.atttypmod
                       FROM pg_attribute a

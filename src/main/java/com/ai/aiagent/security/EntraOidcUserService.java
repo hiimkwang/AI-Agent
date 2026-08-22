@@ -21,21 +21,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/**
- * Kiem tra va lam giau nguoi dung ngay khi ho dang nhap bang Entra ID.
- *
- * Ba viec, theo dung thu tu:
- *   1) TU CHOI neu token khong thuoc tenant cua cong ty ({@code tid}) hoac dia chi
- *      khong thuoc mien cho phep. Day la dai an toan THU HAI - lop thu nhat la app
- *      registration dang SingleTenant. Giu ca hai vi doi app registration sang
- *      MultiTenant la mot dong sua cau hinh, con lop nay thi phai sua code.
- *   2) Ghi nhan lan dang nhap vao {@code rag_users} de audit.
- *   3) Gan quyen {@code ROLE_*} de cac rule {@code hasRole("ADMIN")} san co trong
- *      {@link SecurityConfig} chay nguyen ven, khong phai sua controller nao.
- *
- * Quyen o day chi la anh chup luc dang nhap; {@link EntraScopeFilter} tinh lai moi
- * request nen nguoi bi go quyen khong phai doi het phien.
- */
 @Service
 @ConditionalOnProperty(prefix = "rag.entra", name = "enabled", havingValue = "true")
 @Slf4j
@@ -62,13 +47,12 @@ public class EntraOidcUserService implements OAuth2UserService<OidcUserRequest, 
         requireTenant(tenant);
         requireAllowedDomain(upn);
         if (objectId == null) {
-            // Khong co oid thi khong co dinh danh ben vung de phan quyen hay audit.
             throw denied("Token khong co claim 'oid'. Kiem tra cau hinh app registration.");
         }
 
         scopes.recordLogin(objectId, upn, user.getFullName());
         AccessScope scope = scopes.scopeOf(objectId, upn, appRoles(user));
-        log.info("Dang nhap Entra: {} (oid={}, role={}, phong ban={})",
+        log.info("Entra sign-in: {} (oid={}, roles={}, departments={})",
                 upn, objectId, scope.roles(),
                 scope.allDepartments() ? "*" : scope.departments());
 
@@ -76,7 +60,6 @@ public class EntraOidcUserService implements OAuth2UserService<OidcUserRequest, 
                 nameAttributeKey(user));
     }
 
-    /** Claim {@code roles} = app role da gan trong app registration. Rong neu chua khai bao. */
     static List<String> appRoles(OidcUser user) {
         Object raw = user.getClaims().get("roles");
         List<String> out = new ArrayList<>();
@@ -102,7 +85,7 @@ public class EntraOidcUserService implements OAuth2UserService<OidcUserRequest, 
         String expected = props.getTenantId();
         if (expected == null || expected.isBlank()) return;
         if (tenant == null || !tenant.equalsIgnoreCase(expected.strip())) {
-            log.warn("Tu choi dang nhap: tenant '{}' khong phai tenant cua cong ty.", tenant);
+            log.warn("Sign-in rejected: tenant '{}' is not the company tenant.", tenant);
             throw denied("Tài khoản không thuộc tổ chức được phép truy cập.");
         }
     }
@@ -115,15 +98,11 @@ public class EntraOidcUserService implements OAuth2UserService<OidcUserRequest, 
                 .filter(d -> d != null && !d.isBlank())
                 .anyMatch(d -> value.endsWith("@" + d.strip().toLowerCase(Locale.ROOT)));
         if (!ok) {
-            log.warn("Tu choi dang nhap: '{}' khong thuoc mien cho phep {}.", upn, allowed);
+            log.warn("Sign-in rejected: '{}' is not in the allowed domains {}.", upn, allowed);
             throw denied("Chỉ tài khoản " + String.join(", ", allowed) + " được phép đăng nhập.");
         }
     }
 
-    /**
-     * {@code DefaultOidcUser} nem loi neu thuoc tinh dinh danh khong ton tai trong claim,
-     * nen chon theo thu tu uu tien va luon co duong lui la {@code sub}.
-     */
     private static String nameAttributeKey(OidcUser user) {
         if (user.getClaims().containsKey("preferred_username")) return "preferred_username";
         if (user.getClaims().containsKey("email")) return "email";

@@ -12,21 +12,10 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 
-/**
- * HTML -> Markdown.
- *
- * Hai buoc:
- *  1) jsoup DON DEP: bo script/style/nav/footer/quang cao, va neu tim duoc vung
- *     noi dung chinh (article, main, .content...) thi chi lay vung do. Neu khong
- *     don thi menu va footer lap lai o MOI trang se lam nhieu vector store va
- *     chiem cho trong top-k.
- *  2) flexmark CHUYEN DOI: giu heading, danh sach, bang, link, inline code.
- */
 @Component
 @Slf4j
 public class HtmlToMarkdown {
 
-    /** Cac the chac chan khong phai noi dung. */
     private static final String NOISE_SELECTOR = String.join(",",
             "script", "style", "noscript", "iframe", "svg", "canvas",
             "nav", "footer", "header", "aside", "form", "button",
@@ -35,24 +24,16 @@ public class HtmlToMarkdown {
             ".advertisement", ".ads", ".cookie", ".cookie-banner", ".popup", ".modal",
             "#nav", "#navbar", "#menu", "#sidebar", "#footer", "#header");
 
-    /** Uu tien tim vung noi dung chinh theo thu tu nay. */
     private static final String[] MAIN_SELECTORS = {
             "article", "main", "[role=main]",
             ".post-content", ".entry-content", ".article-content", ".article-body",
             ".content", "#content", ".main-content", "#main-content", ".markdown-body"
     };
 
-    /**
-     * BUOC BAT: tat setext heading.
-     *
-     * Mac dinh flexmark sinh heading kieu setext ({@code Tieu de} roi mot dong
-     * {@code ====}) chu khong phai ATX ({@code # Tieu de}). Neu de mac dinh thi
-     * {@code MarkdownChunker} - von nhan dien heading de bam chunk theo cau truc -
-     * se KHONG thay heading nao trong tai lieu chuyen tu HTML, va toan bo loi ich
-     * cua viec bam theo muc bien mat mot cach am tham.
-     */
     private final FlexmarkHtmlConverter converter = FlexmarkHtmlConverter.builder(
             new MutableDataSet()
+                    // Required: flexmark emits setext headings by default, which
+                    // MarkdownChunker does not recognise as headings.
                     .set(FlexmarkHtmlConverter.SETEXT_HEADINGS, false)
                     .set(FlexmarkHtmlConverter.OUTPUT_UNKNOWN_TAGS, false)
                     .set(FlexmarkHtmlConverter.SKIP_ATTRIBUTES, true))
@@ -66,7 +47,6 @@ public class HtmlToMarkdown {
     public String convert(String html, String fileName, String baseUri) {
         Document doc = Jsoup.parse(html, baseUri == null ? "" : baseUri);
 
-        // 1) Don dep
         doc.select(NOISE_SELECTOR).remove();
         doc.select("[style*=display:none]").remove();
         doc.select("[style*=display: none]").remove();
@@ -74,7 +54,6 @@ public class HtmlToMarkdown {
 
         Element root = pickMainContent(doc);
 
-        // Giu lai tieu de trang de chunk co ngu canh, neu than bai chua co h1
         String title = doc.title();
         StringBuilder htmlOut = new StringBuilder();
         if (title != null && !title.isBlank() && root.select("h1").isEmpty()) {
@@ -83,23 +62,17 @@ public class HtmlToMarkdown {
         }
         htmlOut.append(root.html());
 
-        // 2) Chuyen doi
         String markdown;
         try {
             markdown = converter.convert(htmlOut.toString());
         } catch (RuntimeException e) {
-            log.warn("flexmark khong chuyen doi duoc '{}' ({}) -> lay text thuan.",
+            log.warn("flexmark could not convert '{}' ({}), falling back to plain text.",
                     fileName, e.getMessage());
             markdown = root.wholeText();
         }
         return Markdown.normalize(markdown);
     }
 
-    /**
-     * Chon vung noi dung chinh: uu tien selector quen thuoc, neu khong co thi lay
-     * the co nhieu van ban nhat trong so div/section (heuristic don gian nhung
-     * hieu qua voi trang tai lieu noi bo).
-     */
     private Element pickMainContent(Document doc) {
         for (String selector : MAIN_SELECTORS) {
             Elements found = doc.select(selector);
@@ -119,7 +92,6 @@ public class HtmlToMarkdown {
         int bestLength = body.text().length();
         for (Element candidate : body.select("div, section")) {
             int length = candidate.text().length();
-            // Chi thay the neu chua gan het noi dung -> tranh cat mat phan than bai
             if (length > bestLength * 0.6 && length < bestLength && candidate.select("p, li, td").size() >= 3) {
                 best = candidate;
                 bestLength = length;

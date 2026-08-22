@@ -11,13 +11,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Bao cao van hanh theo bot (chi ADMIN).
- *
- * Cau hoi ma bao cao nay phai tra loi duoc, va truoc day khong tra loi duoc: bot nao
- * dang duoc dung, bot nao dang tu choi qua nhieu (thieu tai lieu), bot nao bi 👎 nhieu
- * (tra loi sai), bot nao dot tien nhat. So lieu gop toan he giau het nhung dieu do.
- */
 @RestController
 @RequestMapping("/api/v1/rag/admin/reports")
 @Slf4j
@@ -29,7 +22,6 @@ public class ReportController {
         this.reports = reports;
     }
 
-    /** Bang tong hop theo bot + tong toan he trong cung cua so thoi gian. */
     @GetMapping("/bots")
     public Map<String, Object> byBot(@RequestParam(defaultValue = "30") int days) {
         List<Map<String, Object>> bots = reports.byBot(days);
@@ -40,7 +32,6 @@ public class ReportController {
         return out;
     }
 
-    /** Chuoi theo ngay, de ve do thi xu huong. */
     @GetMapping("/daily")
     public Map<String, Object> daily(@RequestParam(defaultValue = "14") int days) {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -49,11 +40,6 @@ public class ReportController {
         return out;
     }
 
-    /**
-     * Cau hoi bi tu choi nhieu nhat: danh sach TAI LIEU CAN NAP, xep theo so lan bi hoi.
-     *
-     * @param bot loc theo mot bot; de trong thi tinh toan he
-     */
     @GetMapping("/gaps")
     public Map<String, Object> gaps(@RequestParam(required = false) String bot,
                                     @RequestParam(defaultValue = "30") int days,
@@ -65,12 +51,6 @@ public class ReportController {
         return out;
     }
 
-    /**
-     * Cong don thu cong thay vi mot cau SQL rieng.
-     *
-     * Ty le duoc tinh lai tu tong, KHONG lay trung binh cac ty le cua tung bot: mot bot
-     * tra loi 3 cau se keo trung binh cong lech han so voi thuc te.
-     */
     private Map<String, Object> totalOf(List<Map<String, Object>> bots) {
         long questions = 0;
         long abstained = 0;

@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BSC Assistant — Đặc tả hệ thống</title>
+<style>
+:root {
+  --bg:           #F1F3F2;
+  --surface:      #FAFBFA;
+  --sunk:         #E8ECEB;
+  --fg:           #131A1C;
+  --muted:        #566462;
+  --faint:        #8A9895;
+  --rule:         #D3DAD8;
+  --rule-firm:    #B6C1BE;
+  --accent:       #0E6B63;
+  --accent-ink:   #0A4F49;
+  --accent-soft:  #DCEAE7;
+  --ochre:        #A8661C;
+  --ochre-soft:   #F6EADA;
+  --crimson:      #A83232;
+  --crimson-soft: #F6E2E2;
+  --shadow: 0 1px 2px rgba(19,26,28,.05), 0 1px 12px rgba(19,26,28,.04);
+  --display: Constantia, Cambria, "Times New Roman", serif;
+  --body: Corbel, Candara, "Segoe UI", system-ui, sans-serif;
+  --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+  --gutter: clamp(1rem, 4vw, 3rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#0E1415; --surface:#151D1E; --sunk:#1A2324; --fg:#E6EBE9;
+    --muted:#A3B2AF; --faint:#6E7E7C; --rule:#2A3536; --rule-firm:#3B4849;
+    --accent:#5FBDB1; --accent-ink:#8FD6CC; --accent-soft:#16302E;
+    --ochre:#D9A055; --ochre-soft:#332616; --crimson:#E08585; --crimson-soft:#331C1C;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 12px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#0E1415; --surface:#151D1E; --sunk:#1A2324; --fg:#E6EBE9;
+  --muted:#A3B2AF; --faint:#6E7E7C; --rule:#2A3536; --rule-firm:#3B4849;
+  --accent:#5FBDB1; --accent-ink:#8FD6CC; --accent-soft:#16302E;
+  --ochre:#D9A055; --ochre-soft:#332616; --crimson:#E08585; --crimson-soft:#331C1C;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 12px rgba(0,0,0,.3);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 400 16px/1.65 var(--body);
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 var(--gutter) 6rem; }
+
+header.top {
+  border-bottom: 1px solid var(--rule);
+  padding: clamp(2.5rem, 7vw, 4.5rem) 0 2rem;
+  margin-bottom: 2.5rem;
+}
+header.top .eyebrow {
+  font: 600 .72rem/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); margin: 0 0 1rem;
+}
+header.top h1 {
+  font: 400 clamp(2rem, 5.5vw, 3.1rem)/1.1 var(--display);
+  margin: 0 0 1rem; letter-spacing: -.01em;
+}
+header.top .lede { font-size: 1.08rem; color: var(--muted); max-width: 62ch; margin: 0; }
+header.top .stamp {
+  margin-top: 1.5rem; font: 400 .85rem/1.5 var(--mono); color: var(--faint);
+}
+
+nav.toc {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 10px;
+  padding: 1.1rem 1.3rem; margin-bottom: 3rem; box-shadow: var(--shadow);
+}
+nav.toc p { margin: 0 0 .7rem; font: 600 .72rem/1 var(--body);
+  letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+nav.toc ol { margin: 0; padding: 0; list-style: none;
+  display: grid; gap: .35rem .9rem; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+nav.toc a { color: var(--fg); text-decoration: none; font-size: .93rem;
+  border-bottom: 1px solid transparent; }
+nav.toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+nav.toc .n { color: var(--faint); font: 400 .82rem var(--mono); margin-right: .45rem; }
+
+section { margin-bottom: 3.5rem; scroll-margin-top: 1.5rem; }
+.sec-label {
+  font: 600 .7rem/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); margin: 0 0 .55rem;
+}
+h2 { font: 400 clamp(1.45rem, 3.2vw, 2rem)/1.2 var(--display); margin: 0 0 1.1rem;
+  letter-spacing: -.005em; }
+h3 { font: 600 1.05rem/1.35 var(--body); margin: 2rem 0 .7rem; }
+h4 { font: 600 .95rem/1.4 var(--body); margin: 1.4rem 0 .5rem; color: var(--muted); }
+p { margin: 0 0 1rem; max-width: 74ch; }
+ul, ol { max-width: 74ch; padding-left: 1.25rem; }
+li { margin-bottom: .4rem; }
+strong { font-weight: 600; }
+code { font: .88em var(--mono); background: var(--sunk); padding: .12em .38em;
+  border-radius: 4px; }
+a { color: var(--accent-ink); }
+
+.scroll { overflow-x: auto; margin: 1.2rem 0 1.6rem; border: 1px solid var(--rule);
+  border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; min-width: 480px; }
+caption { text-align: left; padding: .85rem 1rem .2rem; font: 600 .78rem/1.4 var(--body);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+th, td { text-align: left; padding: .62rem 1rem; border-bottom: 1px solid var(--rule);
+  vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: .82rem;
+  letter-spacing: .04em; text-transform: uppercase; background: var(--sunk); }
+tbody tr:last-child td { border-bottom: none; }
+td.m, th.m { font-family: var(--mono); font-size: .85rem; }
+
+pre { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 10px; padding: 1.1rem 1.2rem; margin: 1.2rem 0 1.6rem;
+  font: .84rem/1.5 var(--mono); box-shadow: var(--shadow); }
+pre code { background: none; padding: 0; font-size: inherit; }
+
+.note { border-left: 3px solid var(--accent); background: var(--accent-soft);
+  padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.3rem 0; }
+.note.warn { border-left-color: var(--ochre); background: var(--ochre-soft); }
+.note.danger { border-left-color: var(--crimson); background: var(--crimson-soft); }
+.note .nt { display: block; font: 600 .72rem/1 var(--body); letter-spacing: .1em;
+  text-transform: uppercase; margin-bottom: .5rem; color: var(--accent-ink); }
+.note.warn .nt { color: var(--ochre); }
+.note.danger .nt { color: var(--crimson); }
+.note p:last-child { margin-bottom: 0; }
+
+ol.ladder { list-style: none; padding: 0; margin: 1.3rem 0; max-width: none; }
+ol.ladder > li { display: grid; grid-template-columns: 2rem 1fr; gap: .9rem;
+  padding: .75rem 0; border-bottom: 1px solid var(--rule); margin: 0; }
+ol.ladder > li:last-child { border-bottom: none; }
+.step-n { font: 600 .8rem/1.7 var(--mono); color: var(--accent);
+  background: var(--accent-soft); border-radius: 6px; text-align: center; height: 1.7rem; }
+.step-b b { display: block; font-weight: 600; margin-bottom: .15rem; }
+.step-b span { color: var(--muted); font-size: .92rem; }
+
+.grid2 { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin: 1.3rem 0; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px;
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.card h4 { margin: 0 0 .45rem; color: var(--fg); }
+.card p { margin: 0; font-size: .92rem; color: var(--muted); }
+
+.pill { display: inline-block; font: 600 .7rem/1 var(--body); letter-spacing: .06em;
+  padding: .3em .6em; border-radius: 999px; text-transform: uppercase; }
+.ok { background: var(--accent-soft); color: var(--accent-ink); }
+.todo { background: var(--ochre-soft); color: var(--ochre); }
+.bad { background: var(--crimson-soft); color: var(--crimson); }
+
+footer { border-top: 1px solid var(--rule); padding-top: 1.5rem; color: var(--faint);
+  font-size: .88rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">BSC · Khối Công nghệ thông tin</p>
+  <h1>BSC Assistant — đặc tả hệ thống</h1>
+  <p class="lede">Trợ lý hỏi–đáp trên kho tài liệu nội bộ (RAG). Tài liệu mô tả hệ thống
+    <strong>đúng như đang chạy</strong>: công nghệ thật, luồng thật, giới hạn thật — không
+    phải thiết kế dự kiến.</p>
+  <p class="stamp">UAT 10.21.170.55 · https://chatbot-uat.bsc.com.vn/rag/ · Spring Boot 3.5.9 / Java 21 · Flyway V9<br>
+    Kho đo tại thời điểm cập nhật: 201 tài liệu · 19.392 đoạn · 17 nhóm tài liệu · cập nhật 21/08/2026</p>
+</header>
+
+<nav class="toc">
+  <p>Nội dung</p>
+  <ol>
+    <li><a href="#muc-dich"><span class="n">01</span>Hệ thống làm gì</a></li>
+    <li><a href="#cong-nghe"><span class="n">02</span>Công nghệ sử dụng</a></li>
+    <li><a href="#kien-truc"><span class="n">03</span>Kiến trúc triển khai</a></li>
+    <li><a href="#hoi-dap"><span class="n">04</span>Luồng hỏi–đáp</a></li>
+    <li><a href="#truy-xuat"><span class="n">05</span>Cơ chế truy xuất</a></li>
+    <li><a href="#nap"><span class="n">06</span>Luồng nạp tài liệu</a></li>
+    <li><a href="#quyen"><span class="n">07</span>Phân quyền ba lớp</a></li>
+    <li><a href="#bot"><span class="n">08</span>Nền tảng nhiều bot</a></li>
+    <li><a href="#giao-dien"><span class="n">09</span>Giao diện web</a></li>
+    <li><a href="#api"><span class="n">10</span>Bản đồ API</a></li>
+    <li><a href="#du-lieu"><span class="n">11</span>Mô hình dữ liệu</a></li>
+    <li><a href="#van-hanh"><span class="n">12</span>Quan sát &amp; vận hành</a></li>
+    <li><a href="#bat-bien"><span class="n">13</span>Bất biến — phá là hỏng</a></li>
+    <li><a href="#chat-luong"><span class="n">14</span>Khi trả lời chưa tốt</a></li>
+  </ol>
+</nav>
+
+<!-- 01 -->
+<section id="muc-dich">
+  <p class="sec-label">Một · Mục đích</p>
+  <h2>Ba tính chất quyết định mọi lựa chọn kỹ thuật</h2>
+  <div class="grid2">
+    <div class="card">
+      <h4>Chỉ trả lời theo tài liệu</h4>
+      <p>Không dùng kiến thức chung của mô hình. Không đủ căn cứ thì nói "không tìm thấy",
+        không đoán. Cổng từ chối là một bước riêng, không phải lời dặn trong prompt.</p>
+    </div>
+    <div class="card">
+      <h4>Luôn kèm nguồn</h4>
+      <p>Mỗi câu trả lời trích tên file, đường dẫn mục và đoạn nguyên văn, để người đọc tự
+        kiểm chứng thay vì phải tin.</p>
+    </div>
+    <div class="card">
+      <h4>Đọc theo quyền</h4>
+      <p>Hai người khác phòng hỏi cùng một câu có thể nhận hai kết quả khác nhau. Quyền nằm
+        ở tầng truy xuất, không nằm ở prompt.</p>
+    </div>
+  </div>
+  <p>Ba đường vào — <strong>web hỏi–đáp</strong>, <strong>web quản trị</strong> và
+    <strong>bot Microsoft Teams</strong> — dùng chung một lõi RAG. Chúng chỉ khác nhau ở cách
+    xác định danh tính và cách thu hẹp phạm vi đọc.</p>
+  <div class="note">
+    <span class="nt">Nguyên tắc thiết kế</span>
+    <p>Mọi bước phụ trợ (viết lại câu hỏi, HyDE, sinh ngữ cảnh chunk, cache, lưu hội thoại)
+      đều <strong>hỏng thì đi tiếp</strong>, chỉ ghi cảnh báo. Riêng bộ rerank thì không: hệ
+      thống phải phân biệt được <em>"không có gì liên quan"</em> với <em>"bộ rerank bị
+      lỗi"</em>, vì hai trạng thái đó dẫn tới hai hành vi trái ngược nhau.</p>
+  </div>
+</section>
+
+<!-- 02 -->
+<section id="cong-nghe">
+  <p class="sec-label">Hai · Công nghệ</p>
+  <h2>Một monolith Spring Boot, không có hàng đợi, không có microservice</h2>
+  <p>Toàn bộ hệ thống là <strong>một tiến trình Java duy nhất</strong> cộng một PostgreSQL.
+    Không Kafka, không Redis, không vector database riêng. Lựa chọn này là có chủ ý: quy mô
+    nội bộ vài trăm người dùng không cần tách tầng, và mỗi thành phần thêm vào là một thứ nữa
+    phải vận hành.</p>
+
+  <div class="scroll">
+    <table>
+      <caption>Nền tảng</caption>
+      <thead><tr><th>Thành phần</th><th>Lựa chọn</th><th class="m">Phiên bản</th><th>Ghi chú</th></tr></thead>
+      <tbody>
+        <tr><td>Runtime</td><td>Java</td><td class="m">21</td><td>LTS, virtual thread chưa dùng</td></tr>
+        <tr><td>Framework</td><td>Spring Boot</td><td class="m">3.5.9</td><td>MVC servlet, không WebFlux</td></tr>
+        <tr><td>CSDL</td><td>PostgreSQL + pgvector</td><td class="m">17</td><td>Vừa là kho quan hệ, vừa là vector store, vừa là full-text index</td></tr>
+        <tr><td>Schema</td><td>Flyway</td><td class="m">V1 → V9</td><td>23 bảng; số chiều vector truyền vào DDL qua placeholder</td></tr>
+        <tr><td>Bảo mật</td><td>Spring Security</td><td class="m">—</td><td>Hai filter chain: API key và OIDC Entra</td></tr>
+        <tr><td>Quan sát</td><td>Actuator + Micrometer</td><td class="m">—</td><td>Xuất Prometheus tại <code>/actuator/prometheus</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <caption>Mô hình ngôn ngữ và xử lý tài liệu</caption>
+      <thead><tr><th>Vai trò</th><th>Lựa chọn</th><th>Ghi chú</th></tr></thead>
+      <tbody>
+        <tr><td>Sinh câu trả lời</td><td>Claude · OpenAI · Gemini · Ollama</td>
+            <td>Claude qua SDK <code>com.anthropic:anthropic-java</code>; Gemini gọi REST tay</td></tr>
+        <tr><td>LLM nội bộ</td><td>Cùng danh sách trên</td>
+            <td>Dùng cho viết lại câu hỏi, HyDE, rerank, sinh ngữ cảnh chunk, chấm eval. Tách riêng để dùng model rẻ hơn</td></tr>
+        <tr><td>Embedding</td><td>OpenAI <code>text-embedding-3-small</code> (1536)</td>
+            <td>Thay thế: Ollama <code>bge-m3</code>, hoặc LOCAL all-MiniLM ONNX 384 chiều</td></tr>
+        <tr><td>Rerank</td><td>LLM · Cohere · NONE</td>
+            <td>Mặc định LLM. Kết quả mang cờ <code>reliable</code>/<code>degraded</code></td></tr>
+        <tr><td>Khung LLM</td><td>LangChain4j <code>0.31.0</code></td>
+            <td>Chỉ dùng cho OpenAI/Ollama chat + embedding, không dùng cho phần còn lại</td></tr>
+        <tr><td>PDF</td><td>PDFBox <code>3.0.3</code></td><td>Bản scan cần bật OCR, mỗi trang một lời gọi model</td></tr>
+        <tr><td>Office</td><td>Apache POI <code>5.4.0</code></td><td>Word, Excel, PowerPoint</td></tr>
+        <tr><td>HTML</td><td>jsoup <code>1.18.3</code> + flexmark <code>0.64.8</code></td><td>Phải tắt setext heading, nếu không chunker không thấy heading nào</td></tr>
+        <tr><td>Cache</td><td>Caffeine + bảng <code>rag_answer_cache</code></td><td>Caffeine cho rate limit; cache câu trả lời nằm trong DB để sống qua restart</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="nt">Ràng buộc đã biết</span>
+    <p>LangChain4j 0.31 chưa có module Google AI Gemini dùng API key, nên
+      <code>GeminiLlmClient</code> gọi REST thủ công. Claude Opus 5 <strong>không nhận tham
+      số <code>temperature</code></strong> (trả 400) và bật thinking theo mặc định; tắt
+      thinking chỉ hợp lệ khi effort ≤ high, nên client tự hạ effort.</p>
+  </div>
+</section>
+
+<!-- 03 -->
+<section id="kien-truc">
+  <p class="sec-label">Ba · Hạ tầng</p>
+  <h2>Một tiền tố duy nhất, không đụng tới Drupal đang chạy</h2>
+<pre><code>Internet
+   │  https://chatbot-uat.bsc.com.vn        cert GlobalSign, hạn 02/2027
+   ▼
+103.219.180.171     lớp biên — kết thúc TLS
+   ▼
+10.21.170.5         proxy nội bộ
+   ▼
+10.21.170.55:80     Apache ─┬─ /       → Drupal          (GIỮ NGUYÊN)
+                            └─ /rag/   → 127.0.0.1:8080/rag/
+                                              │
+                     systemd  aiagent.service ┘   jar Spring Boot
+                     systemd  rag-postgres     podman, chỉ bind 127.0.0.1</code></pre>
+
+  <p>Tiền tố <code>/rag</code> do <strong>ứng dụng</strong> sinh ra
+    (<code>server.servlet.context-path</code>), không phải do Apache thêm vào — Apache
+    chuyển tiếp và <em>giữ nguyên</em> tiền tố. Hệ quả: tiền tố có mặt cả khi nối thẳng vào
+    cổng 8080 qua SSH tunnel, bỏ qua Apache.</p>
+
+  <div class="note danger">
+    <span class="nt">Điểm dễ hỏng nhất</span>
+    <p>Tiền tố phải khớp ở bốn nơi: <code>SERVER_CONTEXT_PATH</code> trong
+      <code>aiagent.env</code>, <code>ProxyPass</code> trong <code>chatbot.conf</code>,
+      <code>HEALTH_URL</code> trong <code>deploy.env</code>, và Redirect URI khai với Entra.
+      Lệch một chỗ là 404 toàn bộ hoặc <code>AADSTS50011</code>, và không có dòng log nào báo.</p>
+  </div>
+
+  <p>Trong mã nguồn, hệ quả của tiền tố là hai quy tắc bắt buộc: mọi phép so đường dẫn phía
+    server phải đi qua <code>RequestPaths.within(request)</code> chứ không dùng
+    <code>getRequestURI()</code>; và mọi đường dẫn tuyệt đối phía web phải đi qua hàm
+    <code>url()</code> trong <code>app.js</code>. Sai chỗ nào thì chỗ đó hỏng <em>theo chiều
+    mở</em> và im lặng — rate limit tắt hẳn, nhật ký ngừng ghi, bot Teams bị CSRF chặn.</p>
+</section>
+
+<!-- 04 -->
+<section id="hoi-dap">
+  <p class="sec-label">Bốn · Luồng chính</p>
+  <h2>Một câu hỏi đi qua mười hai chặng</h2>
+  <p>Giao diện hiển thị các chặng này theo thời gian thực qua Server-Sent Events, nên người
+    dùng thấy hệ thống đang làm gì thay vì nhìn một con quay.</p>
+
+  <ol class="ladder">
+    <li><span class="step-n">1</span><span class="step-b"><b>Xác thực và dựng phạm vi</b>
+      <span>API key hoặc phiên Entra → <code>AccessScope</code>: vai trò, danh sách nhóm tài liệu đọc được.</span></span></li>
+    <li><span class="step-n">2</span><span class="step-b"><b>Giới hạn tần suất</b>
+      <span>Caffeine, theo người dùng và theo bot. Vượt hạn mức trả 429.</span></span></li>
+    <li><span class="step-n">3</span><span class="step-b"><b>Nhận diện xã giao</b>
+      <span>"Chào bạn" không khớp tài liệu nào, nên trả lời bằng lời chào trước khi truy xuất — nếu không cổng từ chối sẽ đáp "không tìm thấy tài liệu".</span></span></li>
+    <li><span class="step-n">4</span><span class="step-b"><b>Đọc lại ngữ cảnh hội thoại</b>
+      <span>Vài lượt gần nhất, để "còn thử việc thì sao?" hiểu được.</span></span></li>
+    <li><span class="step-n">5</span><span class="step-b"><b>Tra cache</b>
+      <span>Khớp chính xác, rồi khớp ngữ nghĩa theo cosine. Khoá cache gồm cả vai trò lẫn phòng ban.</span></span></li>
+    <li><span class="step-n">6</span><span class="step-b"><b>Lập kế hoạch truy vấn</b>
+      <span>Mở rộng thuật ngữ bằng từ điển, viết lại câu hỏi, sinh HyDE, và kiểm tra câu hỏi có quá mơ hồ không.</span></span></li>
+    <li><span class="step-n">7</span><span class="step-b"><b>Truy xuất lai</b>
+      <span>Nhánh vector và nhánh full-text chạy song song trên mọi biến thể, hợp nhất bằng RRF.</span></span></li>
+    <li><span class="step-n">8</span><span class="step-b"><b>Lọc theo quyền</b>
+      <span>pgvector áp filter <em>sau</em> khi duyệt HNSW, nên phải over-fetch rồi cắt lại ở Java.</span></span></li>
+    <li><span class="step-n">9</span><span class="step-b"><b>Rerank</b>
+      <span>Chấm lại mức liên quan. Kết quả mang cờ đáng tin hay không.</span></span></li>
+    <li><span class="step-n">10</span><span class="step-b"><b>Cổng từ chối</b>
+      <span>Dưới ngưỡng thì từ chối trả lời. Rerank lỗi thì chuyển sang đánh giá bằng cosine chứ không im lặng bỏ qua.</span></span></li>
+    <li><span class="step-n">11</span><span class="step-b"><b>Sinh câu trả lời</b>
+      <span>Ghép prompt từ <code>parent_content</code>, stream từng token về client.</span></span></li>
+    <li><span class="step-n">12</span><span class="step-b"><b>Hậu kiểm và lưu</b>
+      <span>Đối chiếu các mốc trích dẫn với danh sách nguồn thật, bỏ mốc dẫn nguồn không tồn tại; ghi hội thoại, trích dẫn, token, chi phí, độ trễ.</span></span></li>
+  </ol>
+
+  <div class="note">
+    <span class="nt">Chi phí một câu hỏi</span>
+    <p>Tối đa bốn lời gọi LLM nối tiếp: viết lại câu hỏi → HyDE → rerank → sinh câu trả lời,
+      cộng một lời gọi embedding. Tắt bớt bước nào cũng được qua cấu hình runtime, đổi lại
+      chất lượng truy xuất giảm — nên đo bằng bộ eval trước khi tắt.</p>
+  </div>
+</section>
+
+<!-- 05 -->
+<section id="truy-xuat">
+  <p class="sec-label">Năm · Truy xuất</p>
+  <h2>Một bảng duy nhất mang cả hai chỉ mục</h2>
+  <p>Bảng <code>rag_chunks</code> vừa giữ cột <code>embedding vector(N)</code> có chỉ mục
+    HNSW, vừa giữ cột <code>tsv</code> có chỉ mục GIN. Không có hệ thống tìm kiếm thứ hai
+    nào phải đồng bộ.</p>
+
+  <div class="scroll">
+    <table>
+      <caption>Hai nhánh tìm kiếm</caption>
+      <thead><tr><th>Nhánh</th><th>Cơ chế</th><th>Bắt được cái gì</th></tr></thead>
+      <tbody>
+        <tr><td>Vector</td><td>cosine trên HNSW</td><td>Câu hỏi diễn đạt khác hẳn từ ngữ trong văn bản</td></tr>
+        <tr><td>Full-text</td><td><code>tsquery</code> ghép các từ bằng <strong>OR</strong></td><td>Số hiệu văn bản, tên riêng, thuật ngữ hiếm — thứ vector hay trượt</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Hai nhánh <strong>thất bại độc lập</strong>: nhánh này chết thì nhánh kia vẫn trả kết
+    quả. Điểm của hai nhánh được hợp nhất bằng Reciprocal Rank Fusion chứ không cộng trọng số,
+    vì hai thang điểm không cùng đơn vị.</p>
+
+  <h3>Cấu hình tìm kiếm tiếng Việt</h3>
+  <p>Text search config là <code>'vi'</code> — thực chất là <code>simple</code> cộng
+    <code>unaccent</code>. Nhờ vậy gõ không dấu vẫn tìm ra. Cột <code>tsv</code> do
+    <strong>trigger</strong> sinh, không phải do code Java ghi.</p>
+
+  <h3>Chunk cha–con</h3>
+  <p>Tài liệu được băm theo heading, và với văn bản pháp quy thì băm theo cấu trúc
+    Chương/Điều/Khoản. Mỗi chunk lưu hai bản: <code>content</code> (con, ngắn, dùng để
+    <em>tìm</em>) và <code>parent_content</code> (cha, rộng hơn, dùng để <em>trả lời</em>).
+    Tìm bằng đoạn hẹp cho độ chính xác, trả lời bằng đoạn rộng cho đủ ngữ cảnh.</p>
+
+  <div class="note danger">
+    <span class="nt">Đã xảy ra thật</span>
+    <p>Hàm gộp các section ngắn <strong>không được gộp qua ranh giới <code>Điều</code></strong>.
+      Một Điều ngắn bị gộp vào Điều kế tiếp sẽ mang nhãn của Điều sau, khiến câu trả lời trích
+      dẫn sai căn cứ mà vẫn đọc rất xuôi — loại lỗi khó phát hiện nhất.</p>
+  </div>
+</section>
+
+<!-- 06 -->
+<section id="nap">
+  <p class="sec-label">Sáu · Nạp liệu</p>
+  <h2>Ba đường nạp, một điểm nghẽn duy nhất</h2>
+  <p>Tải file lẻ, tải hàng loạt, và quét thư mục trên máy chủ — cả ba đều đi qua
+    <code>IngestionService.ingest</code>. Quét virus đặt ở đó chứ không ở controller, để
+    đường nạp thêm sau này không bị bỏ sót.</p>
+
+  <ol class="ladder">
+    <li><span class="step-n">1</span><span class="step-b"><b>Quét virus</b>
+      <span>clamd. <code>fail-closed=true</code> là chủ ý: không kết nối được thì <em>từ chối</em> file, không cho qua.</span></span></li>
+    <li><span class="step-n">2</span><span class="step-b"><b>Chuyển sang Markdown</b>
+      <span>PDFBox / POI / jsoup+flexmark. PDF bản scan cần OCR, tắt OCR thì job tính là <em>thất bại</em> kèm cảnh báo chứ không im lặng bỏ qua.</span></span></li>
+    <li><span class="step-n">3</span><span class="step-b"><b>Đọc front-matter</b>
+      <span>Tiêu đề, nhóm, số hiệu, phiên bản, ngày hiệu lực, role được đọc. Giá trị khai ở form thắng front-matter.</span></span></li>
+    <li><span class="step-n">4</span><span class="step-b"><b>Băm chunk</b>
+      <span>Bám heading, giữ bảng biểu, sinh cặp cha–con.</span></span></li>
+    <li><span class="step-n">5</span><span class="step-b"><b>Sinh ngữ cảnh chunk</b>
+      <span>Tuỳ chọn, tốn một lời gọi LLM mỗi chunk. Lỗi thì bỏ qua, không làm hỏng cả lần nạp.</span></span></li>
+    <li><span class="step-n">6</span><span class="step-b"><b>Nhúng và ghi</b>
+      <span>Ghi theo lô. Trigger tự sinh cột <code>tsv</code>.</span></span></li>
+  </ol>
+
+  <p>Khoá ghi đè là <code>doc_key = category/fileName</code>. Hai file trùng tên ở hai nhóm
+    khác nhau là <strong>hai tài liệu khác nhau</strong> — đây là chủ ý, sửa lỗi ghi đè âm
+    thầm của bản cũ. Nội dung không đổi so với lần nạp trước thì bỏ qua, trừ khi ép nạp lại.</p>
+
+  <p>Job nạp lưu trạng thái trong DB nên không mất khi khởi động lại, và job đang chạy có thể
+    yêu cầu dừng. Job bị ngắt giữa chừng ở lần chạy trước được đánh dấu lại lúc khởi động.</p>
+</section>
+
+<!-- 07 -->
+<section id="quyen">
+  <p class="sec-label">Bảy · Bảo mật</p>
+  <h2>Ba lớp, chỉ lớp thứ ba bảo vệ dữ liệu</h2>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Lớp</th><th>Trả lời câu hỏi</th><th>Cơ chế</th></tr></thead>
+      <tbody>
+        <tr><td>Xác thực</td><td>Anh là ai?</td><td>API key <code>X-API-Key</code>, hoặc đăng nhập Entra ID (OIDC)</td></tr>
+        <tr><td>Phân quyền endpoint</td><td>Anh gọi được API nào?</td><td>Vai trò <code>ADMIN</code> / <code>USER</code> trên từng nhóm đường dẫn</td></tr>
+        <tr><td><strong>Phạm vi dữ liệu</strong></td><td><strong>Anh đọc được tài liệu nào?</strong></td><td><strong>Lọc theo nhóm tài liệu và <code>allowed_roles</code> ngay trong câu SQL truy xuất</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Chỉ lớp thứ ba mới ngăn được việc một người hỏi vòng để lấy nội dung ngoài phạm vi. Hai
+    lớp trên chỉ chặn đường vào.</p>
+
+  <h3>Quy ước "rỗng" không cùng nghĩa ở ba chỗ — và đó là chủ ý</h3>
+  <p>Đây là chỗ dễ suy luận sai nhất trong cả hệ thống, vì hai ô đầu ngược nhau nên người đọc
+    rất dễ đoán ô thứ ba theo ô thứ hai. Đoán như vậy là sai.</p>
+  <div class="grid2">
+    <div class="card">
+      <h4>ACL nhóm tài liệu rỗng = ĐÓNG</h4>
+      <p>Chưa gán nhóm Entra nào thì không ai đọc được, trừ quản trị. Mặc định an toàn.</p>
+    </div>
+    <div class="card">
+      <h4>Đối tượng sử dụng bot rỗng = MỞ</h4>
+      <p>Ai cũng dùng được bot. Cấm dùng bot không bảo vệ dữ liệu — dữ liệu đã được ACL nhóm
+        tài liệu bảo vệ rồi.</p>
+    </div>
+    <div class="card">
+      <h4>Nhóm tài liệu bot được đọc rỗng = ĐÓNG</h4>
+      <p>Bot không gán nhóm nào thì <strong>từ chối mọi câu hỏi</strong>, kể cả của quản trị.
+        Danh sách này là chặn trên của phạm vi, nên nó theo ô thứ nhất chứ không theo ô thứ hai
+        ngay bên cạnh.</p>
+    </div>
+  </div>
+
+  <div class="note danger">
+    <span class="nt">Hai bẫy đã được xử lý, đừng mở lại</span>
+    <p><strong>Trong kênh Teams phải hạ quyền ADMIN xuống USER.</strong> Chỉ thu hẹp danh sách
+      nhóm tài liệu là chưa đủ: bộ truy xuất bỏ qua filter <code>allowed_roles</code> khi người
+      hỏi là ADMIN, nên một quản trị viên hỏi trong kênh sẽ kéo tài liệu hạn chế ra cho cả kênh.</p>
+    <p><strong>Không lấy được nhóm Entra nghĩa là KHÔNG có quyền nào</strong>, không phải "có
+      mọi quyền". Graph lỗi thì trả về rỗng, và rỗng được hiểu là đóng.</p>
+  </div>
+</section>
+
+<!-- 08 -->
+<section id="bot">
+  <p class="sec-label">Tám · Nền tảng</p>
+  <h2>Một cài đặt, nhiều bot, uỷ quyền được cho phòng ban</h2>
+  <p>Một tiến trình phục vụ nhiều trợ lý khác nhau. Mỗi bot có persona riêng, lời chào riêng,
+    model riêng, danh sách nhóm tài liệu riêng, và có thể gán cho từng Team trên Teams.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Khái niệm</th><th>Là gì</th><th>Quyết định điều gì</th></tr></thead>
+      <tbody>
+        <tr><td>Nhóm tài liệu <span class="m">(collection)</span></td><td><code>slug</code> chính là cột <code>category</code> của tài liệu</td><td><strong>Ai đọc được gì</strong>, qua ACL nhóm Entra</td></tr>
+        <tr><td>Bot</td><td>Một cấu hình trả lời</td><td><strong>Ai hỏi được ở đâu</strong>, và giọng điệu trả lời</td></tr>
+        <tr><td>Gán kênh</td><td>Ánh xạ Team/kênh Teams → bot</td><td>Câu hỏi trong Team đó do bot nào phục vụ</td></tr>
+        <tr><td>Uỷ quyền <span class="m">(grant)</span></td><td>Giao một nhóm tài liệu hoặc một bot cho người ngoài đội quản trị</td><td>Họ tự nạp tài liệu và cấp quyền đọc, không thấy gì của phòng khác</td></tr>
+        <tr><td>Tiền tố <span class="m">(namespace)</span></td><td>Cho phép tự tạo nhóm tài liệu bắt đầu bằng một tiền tố</td><td>Hai phòng không tranh nhau tên <code>quy-trinh</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Phạm vi trả lời cuối cùng luôn là <strong>giao</strong> của ba thứ: nhóm tài liệu người
+    hỏi được đọc, nhóm tài liệu bot được đọc, và — nếu hỏi trong kênh — danh sách nhóm được
+    phép trả lời công khai.</p>
+
+  <p>Giao ba chiều nghĩa là <strong>chiều hẹp nhất thắng</strong>. Người hỏi có quyền đọc cả kho
+    vẫn không kéo được tài liệu ra nếu bot chỉ được gán một nhóm; và cả hai vế đó có rộng đến
+    đâu cũng vô nghĩa trong kênh nếu chưa nhóm nào được bật trả lời công khai. Vì nhóm tài liệu
+    mới tạo <em>mặc định</em> chưa được phép trả lời công khai, một cài đặt vừa dựng sẽ trả lời
+    bình thường trong chat riêng và từ chối sạch trong kênh — đúng thiết kế, không phải lỗi.</p>
+
+  <div class="note danger">
+    <span class="nt">Ca mẫu · hẹp phạm vi trông giống hệt hết tài liệu</span>
+    <p>Trên UAT ngày 21/08/2026, bot mặc định phục vụ toàn công ty bị đặt còn <strong>1 trong 17
+      nhóm</strong> tài liệu. Nó chỉ còn quét 373 trên 19.392 đoạn — <strong>1,9% kho</strong> —
+      trong khi người hỏi là quản trị, có quyền đọc cả 17 nhóm.</p>
+    <p>Hỏi "Lệnh điều kiện STO" thì bị từ chối, dù tài liệu đặc tả STO đã nạp đủ 120 đoạn. Đối
+      chiếu full-text: 130 trong 143 đoạn khớp <code>sto</code> nằm ở nhóm
+      <code>lenh-dieu-kien</code>, và <strong>không đoạn nào</strong> nằm ở nhóm duy nhất bot
+      được đọc. Tài liệu nằm ngoài phạm vi thì không có tham số truy xuất nào cứu được.</p>
+    <p><strong>Vì sao khó thấy:</strong> không có lỗi nào được ghi. Truy xuất vẫn chạy đúng, vẫn
+      lấy về 36 ứng viên — chỉ toàn ứng viên vô can — rồi mô hình kết luận không tìm thấy. Câu
+      trả lời ra <em>giống từng chữ</em> câu mà hệ thống nói khi kho thật sự chưa có tài liệu.</p>
+    <p><strong>Cách phân biệt trong 30 giây:</strong> hỏi lại đúng câu đó trên trang hỏi–đáp
+      web. Đường web lấy phạm vi trực tiếp từ nhóm Entra của người đăng nhập, không đi qua danh
+      sách nhóm của bot. Web trả lời được mà Teams từ chối ⇒ lỗi phạm vi, không phải lỗi kho tài
+      liệu. Cả hai đều từ chối ⇒ mới là thiếu tài liệu.</p>
+  </div>
+
+  <div class="note warn">
+    <span class="nt">Ba chi tiết dễ làm sai</span>
+    <p>Persona của bot được chèn <strong>trước</strong> các quy tắc bắt buộc trong system
+      prompt, không phải sau. Mô hình chịu ảnh hưởng mạnh nhất bởi phần cuối prompt; đặt persona
+      ở cuối cho phép một dòng cấu hình vô hiệu hoá quy tắc "chỉ trả lời theo tài liệu".</p>
+    <p>Bot được ghi vào <code>rag_messages.bot_slug</code> bằng <strong>slug</strong>, không
+      phải khoá ngoại. Xoá một bot không được làm mất số liệu lịch sử của nó — đó đúng là thứ
+      cần để giải trình. Đường web không thuộc bot nào nên cột này để trống, và câu báo cáo
+      quy phần đó về nhãn <code>web</code> — đừng "sửa" thành loại bỏ dòng trống.</p>
+    <p>Cảnh báo "bot chưa gán nhóm tài liệu" ở màn tổng quan chỉ kêu khi danh sách
+      <strong>bằng không</strong>. Một bot bị đặt còn 1 trong 17 nhóm không kêu gì cả, vì
+      thu hẹp có chủ ý là chuyện bình thường — một trợ lý Nhân sự đúng ra chỉ nên đọc nhóm Nhân
+      sự. Thứ phân biệt được hai trường hợp đó là con người, nên màn quản trị hiển thị luôn số
+      đã chọn trên tổng số ngay cạnh danh sách.</p>
+  </div>
+
+  <p>Sửa danh sách nhóm của bot bằng SQL trực tiếp cũng có tác dụng mà không cần khởi động lại:
+    ảnh chụp cấu hình nền tảng nằm trong bộ nhớ và tự nạp lại theo lịch mỗi phút.</p>
+</section>
+
+<!-- 09 -->
+<section id="giao-dien">
+  <p class="sec-label">Chín · Giao diện</p>
+  <h2>Ba trang, không framework, không bước build</h2>
+  <p>Toàn bộ web là HTML/CSS/JS thuần, phục vụ tĩnh từ trong jar. Không CDN — mạng nội bộ
+    chặn, và một trang quản trị không nên phụ thuộc vào máy chủ bên ngoài để hiển thị được.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="m">Trang</th><th>Dành cho</th><th>Nội dung</th></tr></thead>
+      <tbody>
+        <tr><td class="m">index.html</td><td>Mọi người dùng</td><td>Hỏi–đáp, lịch sử hội thoại, trích dẫn nguồn, đánh giá 👍/👎</td></tr>
+        <tr><td class="m">my.html</td><td>Người được uỷ quyền</td><td>Tự tạo nhóm tài liệu, nạp file, cấp quyền đọc, gán bot cho Team</td></tr>
+        <tr><td class="m">admin.html</td><td>Quản trị</td><td>11 tab: tổng quan, nạp liệu, tài liệu, bot &amp; phân quyền, job, nhà cung cấp, cấu hình, đánh giá, báo cáo, phản hồi, nhật ký</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Trình bày Markdown của câu trả lời do một bộ render tối giản tự viết đảm nhiệm: mọi thứ
+    được escape trước khi thêm bất kỳ thẻ nào, nên không có đường XSS. Danh sách
+    <code>&lt;select&gt;</code> được thay bằng listbox tự vẽ — popup của select gốc do hệ điều
+    hành vẽ, không nhận được theme và trong chế độ tối thì chữ trắng nằm trên nền trắng.</p>
+
+  <div class="note warn">
+    <span class="nt">Chọn nhiều thì dùng ô tích, không dùng select multiple</span>
+    <p>Ô chọn nhóm tài liệu cho bot từng là một <code>&lt;select multiple&gt;</code> gốc. Trong
+      listbox gốc, một cú <em>click thường</em> bỏ chọn sạch mọi dòng khác — muốn thêm phải
+      Ctrl+click. Đường lưu thì xoá hết rồi ghi lại đúng phần đang chọn, và nó lưu ngay lúc giá
+      trị đổi. Cộng ba thứ đó lại: một cú click lỡ là cắt bot từ 17 nhóm còn 1, lưu tức thì,
+      không hỏi lại, không hoàn tác; và vì khung cao 5 dòng trên 17 mục, phần vừa bị bỏ chọn nằm
+      ngoài vùng nhìn nên không ai thấy gì xảy ra. Đây chính là nguyên nhân của ca mẫu ở mục 08.</p>
+    <p>Nay là danh sách <strong>ô tích</strong>: mỗi cú click đổi đúng một mục, kèm nút chọn tất
+      cả, bộ đếm <code>n/17</code> ngay cạnh, và một lần hỏi lại trước khi lưu tập rỗng. Quy tắc
+      rút ra: chỗ nào mà "chọn rỗng" là trạng thái phá hoại thì đừng dùng
+      <code>select multiple</code>.</p>
+  </div>
+</section>
+
+<!-- 10 -->
+<section id="api">
+  <p class="sec-label">Mười · Giao tiếp</p>
+  <h2>19 controller, khoảng 100 endpoint, tất cả đều có xác thực</h2>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="m">Tiền tố</th><th>Quyền</th><th>Nội dung</th></tr></thead>
+      <tbody>
+        <tr><td class="m">/api/v1/rag/me</td><td>Công khai</td><td>Trạng thái đăng nhập, vai trò, phạm vi đọc</td></tr>
+        <tr><td class="m">/api/v1/rag/chat<br>/api/v1/rag/chat/stream</td><td>Đã xác thực</td><td>Hỏi–đáp đồng bộ và streaming SSE</td></tr>
+        <tr><td class="m">/api/v1/rag/conversations</td><td>Đã xác thực</td><td>Lịch sử của <em>riêng người gọi</em>; đọc hội thoại của người khác bị chặn</td></tr>
+        <tr><td class="m">/api/v1/rag/feedback</td><td>Đã xác thực</td><td>Đánh giá câu trả lời</td></tr>
+        <tr><td class="m">/api/v1/rag/my/**</td><td>Đã xác thực</td><td>15 endpoint tự phục vụ cho người được uỷ quyền</td></tr>
+        <tr><td class="m">/api/v1/rag/admin/**</td><td>ADMIN</td><td>Tài liệu, nạp liệu, job, nền tảng bot, nhà cung cấp, báo cáo, nhật ký, vòng đời dữ liệu</td></tr>
+        <tr><td class="m">/api/v1/rag/eval/**</td><td>ADMIN</td><td>Bộ câu hỏi chuẩn và các phép đo chất lượng</td></tr>
+        <tr><td class="m">/api/v1/rag/settings</td><td>Đọc: xác thực<br>Ghi: ADMIN</td><td>Cấu hình runtime, áp dụng ngay không cần restart</td></tr>
+        <tr><td class="m">/api/messages</td><td>JWT Microsoft</td><td>Endpoint bot Teams; xác thực bằng token của Bot Framework</td></tr>
+        <tr><td class="m">/actuator/**</td><td>ADMIN</td><td>Trừ <code>/health</code> và <code>/info</code> để probe</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="nt">Hai chi tiết cấu hình Spring Security</span>
+    <p>Chain API dùng <code>SessionCreationPolicy.NEVER</code>, <strong>không phải</strong>
+      <code>STATELESS</code> — <code>STATELESS</code> bỏ qua cả phiên sẵn có, khiến trình duyệt
+      đăng nhập Entra xong vẫn bị 401 ở mọi lời gọi API. CSRF chỉ bật khi bật SSO, và được miễn
+      trừ cho request mang <code>X-API-Key</code>.</p>
+  </div>
+</section>
+
+<!-- 11 -->
+<section id="du-lieu">
+  <p class="sec-label">Mười một · Dữ liệu</p>
+  <h2>23 bảng, Flyway V1 → V9</h2>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="m">Nhóm</th><th class="m">Bảng</th><th>Vai trò</th></tr></thead>
+      <tbody>
+        <tr><td>Kho tri thức</td><td class="m">rag_documents, rag_chunks, rag_synonyms</td><td>Tài liệu, đoạn đã đánh chỉ mục, từ điển thuật ngữ</td></tr>
+        <tr><td>Hội thoại</td><td class="m">rag_conversations, rag_messages, rag_message_citations, rag_feedback</td><td>Lịch sử, trích dẫn, đánh giá</td></tr>
+        <tr><td>Cache</td><td class="m">rag_answer_cache</td><td>Câu trả lời cũ, khớp chính xác và khớp ngữ nghĩa</td></tr>
+        <tr><td>Nền tảng bot</td><td class="m">rag_collections, rag_collection_acl, rag_bots, rag_bot_collections, rag_bot_audience, rag_bot_channels</td><td>Nhóm tài liệu, quyền đọc, bot, gán kênh</td></tr>
+        <tr><td>Uỷ quyền</td><td class="m">rag_grants, rag_namespace_grants</td><td>Giao nhóm/bot cho người khác, cấp tiền tố tự tạo</td></tr>
+        <tr><td>Vận hành</td><td class="m">rag_ingest_jobs, rag_settings, rag_users, rag_audit_log</td><td>Job nạp, cấu hình runtime, người dùng, nhật ký kiểm toán</td></tr>
+        <tr><td>Đánh giá</td><td class="m">rag_eval_cases, rag_eval_runs, rag_eval_results</td><td>Bộ câu hỏi chuẩn và kết quả từng lần chạy</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Số chiều vector được truyền vào Flyway qua placeholder <code>${embeddingDim}</code>, nên
+    đổi cấu hình embedding là đổi luôn DDL. <code>SchemaValidator</code> so cấu hình với DB lúc
+    khởi động và <strong>chặn khởi động</strong> nếu lệch — gõ nhầm lộ ra ngay chứ không âm
+    thầm làm hỏng kết quả tìm kiếm.</p>
+</section>
+
+<!-- 12 -->
+<section id="van-hanh">
+  <p class="sec-label">Mười hai · Vận hành</p>
+  <h2>Kiểm toán bằng filter, số liệu theo bot, dọn dữ liệu theo lịch</h2>
+
+  <h3>Nhật ký kiểm toán</h3>
+  <p>Ghi bằng <strong>một filter</strong>, không phải bằng lời gọi rải trong từng controller.
+    Filter nằm ngay trước <code>ExceptionTranslationFilter</code> nên bắt được cả thao tác
+    <em>bị từ chối</em> (401/403) — đó mới là thứ cần nhất khi điều tra. Thêm endpoint quản trị
+    mới thì không phải làm gì. Nhật ký chỉ có đường đọc, không sửa/xoá được qua giao diện.</p>
+
+  <h3>Số liệu</h3>
+  <p>Xuất Prometheus qua Actuator. Mọi chuỗi cùng một tên metric <strong>phải có cùng bộ khoá
+    tag</strong>: Prometheus loại bỏ <em>im lặng</em> chuỗi lệch tag, không một dòng log nào,
+    số liệu chỉ đơn giản biến mất. Đã xảy ra thật với <code>rag.latency</code>. Nhãn bot không
+    bao giờ để rỗng — đường web mang nhãn <code>"web"</code>.</p>
+
+  <h3>Vòng đời dữ liệu</h3>
+  <p>Tác vụ theo lịch dọn hội thoại, nhật ký và job quá hạn theo số ngày cấu hình được. Chạy
+    tay được từ màn quản trị.</p>
+
+  <h3>Log ứng dụng</h3>
+  <p>Toàn bộ thông điệp log bằng <strong>tiếng Anh</strong>. Mẫu log đã in sẵn
+    <code>class.method.line</code> nên thông điệp không lặp lại tên thành phần. Quy ước mức:</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="m">Mức</th><th>Dùng cho</th></tr></thead>
+      <tbody>
+        <tr><td class="m">ERROR</td><td>Hỏng thật, cần người xử lý. Kèm stack trace khi là lỗi không lường trước.</td></tr>
+        <tr><td class="m">WARN</td><td>Bước phụ trợ hỏng nhưng hệ thống đi tiếp; cấu hình thiếu; phụ thuộc ngoài trả lỗi.</td></tr>
+        <tr><td class="m">INFO</td><td>Sự kiện vòng đời và mỗi request một dòng: khởi động, đăng nhập, nạp xong tài liệu, bot trả lời xong.</td></tr>
+        <tr><td class="m">DEBUG</td><td>Mọi thứ theo khối lượng: nội dung câu trả lời, danh sách ứng viên truy xuất, quyết định của cổng từ chối, file bị bỏ qua khi nạp hàng loạt.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Nội dung câu hỏi và câu trả lời chỉ được ghi khi bật cờ cấu hình <em>và</em> đang ở mức
+    DEBUG — hai điều kiện, vì đó là dữ liệu nội bộ.</p>
+</section>
+
+<!-- 13 -->
+<section id="bat-bien">
+  <p class="sec-label">Mười ba · Ràng buộc</p>
+  <h2>Những thứ phá là hỏng dữ liệu</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Bất biến</th><th>Phá thì sao</th></tr></thead>
+      <tbody>
+        <tr><td>Vector câu hỏi và vector tài liệu phải cùng một model</td><td>Kết quả tìm kiếm vô nghĩa. Đổi model ⇒ tạo lại schema và nạp lại toàn bộ, đồng thời <strong>xoá <code>rag_answer_cache</code></strong> vì cache giữ vector theo model cũ.</td></tr>
+        <tr><td><code>doc_key = category/fileName</code> là khoá ghi đè</td><td>Đổi quy ước là ghi đè nhầm tài liệu, âm thầm.</td></tr>
+        <tr><td>Cột <code>tsv</code> do trigger sinh</td><td>Ghi tay là lệch với nội dung, nhánh full-text trả kết quả sai.</td></tr>
+        <tr><td>Khoá cache phải gồm cả vai trò lẫn phòng ban</td><td>Câu trả lời sinh cho ADMIN được phục vụ lại cho USER. Cache ngữ nghĩa làm rò rỉ này nặng hơn vì không cần câu hỏi giống hệt.</td></tr>
+        <tr><td>Full-text ghép các từ bằng OR</td><td>Quay lại AND là nhánh full-text gần như không bao giờ khớp.</td></tr>
+        <tr><td>Đổi <code>rag.chunking.*</code> phải nạp lại tài liệu</td><td>Chỉ <code>rag.retrieval.*</code> mới có tác dụng ngay.</td></tr>
+        <tr><td>Danh sách nhóm tài liệu của bot là <strong>chặn trên</strong> của phạm vi đọc</td><td>Thiếu một nhóm là thu hẹp kho <em>âm thầm</em>: không lỗi, không log, câu từ chối ra giống hệt câu "kho chưa có tài liệu này". Rỗng thì bot từ chối mọi câu hỏi, kể cả của quản trị.</td></tr>
+        <tr><td>Câu từ chối <strong>không</strong> được vào <code>rag_answer_cache</code></td><td>"Không tìm thấy" hôm nay là câu <em>sai</em> ngày mai, vì tài liệu vẫn được nạp thêm và tham số truy xuất vẫn được chỉnh. Đóng băng nó lại là phục vụ đồ cũ trong 200&nbsp;ms mà người dùng không có cách nào biết.</td></tr>
+        <tr><td>So đường dẫn phải bỏ context path trước khi khớp</td><td>Chạy dưới tiền tố (<code>/rag</code> trên UAT) thì mọi phép so đường dẫn hỏng <em>theo chiều mở</em>: giới hạn tần suất tắt hẳn, nhật ký kiểm toán ngừng ghi, bot Teams bị CSRF chặn. Không một dòng log nào báo.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 14 -->
+<section id="chat-luong">
+  <p class="sec-label">Mười bốn · Chất lượng</p>
+  <h2>Khi câu trả lời chưa tốt thì đo, đừng đoán</h2>
+
+  <p>Bài toán con gà–quả trứng của việc đánh giá — cần bộ câu hỏi chuẩn để đo, mà bộ câu hỏi
+    thật chỉ có sau vài tháng vận hành — được giải bằng ba nguồn:</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Nguồn</th><th>Nhãn đúng lấy từ đâu</th><th>Dùng được để</th></tr></thead>
+      <tbody>
+        <tr><td>Sinh từ chính kho tài liệu</td><td>File chứa đoạn được dùng để sinh câu hỏi</td><td>Chọn cấu hình ngay ngày đầu. Câu sinh ra dễ hơn câu thật nên recall bị thổi lên, nhưng độ lệch đó tác động như nhau lên mọi cấu hình đem so.</td></tr>
+        <tr><td>Thu hoạch câu hỏi thật</td><td>Thứ hệ thống đã tìm ra</td><td>Đo hồi quy. Không đo được cái vốn đã sai.</td></tr>
+        <tr><td>Thêm tay</td><td>Người</td><td>Tốt nhất, nhưng là thứ bổ sung dần.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Hai phép đo, dùng đúng loại</h3>
+  <div class="grid2">
+    <div class="card">
+      <h4>Đo truy xuất</h4>
+      <p>recall@k và MRR. Không sinh câu trả lời, không cần LLM giám khảo. Rẻ và tất định ⇒
+        chạy sau <em>mỗi</em> lần đổi tham số truy xuất.</p>
+    </div>
+    <div class="card">
+      <h4>Đo câu trả lời</h4>
+      <p>Faithfulness và answer-relevance, tốn một lời gọi LLM giám khảo cho <em>mỗi</em> case.
+        Chỉ chạy khi đổi thứ ảnh hưởng tới câu trả lời.</p>
+    </div>
+  </div>
+
+  <p>Quy trình: đo baseline → đổi tham số qua API cấu hình (áp dụng ngay, không restart) → chạy
+    lại eval → so điểm. Tham số của từng lần chạy được lưu kèm kết quả nên so được về sau.</p>
+
+  <p>Muốn biết <em>vì sao</em> một câu trả lời sai, endpoint kiểm tra truy xuất trả về từng
+    bước — biến thể truy vấn, kết quả mỗi nhánh, điểm RRF, điểm rerank, quyết định của cổng từ
+    chối — mà không sinh câu trả lời.</p>
+
+  <div class="note">
+    <span class="nt">Nguồn tín hiệu rẻ nhất</span>
+    <p>Nút 👎 của người dùng. Phản hồi xấu hiện thành danh sách việc cần xem lại, và các câu hỏi
+      bị từ chối nhiều lần được tổng hợp thành <strong>danh sách tài liệu cần nạp bổ sung</strong> —
+      xếp theo số lần bị hỏi.</p>
+  </div>
+</section>
+
+<footer>
+  <p>BSC Assistant · Khối Công nghệ thông tin — BIDV Securities. Tài liệu mô tả hệ thống đang
+    chạy tại thời điểm cập nhật ghi ở đầu trang. Hướng dẫn cho người dùng cuối nằm ở
+    <code>docs/HUONG-DAN-SU-DUNG.md</code>; quy trình triển khai ở <code>docs/DEPLOY-UAT.md</code>.</p>
+</footer>
+
+</div>
+</body>
+</html>

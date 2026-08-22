@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BSC Assistant — Nhóm của tôi</title>
+    <link rel="stylesheet" href="app.css">
+    <style>
+        .page { max-width: 70rem; margin: 0 auto; padding: 1.4rem clamp(.8rem, 3vw, 2rem) 4rem; }
+        h2 { font-size: 1.22rem; margin: 0 0 .3rem; }
+        .sub { color: var(--muted); font-size: .92rem; margin: 0 0 1.2rem; max-width: 70ch; }
+        .grouplist { display: grid; gap: .35rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+                     max-height: 16rem; overflow-y: auto; padding: .8rem; border: 1px solid var(--rule);
+                     border-radius: var(--radius); background: var(--sunk); }
+        .grouplist label { display: flex; gap: .5rem; align-items: flex-start; font-size: .89rem;
+                           font-weight: 450; color: var(--fg); margin-bottom: 0; padding: .18rem 0; }
+        .grouplist label.blocked { opacity: .5; }
+        .gid { font-family: var(--mono, monospace); font-size: .8rem; color: var(--faint); }
+        .col-head { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+        .col-head h3 { margin: 0; }
+        .empty-state { border: 1px dashed var(--rule-strong); border-radius: var(--radius-lg);
+                       padding: 2.2rem 1.6rem; text-align: center; color: var(--muted);
+                       background: var(--sunk); font-size: .93rem; }
+        /* 200 tai lieu thi khong duoc day dai ca trang: cuon trong khung. */
+        .doclist { max-height: 22rem; overflow: auto; border: 1px solid var(--rule);
+                   border-radius: var(--radius); }
+        .doclist table { font-size: .86rem; }
+        .doclist th { position: sticky; top: 0; z-index: 1; }
+    </style>
+</head>
+<body>
+
+<div class="topbar" data-topbar>
+    <div class="brand"><span class="dot"></span> BSC Assistant <small>nhóm của tôi</small></div>
+    <nav>
+        <a href="./">Hỏi đáp</a>
+        <a href="my.html" class="active">Nhóm của tôi</a>
+        <a href="admin.html">Quản trị</a>
+    </nav>
+    <div class="spacer"></div>
+    <button class="ghost icon" id="theme-toggle" title="Đổi sáng/tối"></button>
+    <button class="ghost tiny" onclick="promptForKey()">API key</button>
+</div>
+
+<div class="page">
+    <h2>Nhóm tài liệu của tôi</h2>
+    <p class="sub" id="who">Đang tải…</p>
+
+    <div id="failed" style="display:none"></div>
+
+    <div id="nothing" style="display:none">
+        <div class="empty-state">
+            <p><strong>Bạn chưa được giao quản lý nhóm tài liệu nào.</strong></p>
+            <p style="font-size:.9rem">Đề nghị quản trị hệ thống cấp quyền cho bạn:
+                họ vào <span class="mono">Quản trị → Bot &amp; phân quyền → Uỷ quyền</span>,
+                nhập email của bạn và chọn nhóm tài liệu.</p>
+        </div>
+    </div>
+
+    <div id="workspace" style="display:none">
+        <section class="card" style="margin-bottom:1.2rem" id="create-card">
+            <h3>Tạo nhóm tài liệu mới</h3>
+            <p class="faint" style="margin-top:0;font-size:.84rem" id="prefix-hint"></p>
+            <div class="row" style="margin-bottom:.6rem">
+                <div class="field"><label for="new-slug">Mã nhóm</label>
+                    <input id="new-slug" placeholder="phap-che-hop-dong"></div>
+                <div class="field"><label for="new-name">Tên hiển thị</label>
+                    <input id="new-name" placeholder="Hợp đồng"></div>
+                <button class="primary" onclick="createCollection()">Tạo nhóm</button>
+            </div>
+            <p class="faint" style="font-size:.82rem;margin:0">
+                Chọn nhóm được đọc ngay sau khi tạo, ở thẻ của nhóm bên dưới.
+            </p>
+        </section>
+
+        <section class="card" style="margin-bottom:1.2rem">
+            <h3>Nạp tài liệu</h3>
+            <p class="faint" style="margin-top:0;font-size:.84rem">
+                Tài liệu được gán vào đúng nhóm bạn chọn — không nhập <span class="mono">category</span>
+                bằng tay được, để không ghi lẫn sang nhóm của phòng khác.
+            </p>
+            <div class="row" style="margin-bottom:.6rem">
+                <div class="field"><label for="up-collection">Nhóm tài liệu</label>
+                    <select id="up-collection"></select></div>
+                <div class="field"><label for="up-file">File</label>
+                    <input type="file" id="up-file" multiple></div>
+                <button class="primary" onclick="uploadFiles()">Nạp</button>
+            </div>
+            <div id="upload-out"></div>
+        </section>
+
+        <div id="collections"></div>
+
+        <section class="card" style="margin-top:1.2rem">
+            <h3>Bot của tôi</h3>
+            <p class="faint" style="margin-top:0;font-size:.84rem">
+                Bot ở đây là <em>cấu hình trả lời</em>, không phải app Teams. App Teams do bộ phận
+                CNTT tạo một lần cho cả công ty; bạn gán bot của mình cho Team của mình bằng
+                <span class="mono">aadGroupId</span> của Team đó.
+            </p>
+            <div class="row" style="margin-bottom:.8rem">
+                <div class="field"><label for="bot-slug">Mã bot</label>
+                    <input id="bot-slug" placeholder="phap-che-bot"></div>
+                <div class="field"><label for="bot-name">Tên hiển thị</label>
+                    <input id="bot-name" placeholder="Trợ lý Pháp chế"></div>
+                <button class="primary" onclick="createBot()">Tạo bot</button>
+            </div>
+            <div id="bots"></div>
+        </section>
+    </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+    let state = { groups: [], collections: [], bots: [] };
+
+    async function load() {
+        try {
+            await loadWorkspace();
+            document.getElementById('failed').style.display = 'none';
+        } catch (e) {
+            showLoadFailure(e);
+        }
+    }
+
+    /* Khong bat loi o day thi ca hai khoi deu display:none va nguoi dung nhin mot trang
+       trang voi mot dong "Dang tai..." dung yen mai mai. */
+    function showLoadFailure(e) {
+        document.getElementById('workspace').style.display = 'none';
+        document.getElementById('nothing').style.display = 'none';
+        document.getElementById('who').textContent = 'Không tải được thông tin của bạn.';
+        const box = document.getElementById('failed');
+        box.style.display = '';
+        box.innerHTML =
+            '<div class="empty-state"><p><strong>Không tải được trang này.</strong></p>'
+            + '<p style="font-size:.9rem">' + escapeHtml(e && e.message ? e.message : 'Lỗi không rõ.')
+            + '</p><p style="font-size:.9rem">Nếu chưa đăng nhập bằng tài khoản công ty, hãy đặt '
+            + 'API key ở góc trên bên phải rồi tải lại trang.</p>'
+            + '<p><button class="primary" onclick="location.reload()">Tải lại</button></p></div>';
+    }
+
+    async function loadWorkspace() {
+        const profile = await api('/api/v1/rag/my/profile');
+        state.groups = profile.groups || [];
+
+        document.getElementById('who').textContent =
+            (profile.displayId || 'Bạn') + (profile.admin ? ' — quản trị hệ thống' : '')
+            + ' · ' + state.groups.length + ' nhóm Entra';
+
+        const cols = await api('/api/v1/rag/my/collections');
+        state.collections = cols.collections || [];
+
+        const canCreate = !!profile.canCreateCollections;
+        const hasWork = state.collections.length > 0 || profile.botCount > 0 || canCreate;
+        document.getElementById('nothing').style.display = hasWork ? 'none' : '';
+        document.getElementById('workspace').style.display = hasWork ? '' : 'none';
+        if (!hasWork) return;
+
+        document.getElementById('create-card').style.display = canCreate ? '' : 'none';
+        const ns = profile.namespaces || [];
+        document.getElementById('prefix-hint').innerHTML = profile.admin
+            ? 'Bạn là quản trị hệ thống nên đặt mã nhóm tuỳ ý.'
+            : (ns.length
+                ? 'Mã nhóm phải bắt đầu bằng: ' + ns.map(n =>
+                    '<span class="mono">' + escapeHtml(n.prefix) + '</span> (tối đa '
+                    + n.max + ' nhóm)').join(' hoặc ')
+                  + '. Ví dụ <span class="mono">' + escapeHtml(ns[0].prefix) + '-hop-dong</span>.'
+                : '');
+
+        renderUploadTargets();
+        renderCollections();
+        await loadBots();
+    }
+
+    function renderUploadTargets() {
+        document.getElementById('up-collection').innerHTML = state.collections
+            .map(c => '<option value="' + c.id + '">' + escapeHtml(c.name || c.slug)
+                + ' (' + escapeHtml(c.slug) + ')</option>').join('');
+    }
+
+    function groupPicker(collectionId, selected) {
+        const chosen = new Set((selected || []).map(g => g.id));
+        return '<div class="grouplist">' + state.groups.map(g => {
+            const blocked = !g.usableAsAcl;
+            return '<label class="' + (blocked ? 'blocked' : '') + '"'
+                + (blocked ? ' title="Quản trị đã chặn nhóm này làm quyền đọc"' : '') + '>'
+                + '<input type="checkbox" data-col="' + collectionId + '" value="' + g.id + '"'
+                + (chosen.has(g.id) ? ' checked' : '') + (blocked ? ' disabled' : '') + '>'
+                + '<span>' + escapeHtml(g.name)
+                + '<br><span class="gid">' + escapeHtml(g.id) + '</span></span></label>';
+        }).join('') + '</div>';
+    }
+
+    function renderCollections() {
+        document.getElementById('collections').innerHTML = state.collections.map(c => `
+            <section class="card" style="margin-bottom:1rem">
+              <div class="col-head">
+                <h3>${escapeHtml(c.name || c.slug)}</h3>
+                <span class="chip mono">${escapeHtml(c.slug)}</span>
+                <span class="chip">${fmtInt(c.documentCount)} tài liệu</span>
+                ${c.channelAllowed
+                    ? '<span class="chip ochre">Trả lời được trong kênh Teams</span>'
+                    : '<span class="chip">Chỉ chat riêng</span>'}
+              </div>
+              <p class="faint" style="font-size:.84rem;margin:.5rem 0">
+                Tích vào nhóm được phép <strong>đọc</strong> tài liệu của nhóm này.
+                Không tích nhóm nào nghĩa là không ai đọc được, trừ quản trị.
+                Bạn chỉ chọn được nhóm mà chính bạn là thành viên.
+              </p>
+              ${groupPicker(c.id, c.acl)}
+              <div class="row" style="margin-top:.7rem">
+                <button class="primary" onclick="saveAcl(${c.id})">Lưu quyền đọc</button>
+                <button data-docs-btn="${c.id}" onclick="toggleDocs(${c.id}, this)">
+                  Xem tài liệu (${fmtInt(c.documentCount)})
+                </button>
+                ${c.documentCount === 0
+                    ? '<button class="ghost tiny danger" onclick="deleteCollection(' + c.id
+                      + ')">Xoá nhóm</button>'
+                    : ''}
+              </div>
+              <div id="docs-${c.id}" style="margin-top:.8rem"></div>
+            </section>`).join('');
+    }
+
+    async function createCollection() {
+        const slug = document.getElementById('new-slug').value.trim();
+        if (!slug) return toast('Nhập mã nhóm.', 'warn');
+        const r = await api('/api/v1/rag/my/collections', {
+            method: 'POST',
+            body: JSON.stringify({ slug, name: document.getElementById('new-name').value.trim() })
+        });
+        toast(r.message);
+        document.getElementById('new-slug').value = '';
+        document.getElementById('new-name').value = '';
+        load();
+    }
+
+    async function deleteCollection(id) {
+        const hit = state.collections.find(c => c.id === id);
+        const ok = await confirmDialog({
+            title: 'Xoá nhóm tài liệu',
+            message: 'Xoá nhóm tài liệu "' + ((hit && hit.slug) || id) + '"?',
+            confirmLabel: 'Xoá nhóm'
+        });
+        if (!ok) return;
+        toast((await api('/api/v1/rag/my/collections/' + id, { method: 'DELETE' })).message);
+        load();
+    }
+
+    async function saveAcl(id) {
+        const ids = Array.from(document.querySelectorAll('input[data-col="' + id + '"]:checked'))
+            .map(el => el.value);
+        const r = await api('/api/v1/rag/my/collections/' + id + '/acl',
+            { method: 'PUT', body: JSON.stringify({ groupIds: ids }) });
+        toast(r.message);
+        load();
+    }
+
+    /** Bam mot lan mo ra, bam lan nua thu gon lai. */
+    async function toggleDocs(id, btn) {
+        const box = document.getElementById('docs-' + id);
+        if (box.dataset.open === '1') {
+            box.innerHTML = '';
+            box.dataset.open = '';
+            if (btn) btn.textContent = btn.dataset.label || 'Xem tài liệu';
+            return;
+        }
+        if (btn) {
+            btn.dataset.label = btn.textContent.trim();
+            btn.textContent = 'Đang tải…';
+            btn.disabled = true;
+        }
+        try {
+            await renderDocs(id);
+            box.dataset.open = '1';
+            if (btn) btn.textContent = 'Thu gọn';
+        } catch (e) {
+            if (btn) btn.textContent = btn.dataset.label || 'Xem tài liệu';
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    /** Ve lai danh sach, khong dao trang thai mo/dong (dung sau khi xoa mot tai lieu). */
+    async function renderDocs(id) {
+        const r = await api('/api/v1/rag/my/collections/' + id + '/documents?limit=200');
+        const box = document.getElementById('docs-' + id);
+        if (!r.documents.length) {
+            box.innerHTML = '<p class="faint" style="font-size:.86rem">Chưa có tài liệu nào.</p>';
+            return;
+        }
+        box.innerHTML = '<div class="doclist"><table><thead><tr><th>File</th><th>Định dạng</th>'
+            + '<th>Số đoạn</th><th></th></tr></thead><tbody>'
+            + r.documents.map(d => '<tr><td>' + escapeHtml(d.fileName) + '</td>'
+                + '<td>' + escapeHtml(d.sourceFormat || '') + '</td>'
+                + '<td class="num">' + fmtInt(d.chunkCount) + '</td>'
+                + '<td><button class="ghost tiny danger" onclick="deleteDoc(' + d.id + ',' + id + ')">Xoá</button></td>'
+                + '</tr>').join('')
+            + '</tbody></table></div>';
+    }
+
+    async function deleteDoc(docId, collectionId) {
+        const ok = await confirmDialog({
+            title: 'Xoá tài liệu',
+            message: 'Xoá tài liệu này khỏi kho? Toàn bộ đoạn đã băm của nó cũng bị xoá '
+                + 'và sẽ không còn được dùng để trả lời.',
+            confirmLabel: 'Xoá tài liệu'
+        });
+        if (!ok) return;
+        toast((await api('/api/v1/rag/my/documents/' + docId, { method: 'DELETE' })).message);
+        const box = document.getElementById('docs-' + collectionId);
+        const wasOpen = box && box.dataset.open === '1';
+        await load();
+        if (wasOpen) {
+            const again = document.getElementById('docs-' + collectionId);
+            if (again) {
+                await renderDocs(collectionId);
+                again.dataset.open = '1';
+                const btn = document.querySelector('[data-docs-btn="' + collectionId + '"]');
+                if (btn) btn.textContent = 'Thu gọn';
+            }
+        }
+    }
+
+    async function uploadFiles() {
+        const id = document.getElementById('up-collection').value;
+        const input = document.getElementById('up-file');
+        if (!id || !input.files.length) return toast('Chọn nhóm tài liệu và file.', 'warn');
+
+        const out = document.getElementById('upload-out');
+        out.innerHTML = '';
+        for (const file of input.files) {
+            const fd = new FormData();
+            fd.append('file', file);
+            try {
+                const r = await api('/api/v1/rag/my/collections/' + id + '/documents',
+                    { method: 'POST', body: fd });
+                out.innerHTML += '<p style="font-size:.88rem">✅ ' + escapeHtml(r.message) + '</p>';
+            } catch (e) {
+                out.innerHTML += '<p style="font-size:.88rem">❌ ' + escapeHtml(file.name)
+                    + ': ' + escapeHtml(e.message) + '</p>';
+            }
+        }
+        input.value = '';
+        load();
+    }
+
+    async function loadBots() {
+        const r = await api('/api/v1/rag/my/bots');
+        state.bots = r.bots || [];
+        const manageable = r.manageableCollections || [];
+
+        document.getElementById('bots').innerHTML = !state.bots.length
+            ? '<p class="faint" style="font-size:.86rem">Chưa có bot nào được giao cho bạn.</p>'
+            : state.bots.map(b => `
+                <div class="card" style="margin-bottom:.8rem">
+                  <div class="col-head">
+                    <h3>${escapeHtml(b.displayName || b.slug)}</h3>
+                    <span class="chip mono">${escapeHtml(b.slug)}</span>
+                  </div>
+                  <div class="field" style="margin-top:.5rem">
+                    <label>Persona (chèn trước các quy tắc bắt buộc, không thay thế được chúng)</label>
+                    <textarea id="persona-${b.id}" rows="3">${escapeHtml(b.personaPrompt || '')}</textarea>
+                  </div>
+                  <div class="field">
+                    <label>Câu chào</label>
+                    <input id="greeting-${b.id}" value="${escapeHtml(b.greeting || '')}">
+                  </div>
+                  <div class="field">
+                    <label>Nhóm tài liệu bot được đọc</label>
+                    <div class="grouplist">${manageable.map(s =>
+                        '<label><input type="checkbox" data-bot="' + b.id + '" value="' + s + '"'
+                        + (b.collectionSlugs.includes(s) ? ' checked' : '') + '>'
+                        + '<span class="mono">' + escapeHtml(s) + '</span></label>').join('')}</div>
+                  </div>
+                  <div class="row" style="margin-top:.6rem">
+                    <button class="primary" onclick="saveBot(${b.id})">Lưu</button>
+                  </div>
+                  <div class="field" style="margin-top:.8rem">
+                    <label>Gán cho Team trên Teams (aadGroupId của Team — phải là Team bạn là thành viên)</label>
+                    <div class="row">
+                      <input id="team-${b.id}" placeholder="00000000-0000-0000-0000-000000000000">
+                      <button onclick="bindTeam(${b.id})">Gán Team</button>
+                    </div>
+                  </div>
+                  ${b.channels.length ? '<div class="scroll"><table><thead><tr><th>Team</th>'
+                      + '<th>Kênh</th><th></th></tr></thead><tbody>'
+                      + b.channels.map(ch => '<tr><td class="mono">' + escapeHtml(ch.teamAadGroupId)
+                          + '</td><td class="mono">' + escapeHtml(ch.channelId || 'mọi kênh')
+                          + '</td><td><button class="ghost tiny" onclick="unbind(' + ch.id
+                          + ')">Bỏ gán</button></td></tr>').join('')
+                      + '</tbody></table></div>' : ''}
+                </div>`).join('');
+    }
+
+    async function createBot() {
+        const slug = document.getElementById('bot-slug').value.trim();
+        if (!slug) return toast('Nhập mã bot.', 'warn');
+        const r = await api('/api/v1/rag/my/bots', {
+            method: 'POST',
+            body: JSON.stringify({ slug, displayName: document.getElementById('bot-name').value.trim() })
+        });
+        toast(r.message);
+        document.getElementById('bot-slug').value = '';
+        document.getElementById('bot-name').value = '';
+        loadBots();
+    }
+
+    async function saveBot(id) {
+        await api('/api/v1/rag/my/bots/' + id, {
+            method: 'PUT',
+            body: JSON.stringify({
+                slug: 'x',
+                personaPrompt: document.getElementById('persona-' + id).value,
+                greeting: document.getElementById('greeting-' + id).value
+            })
+        });
+        const slugs = Array.from(document.querySelectorAll('input[data-bot="' + id + '"]:checked'))
+            .map(el => el.value);
+        const r = await api('/api/v1/rag/my/bots/' + id + '/collections',
+            { method: 'PUT', body: JSON.stringify({ slugs }) });
+        toast(r.message);
+        loadBots();
+    }
+
+    async function bindTeam(id) {
+        const team = document.getElementById('team-' + id).value.trim();
+        if (!team) return toast('Nhập aadGroupId của Team.', 'warn');
+        const r = await api('/api/v1/rag/my/bots/' + id + '/channels',
+            { method: 'POST', body: JSON.stringify({ teamAadGroupId: team }) });
+        toast(r.message);
+        loadBots();
+    }
+
+    async function unbind(bindingId) {
+        toast((await api('/api/v1/rag/my/bots/channels/' + bindingId,
+            { method: 'DELETE' })).message);
+        loadBots();
+    }
+
+    load();
+</script>
+</body>
+</html>

@@ -49,25 +49,47 @@ tenant công ty, và triệu chứng khi nhầm là lỗi 401 khó hiểu lúc g
 
 ## 2. Đóng gói Teams app
 
-Thư mục [teams-app/](../teams-app/) có sẵn `manifest.json`. Cần làm:
-
-1. Thay `{{BOT_APP_ID}}` bằng Microsoft App ID, `{{APP_HOST}}` bằng host của bạn
-   (chỉ tên miền, không có `https://`).
-2. Thêm hai icon cạnh manifest:
-   - `color.png` — **192×192**, nền đầy màu
-   - `outline.png` — **32×32**, chỉ trắng trên nền trong suốt
-3. Nén **ba file phẳng** (không bọc thư mục) thành `bsc-rag-assistant.zip`:
+Thư mục [teams-app/](../teams-app/) có sẵn `manifest.json` và hai icon. Đóng gói bằng
+script, đừng nén tay:
 
 ```powershell
 cd teams-app
-Compress-Archive -Path manifest.json,color.png,outline.png -DestinationPath ..\bsc-rag-assistant.zip -Force
+.\build.ps1 -BotAppId <Microsoft App ID> -AppHost chatbot-uat.bsc.com.vn
 ```
 
-> Nén cả thư mục thay vì ba file phẳng là lỗi phổ biến nhất khi upload — Teams báo
-> "manifest không hợp lệ" mà không nói lý do thật.
+Ra `bsc-rag-assistant.zip` ở gốc repo (đã có trong `.gitignore` — file này chứa App ID của
+tenant, không commit).
 
-4. **Teams Admin Center** → **Teams apps** → **Manage apps** → **Upload new app** →
-   chọn file zip.
+Script chặn trước 6 lỗi mà Teams chỉ báo chung là *"manifest không hợp lệ"* rồi bắt bạn tự
+đoán:
+
+| Chặn | Vì sao Teams không nói ra |
+|---|---|
+| Zip bị bọc thư mục | Lỗi hay gặp nhất khi nén tay. Teams chỉ nói manifest sai |
+| `manifest.json` có BOM | Không parse được, thông báo y như trên |
+| Còn placeholder chưa thay | `{{BOT_APP_ID}}` không phải GUID ⇒ từ chối |
+| App ID không phải GUID | Dán nhầm Object ID hoặc tenant id |
+| `color.png` ≠ 192×192, `outline.png` ≠ 32×32 | Từ chối, không nói kích thước sai |
+| `outline.png` không có kênh alpha | Không bị từ chối, nhưng hiện ra ô vuông đặc trên thanh bên |
+
+Script kiểm lại chính file zip nó vừa tạo, không chỉ kiểm đầu vào — đọc lại danh sách entry
+để chắc chắn có đúng ba file và không có file nào nằm trong thư mục con.
+
+### Scope: chỉ `personal`
+
+Manifest cố ý chỉ khai `"scopes": ["personal"]` — bot chỉ dùng được ở **chat riêng**.
+Không phải hạn chế kỹ thuật: câu trả lời trong channel hiện ra cho mọi thành viên, nên đó là
+mặt rò rỉ dữ liệu (xem mục 4), và giá trị thật của trợ lý là tra cứu riêng tư.
+
+Mở cho channel là việc của sau, khi có yêu cầu cụ thể từ một phòng: thêm `"team"` (và
+`"groupChat"` nếu cần) vào `bots[0].scopes` **và** bật cờ *trả lời trong kênh* cho đúng những
+nhóm tài liệu chấp nhận được. `build.ps1` sẽ in cảnh báo khi thấy hai scope đó. Thiếu bước
+thứ hai thì bot vẫn từ chối trong channel — đó là mặc định an toàn, không phải lỗi.
+
+### Phát hành
+
+**Teams Admin Center** → **Teams apps** → **Manage apps** → **Upload new app** → chọn
+`bsc-rag-assistant.zip`.
 
 ### Ai được dùng bot
 
@@ -147,6 +169,23 @@ rag.bot.unidentified-departments=*
 
 ## 5. Kiểm tra
 
+Trước khi mở Teams, chạy trên máy chủ — nó đi theo đúng thứ tự phụ thuộc và dừng ở mắt đầu
+tiên bị đứt:
+
+```bash
+export RAG_ADMIN_API_KEY=...
+./deploy/bot-preflight.sh
+```
+
+Nó kiểm: ứng dụng còn sống → `/api/messages` trả 401 → `readiness` của `/admin/bot-status`
+rỗng → **xin được token chiều ra**. Mắt cuối là mắt phân biệt "bot không nhận được câu hỏi"
+với "bot trả lời được nhưng không gửi ra được" — hai thứ nhìn từ Teams giống hệt nhau.
+
+Bước duy nhất script không kết luận được là đường từ Internet vào, vì DNS nội bộ trả về IP
+nội bộ. Nó in ra lệnh `curl` để bạn chạy từ máy ngoài mạng BSC.
+
+Sau đó mới tới Teams:
+
 1. Cài app cho **chính bạn** (Teams → Apps → Built for your org). Bot phải gửi thẻ chào.
 2. Nhắn riêng một câu hỏi có trong tài liệu → phải thấy "đang gõ" rồi ra thẻ trả lời
    kèm mục **Nguồn**.
@@ -165,7 +204,8 @@ rag.bot.unidentified-departments=*
 | Hiện tượng | Nguyên nhân thường gặp |
 |---|---|
 | Bot không phản hồi gì, log không có gì | Messaging endpoint sai, hoặc `<host>` không truy cập được từ Internet. Kiểm tra reverse proxy/firewall. |
-| Log `Bot: token khong hop le` | Đồng hồ máy chủ lệch, hoặc endpoint đang bị chặn không lấy được khoá ký. |
+| Log `token khong hop le: ... no matching key(s) found` | **Nhầm `BOT_APP_TYPE`.** Dòng `Bot: dung khoa ky tu ...` ngay trước đó cho biết đang dùng khoá của ai: `login.microsoftonline.com/<tenant>` = SINGLE_TENANT, `login.botframework.com` = MULTI_TENANT. Khai SINGLE_TENANT cho bot multi-tenant ⇒ nhận được mọi tin nhắn nhưng từ chối hết. Đối chiếu với *Type of App* trên Azure. |
+| Log `Bot: token khong hop le` (lý do khác) | Đồng hồ máy chủ lệch (`timedatectl`), hoặc không lấy được khoá ký vì bị chặn ra ngoài. |
 | Log `audience ... khong khop app-id` | `BOT_APP_ID` khác App ID của Azure Bot resource. |
 | Log `claim serviceurl khong khop` | Có ai đó gửi token của bot khác tới endpoint. Đúng ra phải từ chối — không được nới lỏng. |
 | `Khong xin duoc token de goi Bot Framework` | Sai `BOT_APP_PASSWORD`, secret hết hạn, hoặc nhầm `BOT_APP_TYPE` (xem mục 1). |

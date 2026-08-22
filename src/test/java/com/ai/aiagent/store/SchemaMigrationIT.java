@@ -7,13 +7,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Kiem tra SCHEMA that: 7 file Flyway chay duoc tren Postgres+pgvector va tao ra dung
- * nhung bat bien ma phan con lai cua he thong dua vao.
- *
- * Moi khang dinh o day tuong ung voi mot bat bien da tung bi pha trong thuc te (xem
- * CLAUDE.md muc "Bat bien"). Test nay ton tai de lan sau khong pha lai duoc nua.
- */
 class SchemaMigrationIT extends PostgresTestBase {
 
     @Test
@@ -33,7 +26,6 @@ class SchemaMigrationIT extends PostgresTestBase {
     @Test
     @DisplayName("Cau hinh text search 'vi' ton tai - khong phai 'simple'")
     void vietnameseTextSearchConfigExists() {
-        // Bat bien: cau hinh la 'vi' (simple + unaccent), nho vay go KHONG DAU van tim ra.
         Integer count = jdbc.queryForObject(
                 "SELECT count(*) FROM pg_ts_config WHERE cfgname = 'vi'", Integer.class);
         assertThat(count).isEqualTo(1);
@@ -53,8 +45,6 @@ class SchemaMigrationIT extends PostgresTestBase {
     @DisplayName("Cot tsv do TRIGGER sinh, khong phai do code Java ghi")
     void tsvIsGeneratedByTrigger() {
         truncateAll();
-        // Chen chunk KHONG dat tsv - neu trigger khong chay thi cot nay se rong va
-        // toan bo nhanh full-text im lang tro nen vo dung.
         jdbc.update("""
                 INSERT INTO rag_chunks (doc_id, file_name, category, chunk_index, content,
                                         char_count, embedding)
@@ -70,9 +60,6 @@ class SchemaMigrationIT extends PostgresTestBase {
     @Test
     @DisplayName("So chieu vector trong DDL lay tu placeholder embeddingDim")
     void embeddingDimensionComesFromPlaceholder() {
-        // Test dat placeholder = 4; neu co ai bo placeholder va hardcode 1536 thi
-        // khang dinh nay do - va do la dung, vi khi ay doi model embedding se lam
-        // schema va cau hinh lech nhau ma khong ai biet.
         String type = jdbc.queryForObject("""
                 SELECT format_type(a.atttypid, a.atttypmod)
                   FROM pg_attribute a

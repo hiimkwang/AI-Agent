@@ -16,17 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Hoi thoai va tin nhan luu trong Postgres.
- *
- * Thay cho {@code ConversationMemory} chi nam trong RAM truoc day - cai do mat
- * khi restart, khong chia se duoc giua nhieu instance, va la mot cho RO RI BO NHO
- * (ConcurrentHashMap khong TTL, khong gioi han so hoi thoai, chi giai phong khi co
- * nguoi goi DELETE thu cong).
- *
- * Bang nay cung la nen cho moi cai tien ve sau: co lich su Q&A that thi moi biet
- * chatbot dang sai o dau.
- */
 @Repository
 @Slf4j
 public class ConversationRepository {
@@ -37,11 +26,6 @@ public class ConversationRepository {
         this.jdbc = jdbc;
     }
 
-    /**
-     * @param botId bot phuc vu hoi thoai; null o duong web. Chi dat khi con TRONG:
-     *              hoi thoai da thuoc ve mot bot thi giu nguyen bot do, de mot lan doi
-     *              rang buoc channel khong viet lai lich su thanh cua bot moi
-     */
     public void ensureConversation(String conversationId, String userId, String category,
                                    Long botId) {
         jdbc.update("""
@@ -60,11 +44,6 @@ public class ConversationRepository {
                 trimmed, conversationId);
     }
 
-    /**
-     * @param botSlug ghi ca vao tin nhan CUA NGUOI DUNG, khong chi tin nhan tra loi:
-     *                {@code /eval/cases/harvest} thu hoach cau hoi that tu chinh cac dong
-     *                nay, va thu hoach duoc theo tung bot moi danh gia duoc rieng bot do
-     */
     public long appendUserMessage(String conversationId, String content, String rewrittenQuery,
                                   String botSlug) {
         return insertMessage(conversationId, "user", content, rewrittenQuery,
@@ -87,9 +66,8 @@ public class ConversationRepository {
                                boolean abstained, String cacheHit, String botSlug) {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(connection -> {
-            // Phai chi RO ten cot khoa. Voi RETURN_GENERATED_KEYS, Postgres tra ve
-            // TAT CA cac cot, khi do KeyHolder.getKey() nem loi
-            // "current key entry contains multiple keys".
+            // Key column named explicitly: with RETURN_GENERATED_KEYS Postgres returns
+            // every column and KeyHolder.getKey() then throws.
             PreparedStatement ps = connection.prepareStatement("""
                     INSERT INTO rag_messages
                         (conversation_id, role, content, rewritten_query, provider, model,
@@ -142,7 +120,6 @@ public class ConversationRepository {
         });
     }
 
-    /** Lich su gan nhat, tra ve theo dung thu tu thoi gian. */
     public List<Turn> history(String conversationId, int maxTurns) {
         if (conversationId == null || conversationId.isBlank()) return List.of();
         int limit = Math.max(2, maxTurns * 2);
@@ -158,7 +135,6 @@ public class ConversationRepository {
         return out;
     }
 
-    /** Toan bo tin nhan cua mot hoi thoai kem trich dan - dung cho UI. */
     public List<Map<String, Object>> messages(String conversationId) {
         List<Map<String, Object>> messages = jdbc.query("""
                 SELECT id, role, content, provider, model, input_tokens, output_tokens,
@@ -243,7 +219,37 @@ public class ConversationRepository {
         return jdbc.update("DELETE FROM rag_conversations WHERE id = ?", conversationId);
     }
 
-    /** Don hoi thoai cu - thay cho viec truoc day khong bao gio giai phong bo nho. */
+    /** Owner of a conversation, or {@code null} when it does not exist. */
+    /**
+     * The question an assistant message answered: the last user message before it in the same
+     * conversation. Null when the message is unknown or has no question in front of it.
+     */
+    public String questionOf(long assistantMessageId) {
+        List<String> found = jdbc.queryForList("""
+                SELECT u.content
+                  FROM rag_messages a
+                  JOIN rag_messages u ON u.conversation_id = a.conversation_id
+                                     AND u.role = 'user'
+                                     AND u.id < a.id
+                 WHERE a.id = ?
+                 ORDER BY u.id DESC
+                 LIMIT 1
+                """, String.class, assistantMessageId);
+        return found.isEmpty() ? null : found.get(0);
+    }
+
+    public String ownerOf(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) return null;
+        List<String> hit = jdbc.query("SELECT coalesce(user_id, '') FROM rag_conversations WHERE id = ?",
+                (rs, n) -> rs.getString(1), conversationId);
+        return hit.isEmpty() ? null : hit.get(0);
+    }
+
+    public int deleteConversationsOf(String userId) {
+        if (userId == null || userId.isBlank()) return 0;
+        return jdbc.update("DELETE FROM rag_conversations WHERE user_id = ?", userId);
+    }
+
     public int purgeInactiveOlderThanDays(int days) {
         return jdbc.update(
                 "DELETE FROM rag_conversations WHERE last_active_at < now() - (? || ' days')::interval",

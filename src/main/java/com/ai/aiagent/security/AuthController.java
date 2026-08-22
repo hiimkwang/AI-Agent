@@ -14,24 +14,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
 
-/**
- * "Toi la ai" - giao dien goi endpoint nay dau tien de biet nen hien nut dang nhap
- * Entra, hop nhap API key, hay ten nguoi dung.
- *
- * CO Y de cong khai (xem {@link SecurityConfig}): khi chua xac thuc no chi tra ve
- * {@code authenticated=false} kem duong dan dang nhap, khong lo thong tin nao.
- */
 @RestController
 @RequestMapping("/api/v1/rag")
 public class AuthController {
 
     private final EntraProperties entraProps;
     private final ObjectProvider<ClientRegistrationRepository> clientRegistrations;
+    private final ObjectProvider<GraphDirectoryClient> graph;
 
     public AuthController(EntraProperties entraProps,
-                          ObjectProvider<ClientRegistrationRepository> clientRegistrations) {
+                          ObjectProvider<ClientRegistrationRepository> clientRegistrations,
+                          ObjectProvider<GraphDirectoryClient> graph) {
         this.entraProps = entraProps;
         this.clientRegistrations = clientRegistrations;
+        this.graph = graph;
+    }
+
+    private Map<String, String> groupNames(AccessScope scope) {
+        GraphDirectoryClient client = graph.getIfAvailable();
+        if (client == null || scope.entraGroups().isEmpty()) return Map.of();
+        return client.groupNames(scope.entraGroups());
     }
 
     @GetMapping("/me")
@@ -59,21 +61,13 @@ public class AuthController {
         out.put("admin", scope.isAdmin());
         out.put("allDepartments", scope.allDepartments());
         out.put("departments", new TreeSet<>(scope.departments()));
-        // Nguoi dung tu doc duoc minh dang thuoc nhom nao => tu chan doan duoc
-        // "vi sao toi khong xem duoc tai lieu X" ma khong phai mo ticket.
         out.put("entraGroups", List.copyOf(scope.entraGroups()));
-        // Duong dang nhap: qua Entra hay qua API key - huu ich khi chan doan
+        // Ids alone are unusable in a UI - nobody knows which GUID is which department.
+        out.put("entraGroupNames", groupNames(scope));
         out.put("via", scope.upn() == null ? "api-key" : "entra");
         return out;
     }
 
-    /**
-     * @return pham vi cua nguoi dung DA xac thuc, hoac null.
-     *         Khong dung {@code CurrentScope.get()} o day vi no tra ve
-     *         {@code AccessScope.internal()} (quyen ADMIN) khi khong co xac thuc -
-     *         dung cho tac vu nen, nhung o endpoint cong khai thi se bao sai la
-     *         "ban dang la admin".
-     */
     private AccessScope authenticatedScope() {
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
         if (a == null || !a.isAuthenticated()) return null;

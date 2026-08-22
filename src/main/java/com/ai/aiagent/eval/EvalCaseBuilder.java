@@ -14,26 +14,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Tao bo cau hoi chuan MA KHONG CAN AI GAN NHAN TAY.
- *
- * Van de that: doi model embedding hay bat ky tham so truy xuat nao cung can mot bo do,
- * nhung mot bo 100 cau hoi that co gan nhan nguon dung chi co sau vai thang van hanh.
- * Bat phai co no truoc khi trien khai la bai toan con ga - qua trung.
- *
- * Hai duong thoat, khong duong nao can nguoi ngoi gan nhan:
- *
- *  1) {@link #generate} - SINH TU CHINH KHO TAI LIEU. Voi moi doan tai lieu, nho model
- *     noi bo viet mot cau hoi ma doan do tra loi duoc; nguon dung CHINH LA file chua
- *     doan do, nen nhan co san, khong ai phai gan. Dung duoc ngay ngay dau, truoc khi
- *     co nguoi dung nao.
- *
- *  2) {@link #harvest} - THU HOACH TU LOG THAT. Sau khi chay, {@code rag_messages} da
- *     luu cau hoi that kem trich dan; lay cau hoi + nguon da trich lam case. Bo do tu
- *     lon len theo thoi gian van hanh, dung nhu cach no PHAI hinh thanh.
- *
- * Dung ca hai: (1) de co diem xuat phat ngay, (2) de bo do dan phan anh thuc te.
- */
 @Service
 @Slf4j
 public class EvalCaseBuilder {
@@ -59,23 +39,6 @@ public class EvalCaseBuilder {
         return status.get();
     }
 
-    // ============================================================ 1) Sinh tu kho tai lieu
-
-    /**
-     * Sinh bo cau hoi tu chinh kho tai lieu.
-     *
-     * GIOI HAN PHAI BIET: cau hoi duoc sinh TU doan tai lieu nen dung chung tu vung voi
-     * doan do => de hon cau hoi that, va con so recall tuyet doi se cao hon thuc te.
-     * NHUNG de SO SANH hai cau hinh tren cung mot bo thi do lech nay tac dong nhu nhau
-     * len ca hai ben, nen phep so sanh van co gia tri. Dung no de tra loi "cau hinh nao
-     * tot hon", dung dung no de tra loi "he thong tot den dau".
-     *
-     * De giam bot su de dai do, prompt yeu cau dien dat lai theo giong nguoi dung that
-     * va cam sao chep nguyen van.
-     *
-     * @param perDocument so cau hoi lay tu moi tai lieu - rai deu de mot tai lieu lon
-     *                    khong chiem het bo do
-     */
     public synchronized BuildStatus startGenerate(String suite, int perDocument, String category) {
         if ("RUNNING".equals(status.get().state())) {
             return status.get();
@@ -96,12 +59,6 @@ public class EvalCaseBuilder {
     private record Sample(String fileName, String category, String headingPath, String content) {
     }
 
-    /**
-     * Lay mau RAI DEU theo tai lieu.
-     *
-     * Neu chi {@code ORDER BY random() LIMIT n}, mot quy che 500 trang se chiem gan het
-     * bo do va bo do se do "tim trong mot tai lieu" chu khong phai "tim dung tai lieu".
-     */
     private List<Sample> sampleChunks(int perDocument, String category) {
         StringBuilder sql = new StringBuilder("""
                 SELECT file_name, category, heading_path, content FROM (
@@ -135,7 +92,7 @@ public class EvalCaseBuilder {
                 if (question == null || question.isBlank()) {
                     skipped++;
                 } else if (!seen.add(normalize(question))) {
-                    skipped++; // hai doan sinh ra cung mot cau hoi
+                    skipped++;
                 } else {
                     repository.addCase(new EvalRepository.EvalCase(
                             null, suite, question, sample.fileName(), null,
@@ -143,12 +100,9 @@ public class EvalCaseBuilder {
                     done++;
                 }
             } catch (Exception e) {
-                // Mot cau loi khong duoc lam sap ca lan sinh, nhung PHAI giu lai ly do:
-                // khi khong sinh duoc case nao, "bo qua 200" ma khong noi vi sao la thong
-                // bao vo dung - nguoi van hanh khong biet la thieu API key hay tai lieu xau.
                 skipped++;
                 lastError = e.getClass().getSimpleName() + ": " + e.getMessage();
-                log.debug("Sinh cau hoi loi cho '{}': {}", sample.fileName(), e.getMessage());
+                log.debug("Question generation failed for '{}': {}", sample.fileName(), e.getMessage());
             }
             status.set(new BuildStatus("RUNNING", samples.size(), done, skipped, null));
         }
@@ -163,8 +117,8 @@ public class EvalCaseBuilder {
                       + " (tài liệu có thể chỉ gồm mục lục hoặc bảng trống).";
         }
         status.set(new BuildStatus("DONE", samples.size(), done, skipped, message));
-        log.info("Sinh bo cau hoi '{}': {} case, bo qua {}.{}", suite, done, skipped,
-                lastError == null ? "" : " Loi gan nhat: " + lastError);
+        log.info("Generated eval suite '{}': {} case(s), {} skipped.{}", suite, done, skipped,
+                lastError == null ? "" : " Last error: " + lastError);
     }
 
     private String askForQuestion(Sample sample) {
@@ -202,22 +156,6 @@ public class EvalCaseBuilder {
         return question;
     }
 
-    // ============================================================ 2) Thu hoach tu log
-
-    /**
-     * Lay cau hoi THAT tu lich su hoi thoai lam case moi.
-     *
-     * NGUON NHAN: nguon ma he thong DA trich dan cho cau tra loi khong bi tu choi va
-     * khong bi danh gia xau.
-     *
-     * PHAI HIEU DUNG NO DO GI: nhan o day la "he thong tung tim ra cai gi", khong phai
-     * "cau tra loi dung la cai gi". Vi vay bo nay do duoc HOI QUY - mot thay doi co lam
-     * hong nhung gi truoc day chay tot khong - nhung KHONG noi duoc he thong tu dau da
-     * sai. Do la ly do van nen bo sung cau hoi bi 👎 vao de nguoi that xem lai.
-     *
-     * @param sinceDays chi lay hoi thoai trong N ngay gan nhat
-     * @param limit     so case toi da them
-     */
     public Map<String, Object> harvest(String suite, int sinceDays, int limit) {
         List<Object[]> rows = jdbc.query("""
                 SELECT u.content AS question, c.file_name, m.id AS message_id
@@ -260,7 +198,7 @@ public class EvalCaseBuilder {
             added++;
         }
 
-        log.info("Thu hoach bo cau hoi '{}': them {}, trung {}.", suite, added, duplicates);
+        log.info("Harvested eval suite '{}': {} added, {} duplicates.", suite, added, duplicates);
         return Map.of(
                 "message", "Đã thêm " + added + " câu hỏi thật vào bộ '" + suite + "'"
                         + (duplicates > 0 ? " (bỏ " + duplicates + " câu trùng)." : "."),
@@ -271,12 +209,6 @@ public class EvalCaseBuilder {
                         + "không đo được hệ thống vốn đã sai từ đầu.");
     }
 
-    /**
-     * Cau hoi bi danh gia xau, dua vao mot bo RIENG va KHONG gan nhan nguon.
-     *
-     * Day la danh sach viec can nguoi xem lai: chi nguoi moi biet cau tra loi dung phai
-     * lay tu dau. Tach bo rieng de khong lam ban bo do hoi quy.
-     */
     public Map<String, Object> harvestNegative(String suite, int sinceDays, int limit) {
         List<String> questions = jdbc.query("""
                 SELECT u.content AS question
@@ -310,8 +242,6 @@ public class EvalCaseBuilder {
                         + "thì mới dùng để đo được. Đây là danh sách việc cần xem lại.");
     }
 
-    // ============================================================ Tro giup
-
     private Set<String> existingQuestions(String suite) {
         Set<String> out = new LinkedHashSet<>();
         for (EvalRepository.EvalCase c : repository.listCases(suite, false)) {
@@ -320,7 +250,6 @@ public class EvalCaseBuilder {
         return out;
     }
 
-    /** Khu trung theo cau hoi da bo dau, chu thuong - "Nghi phep?" va "nghỉ phép" la mot. */
     static String normalize(String question) {
         if (question == null) return "";
         return com.ai.aiagent.store.TsQueryBuilder.stripDiacritics(question)

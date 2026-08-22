@@ -20,7 +20,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-/** OpenAI (GPT) - dung langchain4j cho ca ban dong bo va ban stream. */
 public class OpenAiLlmClient implements LlmClient {
 
     private final String modelName;
@@ -85,6 +84,8 @@ public class OpenAiLlmClient implements LlmClient {
         streaming.generate(toMessages(request), new StreamingResponseHandler<AiMessage>() {
             @Override
             public void onNext(String token) {
+                // LangChain4j 0.31 khong co cach huy request dang chay: chi ngung chuyen tiep.
+                if (sink.cancelled()) return;
                 buffer.append(token);
                 sink.onToken(token);
             }
@@ -113,7 +114,6 @@ public class OpenAiLlmClient implements LlmClient {
             in = usage.inputTokenCount();
             out = usage.outputTokenCount() == null ? 0 : usage.outputTokenCount();
         } else {
-            // Stream co the khong tra usage -> uoc luong de van co con so chi phi
             in = ModelPricing.estimateTokens(nullToEmpty(request.system()) + nullToEmpty(request.user()));
             out = ModelPricing.estimateTokens(output);
         }

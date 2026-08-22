@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- APP_NAME and LOG_DIR are passed in by install.sh. -->
+<configuration>
+    <property name="LOGS" value="${LOG_DIR:-./logs}"/>
+    <property name="APP" value="${APP_NAME:-aiagent}"/>
+    <property name="PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} | %-5level | [%thread] | %logger{40} | %msg%n"/>
+
+    <appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOGS}/${APP}.log</file>
+        <encoder>
+            <pattern>${PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOGS}/archived/${APP}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>3GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <logger name="com.ai.aiagent" level="INFO" additivity="false">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="Console"/>
+    </logger>
+
+    <logger name="org.flywaydb" level="INFO" additivity="false">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="Console"/>
+    </logger>
+
+    <!-- Kept at INFO so "Tomcat started on port 8080" survives the WARN root. -->
+    <logger name="org.springframework.boot.web.embedded" level="INFO" additivity="false">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="Console"/>
+    </logger>
+
+    <!-- WARN: HTTP client libraries log Authorization headers at DEBUG. -->
+    <root level="WARN">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="Console"/>
+    </root>
+</configuration>

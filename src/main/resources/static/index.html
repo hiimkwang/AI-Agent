@@ -3,319 +3,547 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Trợ lý tài liệu nội bộ</title>
-    <link rel="stylesheet" href="/app.css">
+    <title>BSC Assistant</title>
+    <link rel="stylesheet" href="app.css">
     <style>
         body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-        .shell { flex: 1; display: grid; grid-template-columns: 1fr; min-height: 0; }
-        @media (min-width: 62rem) { .shell { grid-template-columns: 16rem 1fr; } }
+        .shell { flex: 1; display: grid; grid-template-columns: 1fr; min-height: 0; position: relative; }
+        main { position: relative; }
+        @media (min-width: 62rem) { .shell { grid-template-columns: 18.5rem 1fr; } }
 
-        /* -------------------------------------------------------- Sidebar */
-        /* Cột phụ TỐI hơn, vùng đọc SÁNG hơn. Trước đây ngược lại: khung chat mang nền
-           xám còn mọi thứ quanh nó trắng, nên chỗ cần đọc lại trông như một cái hố. */
+        /* ------------------------------------------------------- Sidebar */
+
         aside {
-            display: none;
-            border-right: 1px solid var(--rule);
             background: var(--bg);
+            border-right: 1px solid var(--rule);
+            display: flex;
             flex-direction: column;
             min-height: 0;
         }
-        @media (min-width: 62rem) { aside { display: flex; } }
-        aside .head {
-            padding: .7rem .8rem;
-            border-bottom: 1px solid var(--rule);
-            display: flex; gap: .5rem; align-items: center;
+        @media (max-width: 61.99rem) {
+            aside {
+                position: fixed; inset: var(--topbar-h) auto 0 0;
+                width: min(20rem, 86vw);
+                z-index: 50;
+                transform: translateX(-102%);
+                transition: transform .24s var(--ease);
+                box-shadow: var(--shadow-lg);
+            }
+            body.nav-open aside { transform: none; }
+            #scrim {
+                position: fixed; inset: var(--topbar-h) 0 0 0; z-index: 45;
+                background: rgba(8, 14, 16, .45); opacity: 0; pointer-events: none;
+                transition: opacity .24s var(--ease);
+            }
+            body.nav-open #scrim { opacity: 1; pointer-events: auto; }
         }
-        aside .head span {
-            font-size: .8rem; font-weight: 600; color: var(--muted); flex: 1;
-        }
-        #conv-list { overflow-y: auto; flex: 1; padding: .4rem; }
-        /* Mục bo góc, cách nhau bằng khoảng trắng thay vì kẻ ngang: danh sách ngắn
-           mà kẻ đủ đường thì trông như bảng dữ liệu chứ không như chỗ bấm được. */
-        .conv {
-            padding: .5rem .65rem;
-            border-radius: var(--radius);
-            cursor: pointer;
-            display: flex; flex-direction: column; gap: .1rem;
-        }
-        .conv + .conv { margin-top: .15rem; }
-        .conv:hover { background: var(--surface-2); }
-        .conv.active { background: var(--accent-soft); color: var(--accent-ink); }
-        .conv b { font-weight: 600; font-size: .88rem; overflow: hidden;
-                  text-overflow: ellipsis; white-space: nowrap; }
-        .conv small { color: var(--faint); font-size: .74rem; }
+        @media (min-width: 62rem) { #scrim, #menu-btn { display: none; } }
 
-        /* ----------------------------------------------------------- Main */
+        /* Thuong hieu nam trong sidebar (khong con thanh ngang chay het chieu rong). */
+        .side-brand {
+            display: flex; align-items: center; gap: .55rem;
+            padding: .95rem 1rem .75rem;
+            font-family: var(--display); font-weight: 650; font-size: 1rem;
+            letter-spacing: -.02em; white-space: nowrap;
+        }
+        .side-brand .dot {
+            width: 1.35rem; height: 1.35rem; border-radius: 50%; flex: none;
+            background: var(--accent-grad); box-shadow: 0 2px 8px -3px var(--accent);
+        }
+        .side-brand-name { overflow: hidden; text-overflow: ellipsis; }
+
+        /* Dieu huong dang hang icon + chu, giong cot ben cua Gemini. */
+        .side-nav { display: flex; flex-direction: column; gap: .1rem; padding: 0 .55rem .3rem; }
+        .side-row {
+            display: flex; align-items: center; gap: .7rem;
+            width: 100%; min-height: 2.35rem;
+            padding: .35rem .7rem;
+            border: 1px solid transparent; background: transparent;
+            border-radius: var(--radius-pill);
+            font-size: .91rem; font-weight: 500; color: var(--fg);
+            text-align: left; text-decoration: none;
+            justify-content: flex-start;
+            box-sizing: border-box;
+            transition: background-color .14s var(--ease);
+        }
+        .side-row:hover:not(:disabled) {
+            background: var(--surface-2); border-color: transparent; color: var(--fg);
+        }
+        .side-row svg { flex: none; color: var(--muted); }
+        .side-row:hover svg { color: var(--accent); }
+
+        .side-row.side-search { cursor: text; }
+        .side-search input {
+            border: none; background: transparent; padding: 0; font-size: .91rem;
+            box-shadow: none !important; min-width: 0;
+        }
+        .side-search input::-webkit-search-cancel-button { cursor: pointer; }
+
+        #conv-list { overflow-y: auto; flex: 1; padding: 0 .55rem .8rem; }
+        .conv-group {
+            font-size: .74rem; font-weight: 650; letter-spacing: .02em;
+            color: var(--faint); padding: 1rem .7rem .3rem;
+        }
+        #conv-list > .conv-group:first-child { padding-top: .5rem; }
+        /* Mot dong mot hoi thoai: tieu de thoi. Chi tiet nam o tooltip, nhom ngay o tren. */
+        .conv {
+            padding: .42rem .7rem;
+            border-radius: var(--radius-pill);
+            cursor: pointer;
+            display: flex; align-items: center; gap: .4rem;
+            min-height: 2.15rem;
+            transition: background-color .14s var(--ease);
+        }
+        .conv:hover { background: var(--surface-2); }
+        .conv.active { background: var(--accent-soft); }
+        .conv.active .txt { color: var(--accent-ink); font-weight: 600; }
+        .conv .txt {
+            min-width: 0; flex: 1;
+            font-size: .91rem; font-weight: 450; line-height: 1.4;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .conv .del { opacity: 0; width: 1.7rem; height: 1.7rem; margin-right: -.3rem;
+                     transition: opacity .14s var(--ease); }
+        .conv:hover .del, .conv:focus-within .del { opacity: 1; }
+        @media (hover: none) { .conv .del { opacity: 1; } }
+
+        .side-foot {
+            border-top: 1px solid var(--rule);
+            padding: .5rem .9rem;
+            display: flex; align-items: center; gap: .4rem;
+        }
+        .side-foot #conv-count { flex: 1; font-size: .78rem; }
+        .side-foot button { font-size: .78rem; }
+
+        /* Goc tren ben phai cua vung chinh: chi sang/toi + nguoi dung. Khong ke ngang. */
+        .main-top {
+            display: flex; align-items: center; flex-wrap: wrap;
+            gap: .5rem; row-gap: .3rem;
+            padding: .55rem clamp(.7rem, 2vw, 1.1rem);
+            min-height: 3rem;
+            background: var(--surface);
+            position: sticky; top: 0; z-index: 30;
+        }
+        .main-top .spacer { flex: 1; }
+
+        /* ---------------------------------------------------- Chat column */
+
         main { display: flex; flex-direction: column; min-height: 0; min-width: 0;
                background: var(--surface); }
+        /* Chua hoi gi: loi chao + khung nhap dung giua trang. Co tin nhan roi thi khung
+           nhap tro ve day trang nhu binh thuong. */
+        main.welcome { justify-content: center; }
+        main.welcome #messages { flex: 0 0 auto; overflow: visible; padding-bottom: .2rem; }
+        main.welcome .composer { flex: 0 0 auto; }
+        main.welcome #welcome { align-items: center; text-align: center; padding-bottom: 1.1rem; }
+        main.welcome #welcome .lede { margin-left: auto; margin-right: auto; }
+        main.welcome .main-top { position: absolute; left: 0; right: 0; background: transparent; }
 
         #messages {
             flex: 1;
             overflow-y: auto;
-            padding: 1.6rem clamp(.8rem, 4vw, 2rem) .8rem;
-            display: flex; flex-direction: column; gap: 1.6rem;
+            padding: 1.8rem clamp(.9rem, 4vw, 2rem) 1rem;
+            display: flex; flex-direction: column; gap: 1.7rem;
         }
-        .msg { max-width: 46rem; width: 100%; margin: 0 auto; display: flex; gap: .8rem; align-items: flex-start; }
+        .msg {
+            max-width: 48rem; width: 100%; margin: 0 auto;
+            display: flex; gap: 1rem; align-items: flex-start;
+            animation: msg-in .25s var(--ease);
+        }
+        @keyframes msg-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
         .msg .avatar {
-            flex: none; width: 1.8rem; height: 1.8rem; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: .78rem; font-weight: 700; margin-top: .1rem;
+            flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%;
+            display: grid; place-items: center;
+            font-size: .82rem; font-weight: 700; margin-top: .1rem;
         }
-        .msg.bot .avatar { background: var(--accent-grad); color: #fff; }
-        /* Giao diện tối lật màu accent thành teal SÁNG, nên chữ trắng trên nền accent
-           gần như mất hút. Đổi sang mực sẫm, cùng cách button.primary đang xử lý. */
-        :root[data-theme="dark"] .msg.bot .avatar,
-        :root[data-theme="dark"] #welcome .mark,
-        :root[data-theme="dark"] details.cite .num { color: #06201E; }
-        @media (prefers-color-scheme: dark) {
-            :root:not([data-theme="light"]) .msg.bot .avatar,
-            :root:not([data-theme="light"]) #welcome .mark,
-            :root:not([data-theme="light"]) details.cite .num { color: #06201E; }
+        .msg.bot .avatar {
+            background: var(--accent-grad); color: var(--on-accent);
+            box-shadow: 0 2px 10px -3px var(--accent);
         }
-        .msg.user .avatar { background: var(--surface-2); color: var(--muted); border: 1px solid var(--rule); }
+        .msg.user .avatar {
+            background: var(--surface-2); color: var(--muted); border: 1px solid var(--rule);
+            font-size: .82rem; font-weight: 650;
+        }
         .msg .content { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
+
         .msg.user { flex-direction: row-reverse; }
         .msg.user .content { align-items: flex-end; }
         .msg.user .bubble {
             background: var(--surface-2);
-            border: 1px solid var(--rule);
-            padding: .6rem .9rem;
+            padding: .7rem 1.1rem;
             border-radius: var(--radius-lg);
-            border-top-right-radius: .3rem;
-            max-width: 34rem;
+            border-top-right-radius: .45rem;
+            max-width: 36rem;
+            font-size: .97rem;
         }
-        /* Câu trả lời KHÔNG đóng khung. Câu trả lời ở đây dài — nhiều đoạn, danh sách,
-           đôi khi cả bảng — nhốt trong một cái bong bóng viền tròn thì đọc mệt và phí
-           chiều ngang. Khung chỉ dành cho hai trường hợp cần nổi bật bên dưới. */
+
         .msg.bot .bubble {
             background: transparent; border: 0; box-shadow: none; padding: 0;
+            font-size: .99rem; line-height: 1.68;
         }
         .msg.bot .bubble > *:first-child { margin-top: 0; }
         .msg.bot .bubble > *:last-child { margin-bottom: 0; }
-        .msg.bot .bubble p { margin: .5rem 0; }
-        .msg.bot .bubble h3, .msg.bot .bubble h4, .msg.bot .bubble h5 { margin: .8rem 0 .3rem; font-size: 1rem; }
-        .msg.bot .bubble ul { margin: .4rem 0; padding-left: 1.2rem; }
+        .msg.bot .bubble p { margin: .65rem 0; }
+        .msg.bot .bubble h3 { margin: 1.2rem 0 .45rem; font-size: 1.14rem; line-height: 1.4; }
+        .msg.bot .bubble h4 { margin: 1.1rem 0 .4rem; font-size: 1.05rem; line-height: 1.45; }
+        .msg.bot .bubble h5, .msg.bot .bubble h6 {
+            margin: 1rem 0 .35rem; font-size: 1rem; line-height: 1.5; color: var(--muted);
+        }
+        .msg.bot .bubble ul, .msg.bot .bubble ol { margin: .55rem 0; padding-left: 1.45rem; }
+        .msg.bot .bubble li { margin: .28rem 0; }
+        .msg.bot .bubble strong { font-weight: 680; }
         .msg.bot .bubble code {
-            font-family: var(--mono); font-size: .86em;
-            background: var(--sunk); padding: .1em .3em; border: 1px solid var(--rule);
+            font-family: var(--mono); font-size: .9em;
+            background: var(--sunk); padding: .12em .38em; border: 1px solid var(--rule);
+            border-radius: 6px;
         }
-        .msg.bot .bubble table { margin: .5rem 0; }
+        .msg.bot .bubble pre.code { margin: .7rem 0; }
+        .msg.bot .bubble pre.code code { background: none; border: 0; padding: 0; }
+        .msg.bot .bubble table { margin: .7rem 0; border: 1px solid var(--rule); border-radius: var(--radius-sm); }
         .msg.bot .bubble blockquote {
-            margin: .5rem 0; padding-left: .8rem; border-left: 2px solid var(--rule-strong);
+            margin: .7rem 0; padding: .1rem 0 .1rem .9rem;
+            border-left: 3px solid var(--rule-strong);
         }
-        /* Cau tra loi "khong tim thay" duoc phan biet ro bang mat */
+        .msg.bot .bubble a { color: var(--accent-ink); text-decoration-thickness: 1px;
+                             text-underline-offset: 2px; }
+
         .msg.abstained .bubble,
         .msg.clarifying .bubble {
-            padding: .75rem .95rem;
+            padding: 1rem 1.15rem;
             border-radius: var(--radius-lg);
         }
-        .msg.abstained .bubble {
-            background: var(--ochre-soft);
-            border: 1px solid var(--ochre);
-        }
-        /* Hoi lai vi cau hoi mo ho: day la mot cau hoi cua tro ly, KHONG phai canh bao
-           loi/khong tim thay, nen dung tong mau accent thay vi ochre. */
-        .msg.clarifying .bubble {
-            background: var(--accent-soft);
-            border: 1px solid var(--accent);
-        }
-        .msg.clarifying .avatar { background: var(--accent-soft); color: var(--accent-ink); border: 1px solid var(--accent); }
+        .msg.abstained .bubble { background: var(--ochre-soft); border: 1px solid var(--ochre); }
+        .msg.clarifying .bubble { background: var(--accent-soft); border: 1px solid var(--accent); }
+        .msg.clarifying .avatar { background: var(--accent-soft); color: var(--accent-ink);
+                                  border: 1px solid var(--accent); box-shadow: none; }
 
-        /* ------------------------------------------------------ Màn hình chào
-           Trước đây khung chat mở ra là một khoảng trống cao gần cả màn hình với đúng
-           một bong bóng chữ ở góc trên — trông như trang bị lỗi. Người dùng mới cũng
-           không biết hỏi được cái gì, vì họ không biết trong kho có tài liệu nào. */
-        #welcome {
-            max-width: 46rem; width: 100%; margin: auto;
-            display: flex; flex-direction: column; align-items: center; text-align: center;
-            padding: 1rem 0 2rem;
+        /* ------------------------------------------------ Thinking status */
+
+        .thinking { margin-bottom: .3rem; }
+        .think-head {
+            display: flex; align-items: center; gap: .6rem;
+            font-size: .95rem; color: var(--muted);
         }
-        #welcome .mark {
-            width: 3rem; height: 3rem; border-radius: 50%;
-            background: var(--accent-grad); color: #fff;
-            display: grid; place-items: center; font-size: 1.3rem;
-            box-shadow: 0 0 0 6px var(--accent-soft);
+        .dots { display: inline-flex; gap: .28rem; flex: none; }
+        .dots i {
+            width: .45rem; height: .45rem; border-radius: 50%;
+            background: var(--accent);
+            animation: bounce 1.25s var(--ease) infinite;
         }
-        #welcome h1 { font-size: 1.5rem; margin: 1.1rem 0 .4rem; letter-spacing: -.015em; }
-        #welcome .lede { color: var(--muted); margin: 0; max-width: 34rem; }
-        #welcome .promises {
-            display: flex; flex-wrap: wrap; gap: .45rem; justify-content: center; margin-top: 1rem;
-        }
-        #welcome .promises span {
-            font-size: .8rem; color: var(--muted);
-            border: 1px solid var(--rule); border-radius: var(--radius-pill);
-            padding: .2rem .7rem; background: var(--surface);
-        }
-        #welcome .suggest-label {
-            margin: 1.8rem 0 .6rem; font-size: .78rem; color: var(--faint);
-        }
-        #welcome .suggests { display: grid; gap: .5rem; width: 100%; }
-        @media (min-width: 46rem) { #welcome .suggests { grid-template-columns: 1fr 1fr; } }
-        #welcome .suggests button {
-            text-align: left; border-radius: var(--radius);
-            border: 1px solid var(--rule); background: var(--surface);
-            padding: .6rem .8rem; font-size: .9rem; color: var(--fg);
-            display: flex; align-items: flex-start; gap: .5rem; line-height: 1.4;
-        }
-        #welcome .suggests button:hover { border-color: var(--accent); background: var(--accent-soft); }
-        #welcome .suggests button i {
-            color: var(--accent); font-style: normal; flex: none;
+        .dots i:nth-child(2) { animation-delay: .16s; }
+        .dots i:nth-child(3) { animation-delay: .32s; }
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+            30%           { transform: translateY(-.32rem); opacity: 1; }
         }
 
-        .status-line {
+        /* Gemini-style sweeping highlight over the current step's label. */
+        .shimmer {
+            background: linear-gradient(100deg,
+                var(--muted) 20%, var(--accent) 42%, var(--accent-2) 52%, var(--muted) 74%);
+            background-size: 300% 100%;
+            -webkit-background-clip: text; background-clip: text;
+            color: transparent;
+            animation: sweep 2.1s linear infinite;
+            font-weight: 560;
+        }
+        @keyframes sweep {
+            from { background-position: 160% 0; }
+            to   { background-position: -60% 0; }
+        }
+        .think-time { color: var(--faint); font-size: .82rem; margin-left: auto; flex: none; }
+
+        .think-steps {
+            list-style: none; margin: .55rem 0 0; padding: 0 0 0 .12rem;
+            display: flex; flex-direction: column; gap: .3rem;
+            border-left: 2px solid var(--rule);
+            padding-left: .9rem;
+        }
+        .think-steps li {
             display: flex; align-items: center; gap: .5rem;
-            color: var(--muted); font-size: .88rem;
+            font-size: .87rem; color: var(--faint);
+            animation: msg-in .2s var(--ease);
         }
-        .spinner {
-            width: 12px; height: 12px; border-radius: 50%;
-            border: 2px solid var(--rule-strong); border-top-color: var(--accent);
-            animation: spin .7s linear infinite; flex: none;
+        .think-steps li.now { color: var(--fg); font-weight: 550; }
+        .think-steps li.done .mark { color: var(--good); }
+        .think-steps .mark {
+            flex: none; width: 1rem; display: grid; place-items: center;
+            font-size: .82rem; line-height: 1;
+        }
+        .think-steps .ring {
+            width: .7rem; height: .7rem; border-radius: 50%;
+            border: 2px solid var(--accent-soft); border-top-color: var(--accent);
+            animation: spin .7s linear infinite; display: block;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* ------------------------------------------------------- Citations */
-        .cites { margin-top: .8rem; display: flex; flex-direction: column; gap: .45rem; }
+        /* Collapsed recap once the answer starts streaming. */
+        details.thought { margin-bottom: .7rem; }
+        details.thought > summary {
+            list-style: none; cursor: pointer;
+            display: inline-flex; align-items: center; gap: .45rem;
+            font-size: .88rem; color: var(--muted);
+            background: var(--sunk); border: 1px solid var(--rule);
+            border-radius: var(--radius-pill); padding: .28rem .8rem;
+            transition: border-color .15s var(--ease), color .15s var(--ease);
+        }
+        details.thought > summary::-webkit-details-marker { display: none; }
+        details.thought > summary:hover { border-color: var(--accent); color: var(--accent-ink); }
+        details.thought .tmark { color: var(--accent); }
+        details.thought .arrow { color: var(--faint); font-size: .68rem; transition: transform .15s var(--ease); }
+        details.thought[open] .arrow { transform: rotate(90deg); }
+        details.thought .think-steps { margin-top: .6rem; }
+
+        /* ------------------------------------------------------- Welcome */
+
+        #welcome {
+            max-width: 48rem; width: 100%; margin: auto;
+            display: flex; flex-direction: column;
+            padding: 1rem 0 2rem;
+        }
+        #welcome h1 {
+            font-size: clamp(1.4rem, 2.8vw, 1.85rem);
+            line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -.025em;
+            overflow-wrap: anywhere;
+            background: var(--accent-grad);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        #welcome .lede {
+            color: var(--muted); margin: 0; max-width: 38rem; font-size: .97rem;
+        }
+
+        /* ----------------------------------------------------- Citations */
+
+        .cites { margin-top: 1.1rem; display: flex; flex-direction: column; gap: .5rem; }
         .cites > .label {
-            font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
+            font-size: .73rem; font-weight: 650; letter-spacing: .05em;
             text-transform: uppercase; color: var(--faint);
         }
-        .cites .pill-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+        .cites .pill-row { display: flex; flex-wrap: wrap; gap: .45rem; }
         details.cite {
             border: 1px solid var(--rule);
-            background: var(--surface);
+            background: var(--sunk);
             border-radius: var(--radius-pill);
             flex: 0 1 auto;
             max-width: 100%;
-            transition: box-shadow .15s ease, border-color .15s ease, border-radius .15s ease;
+            transition: box-shadow .16s var(--ease), border-color .16s var(--ease),
+                        border-radius .16s var(--ease);
         }
         details.cite:hover { border-color: var(--accent); }
         details.cite[open] {
             flex-basis: 100%;
             border-radius: var(--radius);
             box-shadow: var(--shadow-sm);
+            background: var(--surface);
         }
         details.cite > summary {
-            padding: .3rem .75rem; cursor: pointer; display: flex; gap: .45rem;
-            align-items: center; font-size: .82rem; list-style: none;
+            padding: .4rem .85rem; cursor: pointer; display: flex; gap: .5rem;
+            align-items: center; font-size: .85rem; list-style: none;
         }
         details.cite > summary::-webkit-details-marker { display: none; }
         details.cite .num {
-            font-family: var(--mono); font-weight: 700; font-size: .68rem; color: #fff;
-            background: var(--accent-grad);
-            width: 1.2rem; height: 1.2rem; border-radius: 50%; flex: none;
+            font-family: var(--mono); font-weight: 700; font-size: .74rem;
+            color: var(--on-accent); background: var(--accent-grad);
+            width: 1.35rem; height: 1.35rem; border-radius: 50%; flex: none;
             display: inline-flex; align-items: center; justify-content: center;
         }
-        details.cite .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 16rem; }
+        details.cite .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                             max-width: 17rem; font-weight: 550; }
         details.cite[open] .name { white-space: normal; max-width: none; }
-        details.cite .arrow { color: var(--faint); font-size: .7rem; transition: transform .15s ease; }
+        details.cite .arrow { color: var(--faint); font-size: .7rem; transition: transform .16s var(--ease); }
         details.cite[open] .arrow { transform: rotate(90deg); }
         details.cite .snippet {
-            padding: .1rem .9rem .7rem 2.15rem;
-            font-size: .84rem; color: var(--muted); line-height: 1.5;
+            padding: .2rem 1rem .8rem 2.55rem;
+            font-size: .88rem; color: var(--muted); line-height: 1.6;
         }
         details.cite .path {
-            padding: 0 .9rem .4rem 2.15rem;
-            font-family: var(--mono); font-size: .72rem; color: var(--faint);
+            padding: 0 1rem .45rem 2.55rem;
+            font-family: var(--mono); font-size: .78rem; color: var(--faint);
         }
+
+        /* Goi y sau khi he thong tu choi tra loi. Chi hien o luc do, khong hien
+           tran lan tren man hinh chao - cau hoi goi y chung khong bam vao kho tai lieu
+           thuc te nen hay tao ra cau hoi khong the tra loi. */
+        .followups { margin-top: .85rem; display: flex; flex-direction: column; gap: .45rem; }
+        .followups .label {
+            font-size: .73rem; font-weight: 650; letter-spacing: .05em;
+            text-transform: uppercase; color: var(--faint);
+        }
+        .followups .row-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+        .followups button {
+            font-size: .88rem; font-weight: 450; text-align: left;
+            padding: .38rem .8rem; border-radius: var(--radius-pill);
+            border: 1px solid var(--rule-strong); background: var(--surface);
+            color: var(--fg); max-width: 100%;
+        }
+        .followups button:hover:not(:disabled) {
+            border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink);
+        }
+        .followups button .arrow { color: var(--accent); margin-right: .35rem; }
 
         .meta {
-            margin-top: .6rem; display: flex; gap: .4rem; flex-wrap: wrap;
+            margin-top: .9rem; display: flex; gap: .45rem; flex-wrap: wrap;
             align-items: center; font-size: .8rem;
         }
-        .meta .vote { display: flex; gap: .25rem; margin-left: auto; }
+        .meta .actions { display: flex; gap: .2rem; margin-left: auto; align-items: center; }
+        .stopped-note { color: var(--muted); font-style: italic; }
+        .meta .vote { display: inline-flex; gap: .2rem; }
 
-        /* --------------------------------------------------------- Composer
-           Thứ tự bị đảo so với bản cũ: Ô NHẬP LÊN TRÊN, tuỳ chọn xuống dưới và thu nhỏ.
-           Trước đây hai hộp chọn model/nhóm tài liệu nằm trên cùng, to ngang ô nhập, nên
-           thứ đập vào mắt trước lại là hai thứ 95% người dùng không bao giờ đụng tới. */
-        .composer {
-            background: var(--surface);
-            padding: .2rem clamp(.8rem, 4vw, 2rem) .9rem;
-        }
-        .composer .inner { max-width: 46rem; margin: 0 auto; display: flex; flex-direction: column; gap: .45rem; }
-        .composer .send-row {
-            display: flex; gap: .5rem; align-items: flex-end;
-            background: var(--surface); border: 1px solid var(--rule-strong);
-            border-radius: var(--radius-lg); padding: .35rem .4rem .35rem .9rem;
+        /* ----------------------------------------------------- Composer */
+
+        .composer { background: var(--surface); padding: .4rem clamp(.9rem, 4vw, 2rem) 1rem; }
+        .composer .inner { max-width: 48rem; margin: 0 auto; display: flex;
+                           flex-direction: column; gap: .5rem; }
+        .composer .box {
+            background: var(--sunk);
+            border: 1px solid var(--rule-strong);
+            border-radius: var(--radius-xl);
+            padding: .5rem .5rem .35rem 1.15rem;
             box-shadow: var(--shadow);
-            transition: border-color .15s ease, box-shadow .15s ease;
+            transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
         }
-        .composer .send-row:focus-within { border-color: var(--accent); }
-        .composer .send-row textarea {
-            border: none; background: transparent; box-shadow: none !important; padding: .45rem 0;
-            font-size: .98rem;
+        .composer .box:focus-within {
+            border-color: var(--accent);
+            box-shadow: var(--shadow), 0 0 0 3px var(--accent-soft);
         }
-        .composer textarea { flex: 1; min-height: 2.6rem; max-height: 10rem; resize: none; }
-        .composer #send { border-radius: var(--radius-pill); }
+        .composer .send-row { display: flex; gap: .5rem; align-items: flex-end; }
+        .composer textarea {
+            flex: 1; min-height: 2.5rem; max-height: 12rem; resize: none;
+            border: none; background: transparent; box-shadow: none !important;
+            padding: .48rem 0; font-size: .99rem; line-height: 1.6;
+        }
+        #send {
+            width: 2.6rem; height: 2.6rem; padding: 0; flex: none;
+            border-radius: 50%; font-size: 1.15rem; line-height: 1;
+        }
+        /* Trong luc dang tra loi, nut gui doi thanh nut dung. */
+        #send.stop {
+            background: var(--surface); border-color: var(--rule-strong);
+            color: var(--fg); box-shadow: var(--shadow-sm); font-size: .8rem;
+        }
+        #send.stop:hover:not(:disabled) {
+            border-color: var(--crimson); color: var(--crimson);
+            background: var(--crimson-soft); filter: none;
+        }
 
-        /* Hàng tuỳ chọn: chữ nhỏ, không viền, nằm ngang cùng dòng gợi ý. */
         .composer .controls {
-            display: flex; gap: .8rem; flex-wrap: wrap; align-items: center;
-            font-size: .78rem; color: var(--faint);
+            display: flex; gap: .55rem; flex-wrap: wrap; align-items: center;
+            padding: .15rem .15rem .1rem .1rem; font-size: .82rem; color: var(--faint);
         }
-        .composer .controls .opt { display: flex; align-items: center; gap: .3rem; }
-        .composer .controls select {
-            width: auto; font-size: .78rem; padding: .12rem 1.1rem .12rem .35rem;
-            border-color: transparent; background-color: transparent; color: var(--muted);
+        /* Cac vien thuoc dieu khien: dung CHUNG mot chieu cao, neu khong chung lech
+           nhau vai pixel va nhin rat nghiep du. */
+        .composer .controls .opt,
+        .composer .controls label.inline {
+            display: inline-flex; align-items: center; gap: .35rem;
+            min-height: 2.05rem; box-sizing: border-box;
+            background: var(--surface); border: 1px solid var(--rule);
             border-radius: var(--radius-pill);
         }
-        .composer .controls select:hover { border-color: var(--rule-strong); background-color: var(--surface-2); }
-        .composer .controls label.inline { font-size: .78rem; color: var(--faint); }
-        .composer .controls .grow { flex: 1; }
-        .hint { font-size: .78rem; color: var(--faint); }
+        .composer .controls .opt { padding: 0 .3rem 0 .7rem; }
+        .composer .controls .opt > label { margin: 0; font-size: .82rem; color: var(--faint); }
+        /* The select itself is display:none (custom listbox in app.js); everything the
+           reader sees and clicks is .dd-btn, so the pill styling belongs on it. */
+        .composer .controls .dd { width: auto; }
+        .composer .controls .dd-btn {
+            width: auto; max-width: 11rem; min-height: 1.75rem;
+            font-size: .86rem; font-weight: 550;
+            padding: .1rem .35rem .1rem .35rem; gap: .25rem;
+            border-color: transparent; background: transparent; color: var(--fg);
+            border-radius: var(--radius-pill);
+        }
+        .composer .controls .dd-btn:hover:not(:disabled) {
+            background: var(--surface-2); border-color: transparent; color: var(--fg);
+        }
+        .composer .controls .dd.open > .dd-btn {
+            background: var(--surface-2); border-color: transparent; box-shadow: none;
+        }
+        .composer .controls label.inline {
+            font-size: .82rem; color: var(--muted); padding: 0 .8rem;
+        }
+        .hint { font-size: .79rem; color: var(--faint); text-align: center; line-height: 1.45; }
+        /* An cac o chi danh cho quan tri. Van giu trong DOM de JS doc .value binh thuong. */
+        body.plain-user .admin-only { display: none !important; }
     </style>
 </head>
 <body>
 
-<div class="topbar">
-    <div class="brand"><span class="dot"></span> Trợ lý tài liệu <small>RAG</small></div>
-    <nav>
-        <a href="/" class="active">Hỏi đáp</a>
-        <a href="/admin.html">Quản trị</a>
-    </nav>
-    <div class="spacer"></div>
-    <span class="chip" id="pipeline-chip" title="Model đang dùng để trả lời">—</span>
-    <button class="ghost tiny" id="theme-toggle">Tối</button>
-    <button class="ghost tiny" onclick="promptForKey()">API key</button>
-</div>
-
 <div class="shell">
-    <aside>
-        <div class="head">
-            <span>Hội thoại</span>
-            <button class="tiny" onclick="newConversation()">+ Mới</button>
+    <aside id="sidebar">
+        <div class="side-brand">
+            <span class="dot"></span>
+            <span class="side-brand-name">BSC Assistant</span>
         </div>
-        <div id="conv-list"><div class="empty">Chưa có hội thoại nào.</div></div>
-    </aside>
 
-    <main>
+        <nav class="side-nav">
+            <button class="side-row" onclick="newConversation()">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.5 3.9a1.9 1.9 0 0 1 2.7 2.7L8.4 17.4l-3.9 1.1 1.1-3.9z"/><path d="M14.6 5.8 18.2 9.4"/></svg><span>Cuộc trò chuyện mới</span>
+            </button>
+            <label class="side-row side-search">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"/><path d="M15.5 15.5 20 20"/></svg>
+                <input id="conv-filter" type="search" placeholder="Tìm trong lịch sử"
+                       autocomplete="off" aria-label="Tìm trong lịch sử hỏi đáp">
+            </label>
+            <a class="side-row" href="my.html"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.8a1.8 1.8 0 0 1 1.8-1.8h3.4l1.8 2.2h7.2a1.8 1.8 0 0 1 1.8 1.8v8.2a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8z"/></svg><span>Nhóm của tôi</span></a>
+            <a class="side-row admin-only" href="admin.html"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7.5h16M4 12h16M4 16.5h16"/><circle cx="9" cy="7.5" r="1.9" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="7.5" cy="16.5" r="1.9" fill="currentColor" stroke="none"/></svg><span>Quản trị</span></a>
+        </nav>
+
+        <div id="conv-list"><div class="empty">Chưa có hội thoại nào.</div></div>
+
+        <div class="side-foot">
+            <span class="faint" id="conv-count"></span>
+            <button class="ghost tiny danger" id="clear-all" disabled
+                    title="Xoá toàn bộ lịch sử của bạn">
+                Xoá tất cả
+            </button>
+        </div>
+    </aside>
+    <div id="scrim"></div>
+
+    <main class="welcome">
+        <div class="main-top" data-topbar>
+            <button class="icon" id="menu-btn" title="Lịch sử hỏi đáp"
+                    aria-label="Lịch sử hỏi đáp">☰</button>
+            <div class="spacer"></div>
+            <span class="chip admin-only" id="pipeline-chip"
+                  title="Model đang dùng để trả lời">—</span>
+            <button class="ghost icon" id="theme-toggle" title="Đổi sáng/tối"></button>
+            <button class="ghost tiny" onclick="promptForKey()">API key</button>
+        </div>
+
         <div id="messages"></div>
 
         <div class="composer">
             <div class="inner">
-                <div class="send-row">
-                    <textarea id="input" rows="1" placeholder="Nhập câu hỏi… (Enter để gửi, Shift+Enter để xuống dòng)"></textarea>
-                    <button class="primary" id="send">Gửi</button>
+                <div class="box">
+                    <div class="send-row">
+                        <textarea id="input" rows="1"
+                                  placeholder="Hỏi bất cứ điều gì về tài liệu nội bộ…"></textarea>
+                        <button class="primary" id="send" title="Gửi câu hỏi (Enter)"
+                                aria-label="Gửi câu hỏi">↑</button>
+                    </div>
+                    <div class="controls">
+                        <span class="opt admin-only" id="opt-model">
+                            <label for="provider">Model</label>
+                            <select id="provider" title="Model dùng để trả lời câu hỏi này">
+                                <option value="">mặc định</option>
+                            </select>
+                        </span>
+                        <span class="opt">
+                            <label for="category">Nhóm</label>
+                            <select id="category" title="Chỉ tìm trong một nhóm tài liệu">
+                                <option value="">tất cả tài liệu</option>
+                            </select>
+                        </span>
+                        <label class="inline admin-only" id="opt-cache"
+                               title="Tắt để buộc hệ thống tính lại, không lấy từ cache">
+                            <input type="checkbox" id="use-cache" checked> Dùng cache
+                        </label>
+                    </div>
                 </div>
-                <div class="controls">
-                    <span class="hint grow" id="hint">Câu trả lời luôn kèm nguồn để bạn kiểm chứng.</span>
-                    <span class="opt">
-                        <label for="provider" style="display:inline;margin:0">Model</label>
-                        <select id="provider" title="Model dùng để trả lời câu hỏi này">
-                            <option value="">mặc định hệ thống</option>
-                        </select>
-                    </span>
-                    <span class="opt">
-                        <label for="category" style="display:inline;margin:0">Nhóm tài liệu</label>
-                        <select id="category" title="Chỉ tìm trong một nhóm tài liệu">
-                            <option value="">tất cả</option>
-                        </select>
-                    </span>
-                    <label class="inline" title="Tắt để buộc hệ thống tính lại, không lấy từ cache">
-                        <input type="checkbox" id="use-cache" checked> Dùng cache
-                    </label>
-                </div>
+                <p class="hint" id="hint">Câu trả lời luôn kèm nguồn để bạn kiểm chứng.
+                    Enter để gửi, Shift+Enter để xuống dòng.</p>
             </div>
         </div>
     </main>
@@ -323,40 +551,63 @@
 
 <div id="toasts"></div>
 
-<script src="/app.js"></script>
+<script src="app.js"></script>
 <script>
     let conversationId = null;
     let busy = false;
+    let inflight = null;   // AbortController cua luot hoi dang chay
     let models = [];
+    let convCache = [];
+    let restricted = false;
 
-    /* ------------------------------------------------------------ Khoi tao */
+    /* Server stage ids -> what the reader actually sees. Unknown stages fall back to
+       the server's own Vietnamese detail text, so a new stage still reads sensibly. */
+    const STAGE_LABELS = {
+        received:   'Tiếp nhận câu hỏi',
+        history:    'Đọc lại ngữ cảnh hội thoại',
+        planning:   'Phân tích và làm rõ câu hỏi',
+        retrieving: 'Tìm trong tài liệu nội bộ',
+        reranking:  'Chấm điểm mức liên quan',
+        generating: 'Tổng hợp câu trả lời',
+        cache:      'Lấy lại câu trả lời đã có'
+    };
 
     async function boot() {
-        try {
-            const [settings, cats, convs] = await Promise.all([
-                api('/api/v1/rag/settings'),
-                api('/api/v1/rag/admin/categories').catch(() => ({ categories: [] })),
-                api('/api/v1/rag/conversations?limit=40').catch(() => ({ conversations: [] }))
-            ]);
-            document.getElementById('pipeline-chip').textContent =
-                settings.provider + ' / ' + settings.model;
+        // Nguoi dung thuong khong thay va khong chon model, khong thay chi phi/token.
+        // Server cung da cat nhung so lieu do va bo qua provider/model do client gui.
+        const auth = await loadAuth().catch(() => ({}));
+        restricted = isRestrictedUser(auth);
+        if (restricted) document.body.classList.add('plain-user');
 
-            const catalog = await api('/api/v1/rag/models');
-            models = catalog.providers || [];
-            const sel = document.getElementById('provider');
-            models.filter(p => p.available).forEach(p => {
-                const group = document.createElement('optgroup');
-                group.label = p.provider;
-                p.models.forEach(m => {
-                    const o = document.createElement('option');
-                    o.value = p.provider + '|' + m;
-                    o.textContent = m;
-                    group.appendChild(o);
+        try {
+            const [cats, convs] = await Promise.all([
+                api('/api/v1/rag/categories').catch(() => ({ categories: [] })),
+                api('/api/v1/rag/conversations?limit=60&mine=true').catch(() => ({ conversations: [] }))
+            ]);
+
+            if (!restricted) {
+                api('/api/v1/rag/settings').then(settings => {
+                    document.getElementById('pipeline-chip').textContent =
+                        settings.provider + ' / ' + settings.model;
+                }).catch(() => { /* thieu chip khong lam hong man chat */ });
+
+                const catalog = await api('/api/v1/rag/models').catch(() => ({ providers: [] }));
+                models = catalog.providers || [];
+                const sel = document.getElementById('provider');
+                models.filter(p => p.available).forEach(p => {
+                    const group = document.createElement('optgroup');
+                    group.label = p.provider;
+                    p.models.forEach(m => {
+                        const o = document.createElement('option');
+                        o.value = p.provider + '|' + m;
+                        o.textContent = m;
+                        group.appendChild(o);
+                    });
+                    sel.appendChild(group);
                 });
-                sel.appendChild(group);
-            });
-            if (!models.some(p => p.available)) {
-                toast('Chưa có provider nào được cấu hình API key — hãy đặt biến môi trường trước khi hỏi.', 'warn');
+                if (models.length && !models.some(p => p.available)) {
+                    toast('Chưa có provider nào được cấu hình API key — hãy đặt biến môi trường trước khi hỏi.', 'warn');
+                }
             }
 
             const catSel = document.getElementById('category');
@@ -370,44 +621,116 @@
         } catch (e) {
             console.warn('boot', e);
         } finally {
-            // Dựng SAU khi nạp xong nhóm tài liệu để gợi ý bám theo kho thật; chạy trong
-            // finally để lỗi mạng lúc khởi động không để lại một khung chat trống trơn.
             showWelcome();
             openFromHash();
         }
     }
 
-    /**
-     * Mở thẳng một hội thoại từ địa chỉ: {@code /#c=<id>}.
-     *
-     * Để người dùng gửi được đường dẫn tới đúng câu trả lời cho đồng nghiệp — trước đây
-     * chỉ có cách bảo nhau "vào trang rồi tự tìm trong danh sách bên trái".
-     */
     function openFromHash() {
         const id = (location.hash || '').startsWith('#c=')
             ? decodeURIComponent(location.hash.substring(3)) : '';
-        if (id) openConversation(id).catch(() => toast('Không mở được hội thoại này.', 'warn'));
+        // openConversation() sets the hash itself, so the hashchange it triggers lands back
+        // here. Without this guard every click fetched the conversation twice.
+        if (!id || id === conversationId) return;
+        openConversation(id).catch(() => toast('Không mở được hội thoại này.', 'warn'));
     }
 
     window.addEventListener('hashchange', openFromHash);
 
-    /* -------------------------------------------------------- Hoi thoai */
+    /* ------------------------------------------------------ Lich su hoi dap */
+
+    function refreshConversations() {
+        return api('/api/v1/rag/conversations?limit=60&mine=true')
+            .then(r => renderConversations(r.conversations || []))
+            .catch(() => { /* thieu lich su khong duoc lam hong man chat */ });
+    }
 
     function renderConversations(list) {
+        convCache = list;
+        paintConversations();
+    }
+
+    function paintConversations() {
         const host = document.getElementById('conv-list');
+        const needle = document.getElementById('conv-filter').value.trim().toLowerCase();
+        const list = needle
+            ? convCache.filter(c => (c.title || '').toLowerCase().includes(needle))
+            : convCache;
+
+        document.getElementById('conv-count').textContent =
+            convCache.length ? convCache.length + ' hội thoại' : '';
+        document.getElementById('clear-all').disabled = !convCache.length;
+
+        host.innerHTML = '';
         if (!list.length) {
-            host.innerHTML = '<div class="empty">Chưa có hội thoại nào.</div>';
+            host.innerHTML = '<div class="empty">'
+                + (needle ? 'Không có hội thoại nào khớp.' : 'Chưa có hội thoại nào.') + '</div>';
             return;
         }
-        host.innerHTML = '';
+
+        let group = null;
         list.forEach(c => {
+            const bucket = dayBucket(c.lastActiveAt);
+            if (bucket.key !== group) {
+                group = bucket.key;
+                const h = document.createElement('div');
+                h.className = 'conv-group';
+                h.textContent = bucket.label;
+                host.appendChild(h);
+            }
+
             const el = document.createElement('div');
             el.className = 'conv' + (c.id === conversationId ? ' active' : '');
-            el.innerHTML = '<b>' + escapeHtml(c.title || '(chưa có tiêu đề)') + '</b>'
-                + '<small>' + c.messageCount + ' tin nhắn · ' + fmtDate(c.lastActiveAt) + '</small>';
-            el.onclick = () => openConversation(c.id);
+            el.innerHTML = '<span class="txt"></span>'
+                + '<button class="icon danger del" title="Xoá hội thoại này"'
+                + ' aria-label="Xoá hội thoại">🗑</button>';
+            const label = c.title || '(chưa có tiêu đề)';
+            el.querySelector('.txt').textContent = label;
+            // Chi tiet don vao tooltip: hang chi con mot dong cho gon, nhom ngay o tren
+            // da noi duoc do moi cu.
+            el.title = label + ' — ' + c.messageCount + ' tin nhắn · '
+                + fmtRelative(c.lastActiveAt);
+            el.onclick = () => {
+                document.body.classList.remove('nav-open');
+                openConversation(c.id).catch(() => toast('Không mở được hội thoại này.', 'warn'));
+            };
+            el.querySelector('.del').onclick = (e) => {
+                e.stopPropagation();
+                removeConversation(c);
+            };
             host.appendChild(el);
         });
+    }
+
+    async function removeConversation(c) {
+        const ok = await confirmDialog({
+            title: 'Xoá hội thoại',
+            message: 'Xoá "' + (c.title || 'hội thoại này') + '"? Toàn bộ câu hỏi, câu trả lời '
+                + 'và trích dẫn trong hội thoại này sẽ mất, không lấy lại được.',
+            confirmLabel: 'Xoá hội thoại'
+        });
+        if (!ok) return;
+        try {
+            await api('/api/v1/rag/conversations/' + encodeURIComponent(c.id), { method: 'DELETE' });
+            toast('Đã xoá hội thoại.');
+            if (c.id === conversationId) newConversation();
+            else await refreshConversations();
+        } catch (e) { /* toast da hien o api() */ }
+    }
+
+    async function clearAllConversations() {
+        const ok = await confirmDialog({
+            title: 'Xoá toàn bộ lịch sử',
+            message: 'Xoá tất cả ' + convCache.length + ' hội thoại của bạn? '
+                + 'Thao tác này không thể hoàn tác.',
+            confirmLabel: 'Xoá tất cả'
+        });
+        if (!ok) return;
+        try {
+            const r = await api('/api/v1/rag/conversations', { method: 'DELETE' });
+            toast((r && r.message) || 'Đã xoá lịch sử.');
+            newConversation();
+        } catch (e) { /* toast da hien o api() */ }
     }
 
     async function openConversation(id) {
@@ -415,6 +738,7 @@
         conversationId = id;
         if (location.hash !== '#c=' + id) location.hash = 'c=' + id;
         const host = document.getElementById('messages');
+        document.querySelector('main').classList.remove('welcome');
         host.innerHTML = '';
         (data.messages || []).forEach(m => {
             if (m.role === 'user') {
@@ -422,6 +746,7 @@
             } else {
                 const el = appendBot();
                 el.classList.toggle('abstained', !!m.abstained);
+                el.dataset.raw = m.content || '';
                 el.querySelector('.bubble').innerHTML = renderMarkdown(m.content);
                 renderCitations(el, m.citations || []);
                 renderMeta(el, {
@@ -431,94 +756,87 @@
                 });
             }
         });
-        api('/api/v1/rag/conversations?limit=40').then(r => renderConversations(r.conversations || []));
-        host.scrollTop = host.scrollHeight;
+        paintConversations();
+        refreshConversations();
+        scrollToEnd(true);
     }
 
     function newConversation() {
         conversationId = null;
-        // Bỏ #c=... khỏi địa chỉ, nếu không tải lại trang sẽ nhảy về hội thoại cũ.
         history.replaceState(null, '', location.pathname);
+        document.body.classList.remove('nav-open');
         showWelcome();
-        api('/api/v1/rag/conversations?limit=40').then(r => renderConversations(r.conversations || []));
+        refreshConversations();
+        document.getElementById('input').focus();
     }
 
-    /* --------------------------------------------------------- Màn hình chào */
+    /* ------------------------------------------------------------- Welcome */
 
-    /**
-     * Gợi ý mặc định. Cố tình là câu hỏi ĐẦY ĐỦ chứ không phải từ khoá: người dùng bấm
-     * vào là gửi được ngay, và họ học luôn cách hỏi mà hệ thống trả lời tốt nhất.
-     */
-    const DEFAULT_SUGGESTIONS = [
-        'Nghỉ phép hằng năm được bao nhiêu ngày?',
-        'Quy trình xin nghỉ phép gồm những bước nào?',
-        'Chi phí công tác được thanh toán thế nào?',
-        'Nội quy về giờ làm việc quy định ra sao?'
-    ];
-
-    function showWelcome() {
+    async function showWelcome() {
         const host = document.getElementById('messages');
+        // Khung nhap len giua trang cung loi chao.
+        document.querySelector('main').classList.add('welcome');
         host.innerHTML = '';
         const el = document.createElement('div');
         el.id = 'welcome';
         el.innerHTML =
-            '<div class="mark">✦</div>'
-            + '<h1>Bạn cần tra cứu điều gì?</h1>'
+            '<h1 id="greeting">Xin chào</h1>'
             + '<p class="lede">Hỏi bằng tiếng Việt tự nhiên. Tôi tìm trong tài liệu nội bộ đã được nạp '
-            + 'và trả lời kèm trích dẫn để bạn kiểm chứng.</p>'
-            + '<div class="promises">'
-            + '<span>Luôn kèm nguồn</span>'
-            + '<span>Không có tài liệu thì nói thẳng, không đoán</span>'
-            + '<span>Câu hỏi chung chung sẽ được hỏi lại</span>'
-            + '</div>'
-            + '<p class="suggest-label">Thử một câu hỏi</p>'
-            + '<div class="suggests"></div>';
-
-        const box = el.querySelector('.suggests');
-        suggestions().forEach(q => {
-            const b = document.createElement('button');
-            b.innerHTML = '<i>→</i><span></span>';
-            b.querySelector('span').textContent = q;
-            b.onclick = () => {
-                document.getElementById('input').value = q;
-                send();
-            };
-            box.appendChild(b);
-        });
+            + 'và trả lời kèm trích dẫn để bạn kiểm chứng.</p>';
         host.appendChild(el);
+
+        // Greeting by name when signed in with a company account; silent otherwise.
+        try {
+            const auth = await loadAuth();
+            const name = greetingName(auth.displayName);
+            if (auth.authenticated && name) {
+                const h = document.getElementById('greeting');
+                if (h) h.textContent = 'Xin chào, ' + name;
+            }
+        } catch (e) { /* khong co ten thi de nguyen loi chao chung */ }
     }
 
     /**
-     * Luôn trả về ĐỦ 4 gợi ý: hai câu bám theo nhóm tài liệu thật (nếu có) rồi bù bằng
-     * câu mẫu. Không lấy toàn bộ theo nhóm — kho mới nạp thường chỉ có một nhóm, và một
-     * ô gợi ý lẻ loi giữa màn hình còn khó coi hơn là không có gợi ý nào.
+     * Ten de chao. displayName thuong la UPN ("quangbd@bsc.com.vn") nen phai bo ten mien,
+     * neu khong tieu de chao dai ca dong va nhin rat tho.
      */
-    function suggestions() {
-        const cats = Array.from(document.getElementById('category').options)
-            .filter(o => o.value)
-            .map(o => o.value);
-        const fromCats = cats.slice(0, 2).map(c => 'Tài liệu nhóm "' + c + '" quy định những gì?');
-        return [...fromCats, ...DEFAULT_SUGGESTIONS].slice(0, 4);
+    function greetingName(displayName) {
+        const raw = (displayName || '').trim();
+        if (!raw) return '';
+        const local = raw.includes('@') ? raw.split('@')[0] : raw;
+        // Ho ten day du: lay ten rieng (tieng Viet dat sau cung).
+        if (/\s/.test(local)) return local.split(/\s+/).pop();
+        return local;
     }
 
     function clearWelcome() {
         const el = document.getElementById('welcome');
         if (el) el.remove();
+        // Da co tin nhan: khung nhap tro ve day trang.
+        document.querySelector('main').classList.remove('welcome');
     }
 
-    /* ---------------------------------------------------------- Render */
+    /* -------------------------------------------------------- Tin nhan */
 
     function appendUser(text) {
         const host = document.getElementById('messages');
         clearWelcome();
         const el = document.createElement('div');
         el.className = 'msg user';
-        el.innerHTML = '<div class="avatar">B</div><div class="content">'
+        el.innerHTML = '<div class="avatar" title="Bạn">' + escapeHtml(userInitial())
+            + '</div><div class="content">'
             + '<div class="bubble">'
             + escapeHtml(text).replace(/\n/g, '<br>') + '</div></div>';
         host.appendChild(el);
-        host.scrollTop = host.scrollHeight;
+        scrollToEnd(true);
         return el;
+    }
+
+    /** Chu cai dau cua ten nguoi dung, de trong avatar cua tin nhan minh gui. */
+    function userInitial() {
+        const name = (authState && authState.displayName) || '';
+        const last = name.trim().split(/\s+/).pop() || '';
+        return (last[0] || 'B').toUpperCase();
     }
 
     function appendBot() {
@@ -527,26 +845,89 @@
         const el = document.createElement('div');
         el.className = 'msg bot';
         el.innerHTML = '<div class="avatar">✦</div><div class="content">'
-            + '<div class="bubble"></div></div>';
+            + '<div class="think-slot"></div><div class="bubble"></div></div>';
         host.appendChild(el);
-        host.scrollTop = host.scrollHeight;
+        scrollToEnd(true);
         return el;
     }
 
-    function setStatus(el, text) {
-        let line = el.querySelector('.status-line');
-        if (!line) {
-            line = document.createElement('div');
-            line.className = 'status-line';
-            el.querySelector('.bubble').appendChild(line);
-        }
-        line.innerHTML = '<span class="spinner"></span><span></span>';
-        line.querySelector('span:last-child').textContent = text;
+    /* Stick to the bottom only while the reader is already there. Scrolling up to re-read
+       something must not be undone by the next streamed token. */
+    let stickToBottom = true;
+    document.getElementById('messages').addEventListener('scroll', () => {
+        const host = document.getElementById('messages');
+        stickToBottom = host.scrollHeight - host.scrollTop - host.clientHeight < 80;
+    });
+
+    function scrollToEnd(force) {
+        const host = document.getElementById('messages');
+        if (force) stickToBottom = true;
+        if (stickToBottom) host.scrollTop = host.scrollHeight;
     }
 
-    function clearStatus(el) {
-        const line = el.querySelector('.status-line');
-        if (line) line.remove();
+    /**
+     * Bang trang thai "dang suy nghi": ba dau cham nhay, ten buoc dang chay chay
+     * hieu ung sang, va cac buoc da xong xep thanh dong thoi gian co dau tich.
+     * Khi cau tra loi bat dau chay chu thi thu gon lai thanh mot dong tom tat.
+     */
+    function createThinker(el) {
+        const slot = el.querySelector('.think-slot');
+        const box = document.createElement('div');
+        box.className = 'thinking';
+        box.innerHTML = '<div class="think-head">'
+            + '<span class="dots"><i></i><i></i><i></i></span>'
+            + '<span class="think-now shimmer"></span>'
+            + '<span class="think-time tabular"></span></div>'
+            + '<ol class="think-steps"></ol>';
+        slot.innerHTML = '';
+        slot.appendChild(box);
+
+        const started = Date.now();
+        const nowEl = box.querySelector('.think-now');
+        const timeEl = box.querySelector('.think-time');
+        const list = box.querySelector('.think-steps');
+        let steps = 0;
+        const tick = setInterval(() => { timeEl.textContent = fmtSeconds(Date.now() - started); }, 100);
+
+        const settlePrevious = () => {
+            const prev = list.querySelector('li.now');
+            if (prev) {
+                prev.className = 'done';
+                prev.querySelector('.mark').textContent = '✓';
+            }
+        };
+
+        return {
+            step(stage, detail) {
+                const label = STAGE_LABELS[stage] || detail || 'Đang xử lý';
+                settlePrevious();
+                const li = document.createElement('li');
+                li.className = 'now';
+                li.innerHTML = '<span class="mark"><span class="ring"></span></span>'
+                    + '<span class="what"></span>';
+                li.querySelector('.what').textContent = label;
+                if (detail && detail !== label) li.title = detail;
+                list.appendChild(li);
+                steps++;
+                nowEl.textContent = label + '…';
+                scrollToEnd();
+            },
+            /** Thu gon thanh dong tom tat co the mo lai. */
+            collapse() {
+                clearInterval(tick);
+                settlePrevious();
+                if (!steps) { box.remove(); return; }
+                const elapsed = Date.now() - started;
+                const d = document.createElement('details');
+                d.className = 'thought';
+                d.innerHTML = '<summary><span class="tmark">✦</span><span>Đã xử lý '
+                    + steps + ' bước trong ' + fmtSeconds(elapsed)
+                    + '</span><span class="arrow">▸</span></summary>';
+                d.appendChild(list);
+                box.replaceWith(d);
+            },
+            remove() { clearInterval(tick); box.remove(); }
+        };
     }
 
     function renderCitations(el, citations) {
@@ -573,13 +954,59 @@
         el.querySelector('.bubble').after(box);
     }
 
+    /**
+     * Ve cac cau hoi goi y khi he thong tu choi tra loi.
+     *
+     * Khi cau hoi con mo ho, goi y den tu QueryPlanner (doan xem nguoi dung muon hoi gi).
+     * Khi khong tim thay trong tai lieu, goi y la chu de CO THAT trong kho, lay tu heading
+     * cua chinh cac doan da truy xuat - nen bam vao la tim ra, khac han cau hoi goi y cung
+     * nhac o man hinh chao truoc day.
+     */
+    function renderFollowups(el, list) {
+        el.querySelectorAll('.followups').forEach(n => n.remove());
+        if (!list || !list.length) return;
+
+        const box = document.createElement('div');
+        box.className = 'followups';
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = 'Có thể bạn muốn hỏi';
+        const row = document.createElement('div');
+        row.className = 'row-chips';
+
+        list.slice(0, 3).forEach(q => {
+            const text = String(q || '').trim();
+            if (!text) return;
+            const b = document.createElement('button');
+            b.innerHTML = '<span class="arrow">→</span><span></span>';
+            b.querySelector('span:last-child').textContent = text;
+            b.title = text;
+            b.onclick = () => {
+                if (busy) return;
+                document.getElementById('input').value = text;
+                send();
+            };
+            row.appendChild(b);
+        });
+        if (!row.children.length) return;
+
+        box.appendChild(label);
+        box.appendChild(row);
+        el.querySelector('.content').appendChild(box);
+    }
+
     function renderMeta(el, info) {
         el.querySelectorAll('.meta').forEach(n => n.remove());
+        // .meta luon la khoi cuoi cung: goi y ve truoc no.
         const meta = document.createElement('div');
         meta.className = 'meta';
 
         const chips = [];
-        if (info.cacheHit) {
+        if (info.stopped || info.cacheHit === 'STOPPED') {
+            chips.push('<span class="chip ochre" title="Bạn đã dừng khi câu trả lời chưa xong">'
+                + 'đã dừng</span>');
+        }
+        if (info.cacheHit && info.cacheHit !== 'STOPPED') {
             chips.push('<span class="chip good" title="Trả lời lấy từ cache nên rất nhanh và không tốn tiền">cache ' + info.cacheHit.toLowerCase() + '</span>');
         }
         if (info.abstained && info.abstainReason === 'CLARIFICATION_NEEDED') {
@@ -597,19 +1024,55 @@
         if (u.costUsd) chips.push('<span class="chip ochre mono" title="Chi phí ước tính">' + fmtMoney(u.costUsd) + '</span>');
         meta.innerHTML = chips.join('');
 
-        if (info.messageId) {
-            const vote = document.createElement('div');
-            vote.className = 'vote';
-            vote.innerHTML = '<button class="tiny ghost" title="Câu trả lời hữu ích">👍</button>'
-                + '<button class="tiny ghost" title="Câu trả lời sai hoặc không hữu ích">👎</button>';
-            const [up, down] = vote.querySelectorAll('button');
-            up.onclick = () => sendFeedback(info.messageId, 1, vote);
-            down.onclick = () => {
-                const comment = prompt('Câu trả lời sai ở đâu? (không bắt buộc)') || null;
-                sendFeedback(info.messageId, -1, vote, comment);
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        // Khong co gi de copy thi khong hien nut (vi du bi dung truoc khi co chu nao).
+        if (!info.noCopy) {
+            const copy = document.createElement('button');
+            copy.className = 'icon';
+            copy.title = 'Sao chép câu trả lời';
+            copy.setAttribute('aria-label', 'Sao chép câu trả lời');
+            copy.textContent = '⧉';
+            copy.onclick = async () => {
+                const text = el.dataset.raw || el.querySelector('.bubble').innerText;
+                if (await copyText(text)) {
+                    copy.textContent = '✓';
+                    setTimeout(() => { copy.textContent = '⧉'; }, 1400);
+                }
             };
-            meta.appendChild(vote);
+            actions.appendChild(copy);
         }
+
+        if (info.messageId) {
+            // Own container: ghi nhan phan hoi thay the RIENG hai nut vote, khong xoa nut copy.
+            const vote = document.createElement('span');
+            vote.className = 'vote';
+            const up = document.createElement('button');
+            up.className = 'icon';
+            up.title = 'Câu trả lời hữu ích';
+            up.textContent = '👍';
+            const down = document.createElement('button');
+            down.className = 'icon';
+            down.title = 'Câu trả lời sai hoặc không hữu ích';
+            down.textContent = '👎';
+            up.onclick = () => sendFeedback(info.messageId, 1, vote);
+            down.onclick = async () => {
+                const comment = await promptDialog({
+                    title: 'Câu trả lời này sai ở đâu?',
+                    message: 'Không bắt buộc — nhưng một dòng mô tả giúp người quản trị '
+                        + 'biết phải bổ sung tài liệu nào.',
+                    placeholder: 'ví dụ: trọn số ngày nghỉ sai, văn bản đã hết hiệu lực…',
+                    confirmLabel: 'Gửi phản hồi',
+                    cancelLabel: 'Gửi không kèm ghi chú'
+                });
+                sendFeedback(info.messageId, -1, vote, comment || null);
+            };
+            vote.appendChild(up);
+            vote.appendChild(down);
+            actions.appendChild(vote);
+        }
+        meta.appendChild(actions);
         el.querySelector('.content').appendChild(meta);
     }
 
@@ -620,10 +1083,29 @@
                 body: JSON.stringify({ messageId, conversationId, rating, comment: comment || null })
             });
             host.innerHTML = '<span class="chip good">đã ghi nhận</span>';
-        } catch (e) { /* toast da hien */ }
+        } catch (e) { /* toast already shown */ }
     }
 
-    /* ------------------------------------------------------------ Gui */
+    /* ------------------------------------------------------------- Gui hoi */
+
+    /** Bam nut khi dang tra loi = dung; con lai = gui. */
+    function sendOrStop() {
+        if (busy) stopAnswering();
+        else send();
+    }
+
+    function stopAnswering() {
+        if (inflight) inflight.abort();
+    }
+
+    function setBusy(on) {
+        busy = on;
+        const btn = document.getElementById('send');
+        btn.classList.toggle('stop', on);
+        btn.textContent = on ? '■' : '↑';
+        btn.title = on ? 'Dừng trả lời (Esc)' : 'Gửi câu hỏi (Enter)';
+        btn.setAttribute('aria-label', btn.title);
+    }
 
     async function send() {
         if (busy) return;
@@ -631,14 +1113,15 @@
         const question = input.value.trim();
         if (!question) return;
 
-        busy = true;
-        document.getElementById('send').disabled = true;
+        setBusy(true);
+        inflight = new AbortController();
         input.value = '';
         input.style.height = 'auto';
         appendUser(question);
 
         const bot = appendBot();
-        setStatus(bot, 'Đang chuẩn bị…');
+        const thinker = createThinker(bot);
+        thinker.step('received');
 
         const sel = document.getElementById('provider').value;
         const [provider, model] = sel ? sel.split('|') : [null, null];
@@ -651,13 +1134,16 @@
         };
 
         let answer = '';
+        let streaming = false;
         try {
-            const response = await fetch('/api/v1/rag/chat/stream', {
+            const response = await fetch(url('/api/v1/rag/chat/stream'), {
                 method: 'POST',
+                credentials: 'same-origin',
+                signal: inflight.signal,
                 headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify(payload)
             });
-            if (response.status === 401) { promptForKey(); throw new Error('401'); }
+            if (response.status === 401) { notifyMissingKey(); throw new Error('401'); }
             if (!response.ok) throw new Error('HTTP ' + response.status);
 
             const reader = response.body.getReader();
@@ -669,7 +1155,6 @@
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
 
-                // SSE: cac frame cach nhau boi dong trong
                 let split;
                 while ((split = buffer.indexOf('\n\n')) >= 0) {
                     const frame = buffer.slice(0, split);
@@ -678,14 +1163,19 @@
                 }
             }
         } catch (e) {
-            clearStatus(bot);
-            if (!answer) {
-                bot.querySelector('.bubble').innerHTML =
-                    '<p class="muted">Không nhận được câu trả lời. ' + escapeHtml(e.message) + '</p>';
+            // Nguoi dung bam dung: giu lai phan da doc duoc, khong bao loi.
+            if (e.name === 'AbortError') {
+                markStopped(bot, thinker, answer);
+            } else {
+                thinker.remove();
+                if (!answer) {
+                    bot.querySelector('.bubble').innerHTML =
+                        '<p class="muted">Không nhận được câu trả lời. ' + escapeHtml(e.message) + '</p>';
+                }
             }
         } finally {
-            busy = false;
-            document.getElementById('send').disabled = false;
+            setBusy(false);
+            inflight = null;
             input.focus();
         }
 
@@ -701,22 +1191,27 @@
             try { data = JSON.parse(dataLines.join('\n')); } catch (e) { return; }
 
             if (event === 'status') {
-                setStatus(bot, data.detail || data.stage);
+                thinker.step(data.stage, data.detail);
             } else if (event === 'citations') {
                 renderCitations(bot, data);
             } else if (event === 'token') {
-                clearStatus(bot);
+                if (!streaming) { streaming = true; thinker.collapse(); }
                 answer += data.t;
+                bot.dataset.raw = answer;
                 bot.querySelector('.bubble').innerHTML = renderMarkdown(answer);
-                document.getElementById('messages').scrollTop = 1e9;
+                scrollToEnd();
             } else if (event === 'done') {
-                clearStatus(bot);
+                if (!streaming) { streaming = true; thinker.collapse(); }
                 conversationId = data.conversationId || conversationId;
                 const clarifying = data.abstained && data.abstainReason === 'CLARIFICATION_NEEDED';
                 bot.classList.toggle('clarifying', clarifying);
                 bot.classList.toggle('abstained', !!data.abstained && !clarifying);
-                if (data.answer) bot.querySelector('.bubble').innerHTML = renderMarkdown(data.answer);
+                if (data.answer) {
+                    bot.dataset.raw = data.answer;
+                    bot.querySelector('.bubble').innerHTML = renderMarkdown(data.answer);
+                }
                 renderCitations(bot, data.citations || []);
+                renderFollowups(bot, data.suggestions);
                 renderMeta(bot, data);
                 if (data.debug) {
                     const d = data.debug;
@@ -727,26 +1222,60 @@
                         + (d.reranker ? ' (rerank ' + d.reranker
                             + (d.rerankReliable ? '' : ', KHÔNG đáng tin') + ')' : '');
                 }
-                api('/api/v1/rag/conversations?limit=40')
-                    .then(r => renderConversations(r.conversations || []));
+                refreshConversations();
             } else if (event === 'error') {
-                clearStatus(bot);
+                thinker.remove();
                 bot.querySelector('.bubble').innerHTML =
                     '<p class="muted">' + escapeHtml(data.error) + '</p>';
             }
         }
     }
 
-    /* ---------------------------------------------------------- Su kien */
+    /**
+     * Danh dau mot cau tra loi bi dung giua duong. Server luu lai dung phan nguoi dung
+     * da doc (cache_hit='STOPPED') nen mo lai hoi thoai se thay khop voi man hinh nay.
+     */
+    function markStopped(bot, thinker, answer) {
+        if (answer) thinker.collapse();
+        else thinker.remove();
 
-    document.getElementById('send').onclick = send;
+        const bubble = bot.querySelector('.bubble');
+        if (!answer) {
+            bubble.innerHTML = '<p class="stopped-note">Đã dừng trước khi có câu trả lời.</p>';
+        } else {
+            const note = document.createElement('p');
+            note.className = 'stopped-note';
+            note.textContent = '⏹ Bạn đã dừng ở đây.';
+            bubble.appendChild(note);
+        }
+        renderMeta(bot, { stopped: true, noCopy: !answer });
+        refreshConversations();
+    }
+
+    /* --------------------------------------------------------------- Nut */
+
+    document.getElementById('send').onclick = sendOrStop;
+    document.getElementById('clear-all').onclick = clearAllConversations;
+    document.getElementById('conv-filter').oninput = paintConversations;
+    document.getElementById('menu-btn').onclick =
+        () => document.body.classList.toggle('nav-open');
+    document.getElementById('scrim').onclick =
+        () => document.body.classList.remove('nav-open');
+
     const input = document.getElementById('input');
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
+
+    // Esc dung tra loi, nhung khong dung khi dang co hop thoai mo (Esc dong hop thoai).
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && busy && !document.querySelector('.modal-backdrop')) {
+            stopAnswering();
+        }
+    });
     input.addEventListener('input', () => {
         input.style.height = 'auto';
-        input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+        input.style.height = Math.min(input.scrollHeight, 192) + 'px';
     });
 
     boot();

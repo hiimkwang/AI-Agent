@@ -4,6 +4,7 @@ import com.ai.aiagent.platform.PlatformModels.BotDef;
 import com.ai.aiagent.platform.PlatformModels.ChannelBinding;
 import com.ai.aiagent.platform.PlatformModels.CollectionDef;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -14,22 +15,10 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
-/**
- * Cau hinh nen tang nhieu bot, giu san trong bo nho.
- *
- * Cac bang V3 rat nho (hang chuc dong) nhung duoc doc o MOI tin nhan va MOI cau hoi -
- * doc DB moi lan la lang phi. Ban chup duoc lam moi khi co thay doi, va dinh ky moi
- * phut de nhieu ban chay cung dong bo voi nhau.
- *
- * KHONG cache theo nguoi dung o day: thanh vien nhom Entra da co cache rieng trong
- * {@code EntraScopeService}. Gop hai vong doi cache lai se sinh ra truong hop "doi quyen
- * roi ma cho nay da moi, cho kia con cu".
- */
 @Service
 @Slf4j
 public class PlatformService {
 
-    /** Anh chup nhat quan tai mot thoi diem. Bat bien nen doc duoc tu nhieu luong. */
     public record Snapshot(
             List<CollectionDef> collections,
             List<BotDef> bots,
@@ -62,12 +51,6 @@ public class PlatformService {
         return snapshot;
     }
 
-    /**
-     * Lam moi dinh ky.
-     *
-     * Can cho trien khai nhieu ban chay: mot quan tri vien doi cau hinh o ban A thi ban B
-     * phai thay trong vong mot phut, chu khong doi den lan khoi dong lai.
-     */
     @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
     public void refreshScheduled() {
         refreshQuietly();
@@ -84,22 +67,43 @@ public class PlatformService {
         try {
             refresh();
         } catch (Exception e) {
-            // Luc khoi dong, Flyway co the chua chay xong hoac DB chua san sang. Giu ban
-            // chup rong va thu lai o lan lam moi sau - khong duoc lam chet ung dung.
-            log.warn("Chua nap duoc cau hinh nen tang ({}). Se thu lai sau 1 phut.",
+            log.warn("Could not load the platform configuration ({}). Retrying in one minute.",
                     e.getMessage());
         }
     }
 
-    // ============================================================ Truy van quyen
-
     /**
-     * Cac collection ma mot nguoi doc duoc, theo nhom Entra cua ho.
+     * Declare a collection for {@code slug} unless one already exists.
      *
-     * MAC DINH TU CHOI: collection chua gan nhom nao thi khong ai doc duoc (tru ADMIN).
-     * Day la chu y - mot collection vua tao ma mac dinh ai cung doc duoc la kieu mac dinh
-     * sai o cho ton kem nhat.
+     * <p>{@code rag_collections.slug} IS the {@code category} column, but nothing in the database
+     * enforces that a category has a matching collection row. A folder ingest happily writes
+     * categories nobody declared, and the documents then land in a state where only an admin can
+     * read them - silently, because retrieval matches the category against the caller's collection
+     * slugs and an undeclared category matches none.
+     *
+     * <p>The new collection is created with an <strong>empty ACL, which means closed</strong>: this
+     * only ends the orphan state, it grants nobody access. Someone still has to pick the Entra
+     * groups that may read it.
+     *
+     * @return true when a collection was actually created
      */
+    public boolean ensureCollection(String slug, String createdBy) {
+        if (slug == null || slug.isBlank()) return false;
+        String clean = slug.trim();
+        if (snapshot.collection(clean).isPresent()) return false;
+        try {
+            repository.createCollection(clean, clean, "Tự khai khi nạp tài liệu", false, createdBy);
+            refresh();
+            log.info("Declared collection '{}' for an otherwise orphaned category (ACL empty, "
+                    + "so it stays closed until someone grants read access).", clean);
+            return true;
+        } catch (DuplicateKeyException e) {
+            // Two ingest workers hit the same new folder at once; the other one won.
+            refresh();
+            return false;
+        }
+    }
+
     public Set<String> readableSlugs(Set<String> entraGroups) {
         Set<String> out = new LinkedHashSet<>();
         if (entraGroups == null || entraGroups.isEmpty()) return out;
@@ -111,7 +115,6 @@ public class PlatformService {
         return out;
     }
 
-    /** Cac collection duoc phep tra loi trong channel Teams. */
     public Set<String> channelAllowedSlugs() {
         Set<String> out = new LinkedHashSet<>();
         for (CollectionDef c : snapshot.collections()) {
@@ -120,23 +123,30 @@ public class PlatformService {
         return out;
     }
 
-    /** True khi chua ai cau hinh ACL cho collection nao - dung de canh bao tren giao dien. */
+    /** Documents nobody but an admin can read, because they carry no category at all. */
+    public List<String> uncategorizedDocuments() {
+        return repository.uncategorizedDocuments();
+    }
+
+    /** Categories on documents that no collection declares - same invisibility, different cause. */
+    public List<String> orphanCategories() {
+        return repository.orphanCategories();
+    }
+
     public boolean hasNoAcl() {
         return snapshot.collections().stream().allMatch(c -> c.aclGroups().isEmpty());
     }
 
-    // ============================================================ Dinh tuyen bot
+    public Optional<BotDef> resolveBot(String teamsAppId, String teamAadGroupId, String channelId) {
+        return resolveBot(teamsAppId, teamAadGroupId, channelId, Set.of(), null);
+    }
 
     /**
-     * Tim bot phuc vu mot cuoc tro chuyen, theo thu tu uu tien:
-     *
-     *   1. {@code teamsAppId} - moi bot mot Azure Bot rieng (cach 2)
-     *   2. rang buoc channel cu the, roi rang buoc ca team (cach 1)
-     *   3. bot mac dinh
-     *
-     * Tra ve rong khi chua co bot nao dang hoat dong.
+     * @param askerGroups     nhóm Entra của người hỏi; để rỗng thì không định tuyến theo người
+     * @param askerObjectId   objectId của người hỏi
      */
-    public Optional<BotDef> resolveBot(String teamsAppId, String teamAadGroupId, String channelId) {
+    public Optional<BotDef> resolveBot(String teamsAppId, String teamAadGroupId, String channelId,
+                                       Set<String> askerGroups, String askerObjectId) {
         Snapshot current = snapshot;
 
         if (teamsAppId != null && !teamsAppId.isBlank()) {
@@ -151,7 +161,6 @@ public class PlatformService {
         if (teamAadGroupId != null) {
             Optional<ChannelBinding> binding = current.bindings().stream()
                     .filter(b -> b.matches(teamAadGroupId, channelId))
-                    // Rang buoc den dung channel thang rang buoc ca team
                     .max(Comparator.comparingInt(ChannelBinding::specificity));
             if (binding.isPresent()) {
                 Optional<BotDef> bound = current.botById(binding.get().botId())
@@ -160,6 +169,9 @@ public class PlatformService {
             }
         }
 
+        Optional<BotDef> byAudience = botForAsker(current, askerGroups, askerObjectId);
+        if (byAudience.isPresent()) return byAudience;
+
         return current.bots().stream()
                 .filter(BotDef::isActive)
                 .filter(BotDef::isDefault)
@@ -167,10 +179,32 @@ public class PlatformService {
     }
 
     /**
-     * {@code activity.recipient.id} cua Teams co dang {@code 28:<app-id>}, con
-     * {@code teams_app_id} luu tran. So sanh phai bo tien to, neu khong dinh tuyen theo
-     * cach 2 se khong bao gio khop - va bieu hien la "moi bot deu tra loi giong nhau".
+     * Chọn trợ lý theo đối tượng sử dụng của chính người hỏi — cách để mỗi phòng có một trợ lý
+     * riêng trong chat riêng mà không phải tạo Azure Bot mới cho từng phòng.
+     *
+     * <p>Chỉ xét bot ĐÃ khai đối tượng: đối tượng rỗng nghĩa là "ai cũng dùng được", nếu coi đó
+     * là khớp thì mọi bot đều khớp mọi người và việc định tuyến thành ngẫu nhiên.
+     *
+     * <p>Người ở hai phòng sẽ khớp nhiều bot, nên thứ tự phải xác định được, không phụ thuộc thứ
+     * tự trong danh sách: khớp theo <em>người</em> thắng khớp theo <em>nhóm</em>; sau đó bot có
+     * đối tượng hẹp hơn thắng; hoà thì lấy slug nhỏ hơn.
      */
+    static Optional<BotDef> botForAsker(Snapshot current, Set<String> askerGroups,
+                                        String askerObjectId) {
+        Set<String> groups = askerGroups == null ? Set.of() : askerGroups;
+        if (groups.isEmpty() && askerObjectId == null) return Optional.empty();
+
+        return current.bots().stream()
+                .filter(BotDef::isActive)
+                .filter(b -> !b.audienceGroups().isEmpty() || !b.audienceUsers().isEmpty())
+                .filter(b -> b.usableBy(groups, askerObjectId))
+                .min(Comparator
+                        .comparingInt((BotDef b) -> askerObjectId != null
+                                && b.audienceUsers().contains(askerObjectId) ? 0 : 1)
+                        .thenComparingInt(b -> b.audienceGroups().size() + b.audienceUsers().size())
+                        .thenComparing(BotDef::slug));
+    }
+
     static boolean matchesAppId(String configured, String recipientId) {
         String a = configured.strip().toLowerCase(Locale.ROOT);
         String b = recipientId.strip().toLowerCase(Locale.ROOT);

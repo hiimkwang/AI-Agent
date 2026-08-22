@@ -24,11 +24,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/**
- * Lop nay quyet dinh tin nhan Teams doc duoc tai lieu nao. Rui ro lon nhat khong phai
- * "tu choi nham" ma la "tra loi trong channel bang quyen ca nhan cua nguoi hoi" - cau
- * tra loi hien cho ca channel trong khi bot van lam dung ACL cua nguoi hoi.
- */
 class BotAccessResolverTest {
 
     private static final String OID = "11111111-1111-1111-1111-111111111111";
@@ -49,9 +44,7 @@ class BotAccessResolverTest {
         ObjectProvider<EntraScopeService> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(entra);
 
-        // Mac dinh: mot bot doc duoc ca hai tap, khong gioi han doi tuong.
         botServes("nhan-su", "noi-quy-chung");
-        // Mac dinh: khong tap nao duoc tra loi trong channel.
         when(platform.channelAllowedSlugs()).thenReturn(Set.of());
         when(platform.snapshot()).thenReturn(new PlatformService.Snapshot(
                 List.of(collection("nhan-su"), collection("noi-quy-chung")),
@@ -65,12 +58,12 @@ class BotAccessResolverTest {
     }
 
     private void botServes(String... slugs) {
-        when(platform.resolveBot(any(), any(), any())).thenReturn(Optional.of(bot(Set.of(slugs),
+        when(platform.resolveBot(any(), any(), any(), any(), any())).thenReturn(Optional.of(bot(Set.of(slugs),
                 Set.of())));
     }
 
     private void botAudience(Set<String> groups) {
-        when(platform.resolveBot(any(), any(), any()))
+        when(platform.resolveBot(any(), any(), any(), any(), any()))
                 .thenReturn(Optional.of(bot(Set.of("nhan-su", "noi-quy-chung"), groups)));
     }
 
@@ -105,8 +98,6 @@ class BotAccessResolverTest {
                 "chan-1", "https://smba.trafficmanager.net/", "28:bot", "vi-VN", List.of());
     }
 
-    // ============================================================ Chat rieng
-
     @Test
     @DisplayName("Chat rieng: pham vi = giao cua tap cua bot va quyen cua nguoi hoi")
     void personalIntersectsBotAndUser() {
@@ -116,7 +107,6 @@ class BotAccessResolverTest {
         BotAccessResolver.Resolution r = resolver.resolve(personal());
 
         assertTrue(r.allowed());
-        // ke-toan bi loai vi bot khong phuc vu tap do
         assertEquals(Set.of("nhan-su"), r.scope().departments());
         assertEquals("chung", r.bot().slug());
     }
@@ -136,15 +126,13 @@ class BotAccessResolverTest {
     @Test
     @DisplayName("Chua cau hinh bot nao => tu choi thay vi nem loi")
     void noBotConfiguredIsDenied() {
-        when(platform.resolveBot(any(), any(), any())).thenReturn(Optional.empty());
+        when(platform.resolveBot(any(), any(), any(), any(), any())).thenReturn(Optional.empty());
         userReads("nhan-su");
 
         BotAccessResolver.Resolution r = resolver.resolve(personal());
         assertFalse(r.allowed());
         assertNotNull(r.denial());
     }
-
-    // ============================================================ Doi tuong su dung
 
     @Test
     @DisplayName("Ngoai doi tuong su dung => tu choi ngay, khong tra cuu gi ca")
@@ -157,10 +145,6 @@ class BotAccessResolverTest {
         assertTrue(r.denial().contains("nhóm được sử dụng"), r.denial());
     }
 
-    /**
-     * Doi tuong RONG = MO, khac han ACL collection (rong = dong). Cam dung bot khong bao
-     * ve du lieu - du lieu duoc bao ve boi ACL collection.
-     */
     @Test
     @DisplayName("Doi tuong su dung de rong nghia la mo cho moi nguoi da xac thuc")
     void emptyAudienceMeansOpen() {
@@ -169,8 +153,6 @@ class BotAccessResolverTest {
 
         assertTrue(resolver.resolve(personal()).allowed());
     }
-
-    // ============================================================ Channel
 
     @Test
     @DisplayName("Channel: chua tap nao bat channel_allowed => tu choi va huong dan nhan rieng")
@@ -196,13 +178,10 @@ class BotAccessResolverTest {
                 "nhan-su khong duoc tra loi cong khai du nguoi hoi co quyen doc");
     }
 
-    /**
-     * Chi thu hep danh sach tap la CHUA DU. {@code HybridRetriever} loc
-     * {@code allowed_roles} bang {@code isAdmin() ? Set.of() : roles()}, nen ADMIN bo qua
-     * ACL muc tai lieu va se keo tai lieu han che ra cho ca kenh.
-     */
     @Test
     @DisplayName("Channel: ADMIN bi ha xuong USER")
+    // Narrowing the collection list is not enough: HybridRetriever skips the
+    // allowed_roles filter for admins.
     void channelStripsAdminRole() {
         when(platform.channelAllowedSlugs()).thenReturn(Set.of("noi-quy-chung"));
         userIsAdmin();
@@ -224,8 +203,6 @@ class BotAccessResolverTest {
         assertTrue(r.allowed());
         assertTrue(r.scope().isAdmin());
     }
-
-    // ============================================================ Chua dinh danh
 
     @Test
     @DisplayName("Khong co aadObjectId va chua khai unidentified-departments => tu choi")
@@ -260,11 +237,19 @@ class BotAccessResolverTest {
         assertEquals(Set.of("noi-quy-chung"), r.scope().departments());
     }
 
-    // ============================================================ Loi chao
-
     @Test
     @DisplayName("Loi chao lay theo bot phuc vu cuoc tro chuyen, khong phai chuoi chung")
     void greetingComesFromBot() {
-        assertEquals(Optional.of("Xin chào"), resolver.greetingFor(personal()));
+        assertEquals(Optional.of("Xin chào"),
+                resolver.botForGreeting(personal()).map(BotDef::greeting));
+    }
+
+    // Tieu de the chao truoc day la chuoi cung "Tro ly tai lieu noi bo", nen nguoi phong
+    // Nhan su duoc chao bang ten bot chung roi lai noi chuyen voi bot Nhan su.
+    @Test
+    @DisplayName("Tieu de the chao lay ten cua chinh bot do")
+    void greetingTitleComesFromBot() {
+        assertEquals(Optional.of("Trợ lý"),
+                resolver.botForGreeting(personal()).map(BotDef::displayName));
     }
 }

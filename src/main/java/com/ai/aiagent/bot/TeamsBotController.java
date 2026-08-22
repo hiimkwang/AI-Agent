@@ -14,20 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 
-/**
- * Diem vao cua bot Teams: {@code POST /api/messages}.
- *
- * Duong dan nay la quy uoc cua Bot Framework va phai khop voi Messaging endpoint khai
- * trong Azure Bot resource.
- *
- * Hop dong quan trong nhat cua endpoint nay la TRA LOI THAT NHANH. Bot Framework coi
- * phan hoi cham la that bai va se GUI LAI, nghia la neu xu ly RAG ngay tai day thi mot
- * cau hoi se bien thanh nhieu luot tra loi trung nhau va nhieu lan goi LLM. Vi vay:
- * xac thuc -> nhan viec -> 200, con lai chay o luong nen ({@link TeamsBotService}).
- *
- * Khong dung {@code /api/v1/rag/**} de tach bach: duong nay xac thuc bang JWT cua
- * Microsoft, khong phai API key, va {@code SecurityConfig} mo no o tang Spring Security.
- */
 @RestController
 @ConditionalOnProperty(prefix = "rag.bot", name = "enabled", havingValue = "true")
 @Slf4j
@@ -54,13 +40,11 @@ public class TeamsBotController {
             root = mapper.readTree(new String(rawBody == null ? new byte[0] : rawBody,
                     StandardCharsets.UTF_8));
         } catch (Exception e) {
-            log.warn("Bot: payload khong phai JSON hop le: {}", e.getMessage());
+            log.warn("Bot payload is not valid JSON: {}", e.getMessage());
             return ResponseEntity.badRequest().build();
         }
 
         String serviceUrl = root.path("serviceUrl").asText(null);
-        // Xac thuc TRUOC khi lam bat cu viec gi ton kem. Endpoint nay cong khai tren
-        // Internet; khong co buoc nay thi ai biet URL cung quay duoc han muc LLM.
         if (!authenticator.verify(authorization, serviceUrl)) {
             return ResponseEntity.status(401).build();
         }

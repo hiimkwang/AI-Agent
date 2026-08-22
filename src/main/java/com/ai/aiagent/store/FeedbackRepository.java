@@ -7,13 +7,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Feedback nguoi dung (thumbs up/down).
- *
- * Day la vong phan hoi truoc day hoan toan khong co: khong biet chatbot dang sai o
- * dau thi moi cai tien deu la phong doan. Cau tra loi bi danh gia xau kem theo
- * trich dan da luu, nen truy nguoc duoc chunk nao gay ra loi.
- */
 @Repository
 public class FeedbackRepository {
 
@@ -50,10 +43,7 @@ public class FeedbackRepository {
         return out;
     }
 
-    /** Cau tra loi bi danh gia xau gan nhat - danh sach viec can xem lai. */
     public List<Map<String, Object>> recentNegative(int limit) {
-        // Lay conversation_id tu BAN GHI TIN NHAN (m), khong lay tu ban ghi feedback:
-        // client co the khong gui conversationId, khi do cau hoi tuong ung se bi rong.
         return jdbc.query("""
                 SELECT f.id, f.message_id, m.conversation_id, f.comment, f.created_at,
                        m.content AS answer, m.abstained,

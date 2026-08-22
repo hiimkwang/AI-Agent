@@ -15,17 +15,6 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Kiem tra CAU SQL TIM KIEM tren DB that.
- *
- * Day la phan quan trong nhat cua he thong va truoc ban nay khong co test nao cham
- * toi: {@code TsQueryBuilderTest} chi kiem tra chuoi tsquery duoc DUNG dung, chu
- * khong kiem tra Postgres co tra ve dung ket qua khong. Hai viec khac han nhau - mot
- * tsquery dung van co the khong khop gi neu cot {@code tsv} sinh bang cau hinh khac.
- *
- * Vector 4 chieu (khong phai 1536) cho de doc: dieu can kiem tra la HANH VI cua cau
- * lenh - thu tu, bo loc, ACL - chu khong phai chat luong model embedding.
- */
 class ChunkSearchIT extends PostgresTestBase {
 
     @Autowired
@@ -41,8 +30,6 @@ class ChunkSearchIT extends PostgresTestBase {
     void setUp() {
         truncateAll();
     }
-
-    // ============================================================ Vector
 
     @Test
     @DisplayName("Tim theo vector tra ve dung thu tu gan nhat truoc")
@@ -61,8 +48,6 @@ class ChunkSearchIT extends PostgresTestBase {
                 .as("chunk trung khop hoan toan phai co cosine ~ 1")
                 .isGreaterThan(0.99);
     }
-
-    // ============================================================ Full-text
 
     @Test
     @DisplayName("Full-text tim duoc ca khi nguoi dung go KHONG DAU")
@@ -85,15 +70,11 @@ class ChunkSearchIT extends PostgresTestBase {
         insertChunk(hr, "nhan-su/nghi-phep.md", "nhan-su", 0,
                 "Người lao động được nghỉ phép năm 12 ngày", NGHI_PHEP);
 
-        // "cong tac phi" khong co trong tai lieu; voi AND thi ca cau se khong khop gi.
-        // Day dung la ly do nhanh full-text tung vo dung khi con dung plainto_tsquery.
         List<RetrievedChunk> found =
                 chunks.fullTextSearch("nghi phep va cong tac phi", 5, SearchFilter.none());
 
         assertThat(found).hasSize(1);
     }
-
-    // ============================================================ Phan quyen
 
     @Test
     @DisplayName("Bo loc category chan tai lieu ngoai pham vi")
@@ -123,7 +104,6 @@ class ChunkSearchIT extends PostgresTestBase {
         assertThat(asUser).hasSize(1);
         assertThat(asUser.get(0).getDocKey()).isEqualTo("nhan-su/cong-khai.md");
 
-        // ADMIN di duong "khong loc role" (HybridRetriever truyen Set.of()) nen thay ca hai.
         List<RetrievedChunk> asAdmin = chunks.vectorSearch(NGHI_PHEP, 10,
                 new SearchFilter(Set.of(), Set.of(), false));
         assertThat(asAdmin).hasSize(2);
@@ -157,13 +137,9 @@ class ChunkSearchIT extends PostgresTestBase {
 
         SearchFilter asUser = new SearchFilter(Set.of(), Set.of("USER"), false);
 
-        // Hai nhanh lech bo loc la mot duong ro ri kin dao: nguoi dung khong thay tai
-        // lieu han che o nhanh vector nhung van keo duoc no ra qua nhanh full-text.
         assertThat(chunks.vectorSearch(NGHI_PHEP, 10, asUser)).hasSize(1);
         assertThat(chunks.fullTextSearch("nghi phep", 10, asUser)).hasSize(1);
     }
-
-    // ============================================================ Ghi de
 
     @Test
     @DisplayName("Nap lai cung docKey thi xoa het chunk cu truoc")
@@ -186,8 +162,6 @@ class ChunkSearchIT extends PostgresTestBase {
     void actualEmbeddingDimensionsIsReadable() {
         assertThat(chunks.actualEmbeddingDimensions()).isEqualTo(4);
     }
-
-    // ============================================================ Tien ich
 
     private long insertDocument(String docKey, String category, List<String> roles) {
         return documents.upsert(new DocumentMeta(

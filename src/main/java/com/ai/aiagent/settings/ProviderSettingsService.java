@@ -20,28 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Cau hinh API key / model cua tung provider LLM, sua duoc luc runtime qua trang admin.
- *
- * TACH RIENG khoi {@link RagSettingsService} vi ly do bao mat: {@code GET /api/v1/rag/settings}
- * (do RagSettingsService phuc vu) duoc phep goi boi MOI nguoi dung da xac thuc, khong chi
- * ADMIN (trang chat can biet model dang dung) - dua API key vao do se lo key cho nguoi
- * dung thuong. Service nay chi duoc expose qua {@code /api/v1/rag/admin/providers}, da
- * bi khoa {@code hasRole("ADMIN")} boi {@code SecurityConfig}.
- *
- * Dung chung bang {@code rag_settings} voi RagSettingsService nhung tach namespace bang
- * tien to {@link #KEY_PREFIX} de hai ben khong dam vao khoa cua nhau.
- *
- * KHONG bao gio tra full API key ra ngoai - {@link #snapshot()} chi tra "co cau hinh hay
- * khong" kem vai ky tu cuoi. Khong dua embedding provider/dimensions vao day: doi luc
- * runtime ma khong tao lai schema + nap lai toan bo se lam vector cau hoi va vector tai
- * lieu lech model (xem bat bien trong CLAUDE.md).
- *
- * {@link #connect} goi thang API cua tung nha cung cap de VUA xac thuc key VUA lay danh
- * sach model that (thay vi bat nguoi dung go tay ten model) - dung REST thu cong bang
- * {@code java.net.http.HttpClient}, theo dung pattern da co o
- * {@code com.ai.aiagent.llm.GeminiLlmClient}.
- */
 @Service
 @Slf4j
 public class ProviderSettingsService {
@@ -71,7 +49,6 @@ public class ProviderSettingsService {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    /** provider (thuong, vd "openai") -> danh sach model that lay duoc lan Ket noi gan nhat. */
     private final Map<String, List<String>> modelsCache = new ConcurrentHashMap<>();
 
     public ProviderSettingsService(RagProperties props, SettingsRepository repository,
@@ -97,13 +74,12 @@ public class ProviderSettingsService {
                     applied++;
                 }
             } catch (Exception ex) {
-                log.warn("Bo qua cau hinh provider luu san '{}': {}", e.getKey(), ex.getMessage());
+                log.warn("Ignoring stored provider setting '{}': {}", e.getKey(), ex.getMessage());
             }
         }
-        log.info("Da ap {} cau hinh provider luu san trong DB.", applied);
+        log.info("Applied {} provider setting(s) stored in the database.", applied);
     }
 
-    /** Trang thai hien tai cua tung provider, API key luon duoc CHE - khong tra full key. */
     public Map<String, Object> snapshot() {
         Map<String, Object> out = new LinkedHashMap<>();
 
@@ -143,17 +119,12 @@ public class ProviderSettingsService {
         return out;
     }
 
-    /**
-     * Ap va luu nhieu cau hinh mot luc. Khoa nao KHONG co mat trong {@code changes} thi
-     * giu nguyen - de xoa han mot API key, dung {@link #clearKey(String)} thay vi gui
-     * chuoi rong (tranh nham lan "khong doi" voi "xoa").
-     */
     public List<String> update(Map<String, Object> changes, String updatedBy) {
         List<String> changed = new ArrayList<>();
         for (Map.Entry<String, Object> e : changes.entrySet()) {
             String key = e.getKey();
             String value = e.getValue() == null ? null : String.valueOf(e.getValue()).strip();
-            if (value == null || value.isBlank()) continue; // rong = bo qua, khong ghi de
+            if (value == null || value.isBlank()) continue;
             if (!applyOne(key, value)) {
                 throw new IllegalArgumentException("Khoa cau hinh provider khong ho tro: '" + key + "'.");
             }
@@ -162,12 +133,11 @@ public class ProviderSettingsService {
         }
         if (!changed.isEmpty()) {
             clients.clearCache();
-            log.info("Da cap nhat {} cau hinh provider boi {}: {}", changed.size(), updatedBy, changed);
+            log.info("{} provider setting(s) updated by {}: {}", changed.size(), updatedBy, changed);
         }
         return changed;
     }
 
-    /** Xoa han mot API key (khac voi de trong o {@link #update} - la "khong doi"). */
     public void clearKey(String providerName) {
         String key;
         switch (providerName == null ? "" : providerName.toLowerCase()) {
@@ -180,16 +150,9 @@ public class ProviderSettingsService {
         }
         repository.remove(KEY_PREFIX + key);
         clients.clearCache();
-        log.info("Da xoa API key cua provider '{}'.", providerName);
+        log.info("Removed the API key of provider '{}'.", providerName);
     }
 
-    /**
-     * Xac thuc key/baseUrl bang cach GOI THAT API liet ke model cua provider, roi luu
-     * lai neu thanh cong. That bai thi KHONG ghi gi ca - giu nguyen cau hinh dang chay.
-     *
-     * @param apiKey  key nguoi dung vua go trong form, rong = dung key da luu
-     * @param baseUrl baseUrl nguoi dung vua go, rong = dung baseUrl da luu
-     */
     public List<String> connect(String providerName, String apiKey, String baseUrl, String updatedBy) {
         String provider = providerName == null ? "" : providerName.toLowerCase();
         List<String> models;
@@ -233,7 +196,6 @@ public class ProviderSettingsService {
                     "Loi khi ket noi toi " + providerName + ": " + describe(e));
         }
 
-        // Chi ghi de key/baseUrl neu nguoi dung THUC SU go gia tri moi trong form
         Map<String, Object> toSave = new LinkedHashMap<>();
         if (apiKey != null && !apiKey.isBlank()) toSave.put(provider + ".apiKey", apiKey.strip());
         if (baseUrl != null && !baseUrl.isBlank()) {
@@ -247,15 +209,13 @@ public class ProviderSettingsService {
         try {
             repository.put(KEY_PREFIX + provider + MODELS_SUFFIX, mapper.writeValueAsString(models), updatedBy);
         } catch (Exception e) {
-            log.warn("Khong luu duoc danh sach model cua '{}' (khong anh huong ket qua Ket noi): {}",
+            log.warn("Could not store the model list of '{}' (the connect result stands): {}",
                     provider, e.getMessage());
         }
         clients.clearCache();
-        log.info("Ket noi thanh cong toi '{}', lay duoc {} model.", provider, models.size());
+        log.info("Connected to '{}', {} model(s) available.", provider, models.size());
         return models;
     }
-
-    // ============================================================ Goi API tung provider
 
     private List<String> fetchOpenAiModels(String apiKey, String baseUrl) throws Exception {
         String base = (baseUrl == null || baseUrl.isBlank()) ? "https://api.openai.com" : trimSlash(baseUrl);
@@ -362,11 +322,6 @@ public class ProviderSettingsService {
         return mapper.readTree(res.body());
     }
 
-    /**
-     * Nhieu exception mang (vd {@code ConnectException} khi khong co gi lang nghe o
-     * port do) tra ve {@code getMessage() == null}, khien thong bao loi hien "...: null"
-     * rat kho hieu - fallback ve ten class exception trong truong hop do.
-     */
     private static String describe(Exception e) {
         String msg = e.getMessage();
         return (msg == null || msg.isBlank()) ? e.getClass().getSimpleName() : msg;
@@ -408,7 +363,6 @@ public class ProviderSettingsService {
         return out;
     }
 
-    /** @return false neu khoa khong duoc ho tro. */
     private boolean applyOne(String key, String value) {
         switch (key) {
             case K_OPENAI_KEY -> props.getOpenai().setApiKey(value);

@@ -11,11 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * {@link AccessScope#cacheScopeKey()} la mot cho ro ri AM THAM: sai o day thi he thong
- * van chay dung, van tra loi dung, chi thinh thoang tra cau tra loi cua NGUOI KHAC.
- * Khong co test thi rat kho phat hien - nen bo tests o day.
- */
 class AccessScopeTest {
 
     private static AccessScope user(Set<String> departments) {
@@ -36,11 +31,6 @@ class AccessScopeTest {
                 user(Set.of("ke-toan", "nhan-su")).cacheScopeKey());
     }
 
-    /**
-     * Loi that su da ton tai truoc khi co P1: khoa cache chi gom phong ban, khong gom role.
-     * ADMIN bo qua bo loc {@code allowed_roles} nen nhin thay ca tai lieu han che; neu dung
-     * chung o cache voi USER thi cau tra loi sinh cho ADMIN se duoc phuc vu lai cho USER.
-     */
     @Test
     @DisplayName("ADMIN va USER cung phong ban KHONG duoc dung chung o cache")
     void adminAndUserDoNotShareCache() {

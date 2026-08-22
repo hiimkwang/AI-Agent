@@ -11,11 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Bam chunk la cho lỗi de xay ra nhung rat kho nhin thay bang mat: mot bang bi cat
- * doi hoac mot heading khong duoc nhan dien se lam giam chat luong tra loi ma khong
- * bao loi gi ca.
- */
 class MarkdownChunkerTest {
 
     private RagProperties props;
@@ -80,7 +75,6 @@ class MarkdownChunkerTest {
                 """;
         List<MarkdownChunker.Chunk> chunks = chunker.chunk(markdown);
 
-        // Phai co it nhat mot chunk chua TRON VEN ca ba hang du lieu
         boolean intact = chunks.stream().anyMatch(c ->
                 c.content().contains("150%") && c.content().contains("200%")
                         && c.content().contains("300%"));
@@ -158,8 +152,6 @@ class MarkdownChunkerTest {
     @Test
     @DisplayName("Khu trung chunk giong nhau trong cung tai lieu")
     void dedupesWithinDocument() {
-        // Phai dai hon child-max-chars, neu khong hai ban sao se nam gon trong CUNG
-        // mot chunk va khong con gi de khu trung
         String repeated = ("Dieu khoan nay duoc lap lai y nguyen o nhieu muc khac nhau trong tai lieu, "
                 + "va no du dai de tao thanh mot chunk rieng biet chu khong bi gop vao chunk khac. ")
                 .repeat(6);

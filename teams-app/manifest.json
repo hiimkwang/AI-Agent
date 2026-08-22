@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
-  "version": "1.0.0",
+  "version": "1.9.0",
   "id": "{{BOT_APP_ID}}",
   "packageName": "vn.com.bsc.rag.assistant",
 
@@ -13,29 +13,29 @@
   },
 
   "name": {
-    "short": "Trợ lý tài liệu",
-    "full": "Trợ lý tra cứu tài liệu nội bộ BSC"
+    "short": "BSC Assistant",
+    "full": "BSC Assistant — Tra cứu tài liệu nội bộ"
   },
   "description": {
-    "short": "Hỏi đáp trên tài liệu nội bộ, luôn kèm nguồn.",
-    "full": "Trợ lý tra cứu tài liệu nội bộ. Hỏi bằng tiếng Việt tự nhiên, trợ lý tìm trong kho tài liệu đã được nạp và trả lời kèm trích dẫn nguồn để bạn kiểm chứng. Chỉ trả lời dựa trên tài liệu; không tìm thấy căn cứ thì nói rõ là không tìm thấy. Quyền đọc tài liệu theo đúng nhóm phòng ban của bạn trên Microsoft Entra ID."
+    "short": "Tra cứu quy định, quy trình và tài liệu hệ thống của BSC, luôn kèm nguồn.",
+    "full": "Trợ lý tra cứu tài liệu nội bộ của BIDV Securities (BSC). Hỏi bằng tiếng Việt tự nhiên, trợ lý tìm trong kho tài liệu đã được nạp và trả lời kèm trích dẫn nguồn để bạn kiểm chứng. Chỉ trả lời dựa trên tài liệu; không tìm thấy căn cứ thì nói rõ là không tìm thấy. Quyền đọc tài liệu theo đúng nhóm phòng ban của bạn trên Microsoft Entra ID."
   },
 
   "icons": {
     "color": "color.png",
     "outline": "outline.png"
   },
-  "accentColor": "#1F4E79",
+  "accentColor": "#2E5AA8",
 
   "bots": [
     {
       "botId": "{{BOT_APP_ID}}",
-      "scopes": ["personal", "team", "groupChat"],
+      "scopes": ["personal", "groupChat"],
       "supportsFiles": false,
       "isNotificationOnly": false,
       "commandLists": [
         {
-          "scopes": ["personal", "team", "groupChat"],
+          "scopes": ["personal", "groupChat"],
           "commands": [
             {
               "title": "hướng dẫn",
@@ -47,7 +47,7 @@
     }
   ],
 
-  "permissions": ["identity", "messageTeamMembers"],
+  "permissions": ["identity"],
 
   "validDomains": ["{{APP_HOST}}"]
 }

@@ -17,32 +17,10 @@ import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-/**
- * Nen chung cho cac test cham DB THAT (Postgres 17 + pgvector qua Testcontainers).
- *
- * Vi sao phai co: toan bo cau SQL tim kiem nam trong {@code ChunkRepository} va toan
- * bo schema nam trong 7 file Flyway - hai thu de hong nhat khi sua, va truoc ban nay
- * khong co mot test tu dong nao cham toi chung. Test nap context cu bi {@code @Disabled}
- * dung vi ly do "can DB that", tuc la cang sua nhieu cang khong duoc bao ve.
- *
- * TU BO QUA khi may khong co Docker, thay vi lam do ca lenh {@code mvn test}: mot bo
- * test khong chay duoc tren may nguoi khac se bi ho tat di, va nhu the con te hon la
- * khong co.
- *
- * Container dung CHUNG cho moi lop test ke thua (static, khoi tao mot lan) - dung
- * moi lop mot container thi thoi gian test tang gap nhieu lan ma khong duoc gi.
- */
 @SpringBootTest(classes = PostgresTestBase.TestApp.class)
 @ExtendWith(PostgresTestBase.DockerAvailable.class)
 public abstract class PostgresTestBase {
 
-    /**
-     * Chi nap tang JDBC + Flyway va cac bean trong {@code store}, KHONG nap ca ung dung.
-     *
-     * Nap ca ung dung se keo theo cac bean can API key LLM, can Entra, can Bot... va
-     * bien mot test ve tang luu tru thanh mot test ve cau hinh moi truong - do khong
-     * chi cham hon ma con hong vi nhung ly do chang lien quan gi den thu dang kiem tra.
-     */
     @org.springframework.context.annotation.Configuration
     @org.springframework.context.annotation.ComponentScan("com.ai.aiagent.store")
     @org.springframework.boot.autoconfigure.ImportAutoConfiguration({
@@ -52,7 +30,6 @@ public abstract class PostgresTestBase {
             org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration.class,
             FlywayAutoConfiguration.class})
     static class TestApp {
-        /** Khong bat @ConfigurationProperties o day - test tu dat gia tri can thiet. */
         @org.springframework.context.annotation.Bean
         com.ai.aiagent.config.RagProperties ragProperties() {
             com.ai.aiagent.config.RagProperties props = new com.ai.aiagent.config.RagProperties();
@@ -61,11 +38,6 @@ public abstract class PostgresTestBase {
         }
     }
 
-    /**
-     * Image pgvector chinh thuc - PHAI dung dung image nay chu khong phai postgres
-     * thuan: schema V1 tao extension {@code vector}, khong co no thi migration do ngay
-     * dong dau tien.
-     */
     static final PostgreSQLContainer<?> POSTGRES;
 
     static {
@@ -91,9 +63,6 @@ public abstract class PostgresTestBase {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
-        // So chieu duoc truyen vao DDL qua placeholder, giong luc chay that. Dung 4
-        // chieu cho test nhanh - dieu QUAN TRONG la co che placeholder hoat dong,
-        // khong phai con so cu the.
         registry.add("spring.flyway.placeholders.embeddingDim", () -> "4");
         registry.add("rag.embedding.dimensions", () -> "4");
     }
@@ -106,7 +75,6 @@ public abstract class PostgresTestBase {
         }
     }
 
-    /** Bo qua ca lop test khi may khong chay Docker. */
     public static class DockerAvailable implements ExecutionCondition {
         @Override
         public ConditionEvaluationResult evaluateExecutionCondition(ExtensionContext context) {
@@ -117,7 +85,6 @@ public abstract class PostgresTestBase {
         }
     }
 
-    /** Xoa sach du lieu giua cac test - moi test phai tu dung du lieu cua no. */
     protected void truncateAll() {
         jdbc.execute("""
                 TRUNCATE rag_documents, rag_chunks, rag_conversations, rag_messages,

@@ -8,20 +8,16 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ai.aiagent.store.StoreModels.Citation;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
-/**
- * Dung the Adaptive Card cho cau tra loi.
- *
- * Vi sao dung the thay vi tin nhan van ban thuan: nguon trich dan phai NHIN THAY va
- * KIEM CHUNG duoc. Voi tai lieu noi quy, cau tra loi khong kem can cu thi khong dung
- * duoc de lam viec - nguoi doc van phai di hoi lai. The cho phep tach ro phan tra loi
- * va phan can cu, va hien doan trich de nguoi doc tu doi chieu.
- *
- * Phien ban 1.4: moi client Teams dang duoc ho tro deu ve duoc.
- */
 @Component
 public class AdaptiveCards {
+
+    /** Below this a snippet only repeats the heading, so it is dropped instead. */
+    private static final int MIN_SNIPPET_CHARS = 40;
+    private static final int SNIPPET_CHARS = 160;
 
     private final ObjectMapper mapper;
 
@@ -29,15 +25,18 @@ public class AdaptiveCards {
         this.mapper = mapper;
     }
 
-    /**
-     * @param maxCitations so nguon toi da hien; con lai gom vao mot dong "va N nguon khac"
-     *                     de the khong dai qua man hinh dien thoai
-     */
-    public JsonNode answer(ChatResponse response, int maxCitations) {
+    public JsonNode answer(ChatResponse response, int maxCitations, int maxAnswerChars) {
         ObjectNode card = base();
         ArrayNode body = (ArrayNode) card.get("body");
 
-        body.add(text(response.answer(), true, "default"));
+        // Teams caps the size of one activity (~28 KB). Over the cap the whole card is
+        // dropped, so the user sees silence - clamp instead and say so.
+        String answer = clamp(response.answer(), maxAnswerChars);
+        body.add(text(answer, true, "default"));
+        if (answer.length() < lengthOf(response.answer())) {
+            body.add(text("_Câu trả lời đã được cắt bớt cho vừa thẻ Teams. "
+                    + "Xem đầy đủ trên giao diện web._", true, "small"));
+        }
 
         List<Citation> citations = response.citations();
         if (!response.abstained() && citations != null && !citations.isEmpty()) {
@@ -54,23 +53,15 @@ public class AdaptiveCards {
         return card;
     }
 
-    /** The chao khi bot duoc cai vao cuoc tro chuyen hoac khi nguoi dung go /help. */
-    public JsonNode greeting(String message) {
+    public JsonNode greeting(String title, String message) {
         ObjectNode card = base();
         ArrayNode body = (ArrayNode) card.get("body");
-        body.add(text("Trợ lý tài liệu nội bộ", true, "default").put("weight", "bolder")
+        body.add(text(title, true, "default").put("weight", "bolder")
                 .put("size", "medium"));
         body.add(text(message, true, "default"));
         return card;
     }
 
-    /**
-     * The tu choi vi thieu quyen.
-     *
-     * Noi RO la do quyen chu khong noi "khong tim thay tai lieu" - neu khong nguoi dung
-     * se hoi di hoi lai mai. Nhung KHONG neu ten tai lieu hay phong ban ho khong duoc
-     * doc, vi ban than danh sach do cung la thong tin.
-     */
     public JsonNode denied(String message) {
         ObjectNode card = base();
         ArrayNode body = (ArrayNode) card.get("body");
@@ -79,8 +70,6 @@ public class AdaptiveCards {
         body.add(text(message, true, "default"));
         return card;
     }
-
-    // ============================================================ Noi bo
 
     private ObjectNode base() {
         ObjectNode card = mapper.createObjectNode();
@@ -116,27 +105,80 @@ public class AdaptiveCards {
     private ObjectNode citation(Citation c) {
         StringBuilder line = new StringBuilder("**").append(c.rank()).append(". ")
                 .append(escape(c.fileName())).append("**");
-        if (c.headingPath() != null && !c.headingPath().isBlank()) {
-            line.append(" — ").append(escape(c.headingPath()));
+
+        String path = trimHeadingPath(c.headingPath(), c.fileName());
+        if (!path.isBlank()) {
+            line.append("\n\n").append(escape(path));
         }
-        if (c.snippet() != null && !c.snippet().isBlank()) {
-            line.append("\n\n").append(escape(abbreviate(c.snippet())));
+        String snippet = cleanSnippet(c.snippet());
+        if (snippet != null) {
+            line.append("\n\n").append(escape(snippet));
         }
         ObjectNode node = text(line.toString(), true, "small");
         node.put("spacing", "small");
         return node;
     }
 
-    private static String abbreviate(String s) {
-        String flat = s.replaceAll("\\s+", " ").strip();
-        return flat.length() <= 200 ? flat : flat.substring(0, 200) + "…";
+    /**
+     * Chunking prefixes the document identity, so the heading path usually starts with the file
+     * name again - on a Teams card that reads as the file name printed twice in a row.
+     */
+    static String trimHeadingPath(String headingPath, String fileName) {
+        if (headingPath == null || headingPath.isBlank()) return "";
+        String stem = normalize(stripExtension(fileName));
+        List<String> parts = new ArrayList<>();
+        for (String raw : headingPath.split(">")) {
+            String part = raw.strip();
+            if (part.isEmpty()) continue;
+            if (parts.isEmpty() && !stem.isEmpty() && normalize(part).equals(stem)) continue;
+            parts.add(part);
+        }
+        return String.join(" › ", parts);
     }
 
     /**
-     * Markdown cua Adaptive Card khong co ranh gioi giua noi dung va cu phap, nen mot
-     * ten file chua {@code *} hay {@code _} co the pha vo dinh dang the. Thoat cac ky
-     * tu do - cung tinh than voi {@code PromptBuilder.neutralize} o phia prompt.
+     * The snippet is the raw chunk, which starts with the same markdown headings already shown
+     * as the path. Strip them; if nothing substantial is left, show no snippet at all rather
+     * than repeating the heading a third time.
      */
+    static String cleanSnippet(String snippet) {
+        if (snippet == null || snippet.isBlank()) return null;
+        StringBuilder kept = new StringBuilder();
+        for (String rawLine : snippet.split("\\R")) {
+            String line = rawLine.strip();
+            if (line.isEmpty()) continue;
+            if (line.startsWith("#")) continue;
+            if (kept.length() > 0) kept.append(' ');
+            kept.append(line);
+        }
+        String flat = kept.toString().replaceAll("\\s+", " ").strip();
+        if (flat.length() < MIN_SNIPPET_CHARS) return null;
+        return flat.length() <= SNIPPET_CHARS ? flat
+                : flat.substring(0, SNIPPET_CHARS).stripTrailing() + "…";
+    }
+
+    private static String stripExtension(String name) {
+        if (name == null) return "";
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
+    }
+
+    private static String normalize(String s) {
+        return s == null ? "" : s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+
+    static String clamp(String answer, int maxChars) {
+        if (answer == null) return "";
+        if (maxChars <= 0 || answer.length() <= maxChars) return answer;
+        int cut = answer.lastIndexOf(' ', maxChars);
+        int at = cut > maxChars / 2 ? cut : maxChars;
+        return answer.substring(0, at).stripTrailing() + "…";
+    }
+
+    private static int lengthOf(String s) {
+        return s == null ? 0 : s.length();
+    }
+
     private static String escape(String s) {
         if (s == null) return "";
         return s.replace("*", "\\*").replace("_", "\\_").replace("#", "\\#");

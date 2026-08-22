@@ -1,5 +1,6 @@
 package com.ai.aiagent.rerank;
 
+import com.ai.aiagent.config.RagProperties;
 import com.ai.aiagent.llm.InternalLlm;
 import com.ai.aiagent.store.StoreModels.RetrievedChunk;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -11,20 +12,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-/**
- * Rerank bang LLM: nho mo hinh doc tung ung vien va cho DIEM do lien quan.
- *
- * Hai thay doi so voi ban cu:
- *
- *  1) Yeu cau tra ve CA DIEM, khong chi thu tu. Truoc day chi co mang chi so nen
- *     khong co con so nao de dat nguong tu choi tra loi.
- *  2) Mang rong duoc TON TRONG. Truoc day {@code order.isEmpty()} bi coi la loi va
- *     fallback nhoi lai top-5 goc; gio mang rong nghia la "khong co gi lien quan"
- *     va he thong se tra "khong tim thay trong tai lieu".
- *     Chi khi that su co EXCEPTION hoac khong parse duoc JSON thi moi tra
- *     {@code degraded} de {@code RelevanceGate} chuyen sang danh gia bang cosine.
- */
 @Component
 @Slf4j
 public class LlmReranker implements Reranker {
@@ -32,10 +23,17 @@ public class LlmReranker implements Reranker {
     private static final int MAX_SNIPPET_CHARS = 900;
 
     private final InternalLlm internalLlm;
+    private final RagProperties props;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final ExecutorService pool = Executors.newFixedThreadPool(4, r -> {
+        Thread t = new Thread(r, "llm-rerank");
+        t.setDaemon(true);
+        return t;
+    });
 
-    public LlmReranker(InternalLlm internalLlm) {
+    public LlmReranker(InternalLlm internalLlm, RagProperties props) {
         this.internalLlm = internalLlm;
+        this.props = props;
     }
 
     @Override
@@ -49,10 +47,78 @@ public class LlmReranker implements Reranker {
             return RerankResult.reliable(List.of(), name());
         }
 
+        int batchSize = Math.max(4, props.getRerank().getBatchSize());
+
+        // Batches are independent, so run them together: sequentially they turned one rerank
+        // call into three and added ~1.6s to every question.
+        List<CompletableFuture<List<Scored>>> futures = new ArrayList<>();
+        for (int start = 0; start < candidates.size(); start += batchSize) {
+            final int offset = start;
+            int end = Math.min(start + batchSize, candidates.size());
+            List<RetrievedChunk> slice = candidates.subList(start, end);
+            futures.add(CompletableFuture.supplyAsync(() -> {
+                List<Scored> batch = scoreBatch(query, slice);
+                if (batch == null) return null;
+                List<Scored> shifted = new ArrayList<>(batch.size());
+                for (Scored s : batch) shifted.add(new Scored(s.index() + offset, s.score()));
+                return shifted;
+            }, pool));
+        }
+
+        List<Scored> all = new ArrayList<>();
+        boolean anyBatchFailed = false;
+        for (CompletableFuture<List<Scored>> f : futures) {
+            List<Scored> batch;
+            try {
+                batch = f.join();
+            } catch (Exception e) {
+                batch = null;
+            }
+            if (batch == null) anyBatchFailed = true;
+            else all.addAll(batch);
+        }
+        // join() returns out of submission order only if a batch failed; sorting by index keeps
+        // the RRF order as the stable tie-break for equal scores.
+        all.sort((a, b) -> Integer.compare(a.index(), b.index()));
+
+        if (all.isEmpty()) {
+            // "Nothing was relevant" and "we never managed to look" must not collapse into the
+            // same answer: the first is a reliable refusal, the second has to fall back to the
+            // cosine gate instead of telling the user the documents say nothing.
+            if (anyBatchFailed) {
+                log.warn("Every LLM rerank batch failed; falling back to the original order and "
+                        + "marking the result unreliable.");
+                return RerankResult.degraded(fallback(candidates, topK), name());
+            }
+            log.debug("LLM rerank found no passage above the relevance threshold; the answer will "
+                    + "be a refusal.");
+            return RerankResult.reliable(List.of(), name());
+        }
+
+        all.sort((a, b) -> Double.compare(b.score(), a.score()));
+        List<RetrievedChunk> out = new ArrayList<>();
+        for (Scored s : all) {
+            if (out.size() >= topK) break;
+            RetrievedChunk chunk = candidates.get(s.index());
+            chunk.setRerankScore(s.score());
+            out.add(chunk);
+        }
+        log.debug("LLM rerank: {} candidates in {} batch(es), {} passages kept, top score {}.",
+                candidates.size(), (candidates.size() + batchSize - 1) / batchSize, out.size(),
+                String.format("%.2f", out.get(0).getRerankScore()));
+        return RerankResult.reliable(out, name());
+    }
+
+    /**
+     * Score one batch. Indices in the result are local to {@code batch}.
+     *
+     * @return null when this batch could not be scored at all
+     */
+    private List<Scored> scoreBatch(String query, List<RetrievedChunk> batch) {
         StringBuilder listing = new StringBuilder();
-        for (int i = 0; i < candidates.size(); i++) {
+        for (int i = 0; i < batch.size(); i++) {
             listing.append('[').append(i).append("] ")
-                    .append(truncate(candidates.get(i).rerankText()))
+                    .append(truncate(batch.get(i).rerankText()))
                     .append("\n\n");
         }
 
@@ -83,53 +149,27 @@ public class LlmReranker implements Reranker {
         try {
             response = internalLlm.generate(prompt);
         } catch (Exception e) {
-            log.warn("LLM rerank loi ({}) -> giu thu tu goc va danh dau khong dang tin.",
-                    e.getMessage());
-            return RerankResult.degraded(fallback(candidates, topK), name());
+            log.warn("LLM rerank batch failed ({}).", e.getMessage());
+            return null;
         }
 
-        List<Scored> scored;
         try {
-            scored = parse(response, candidates.size());
+            List<Scored> scored = parse(response, batch.size());
+            if (scored == null) {
+                log.warn("LLM rerank batch did not return a JSON array.");
+                return null;
+            }
+            return scored;
         } catch (Exception e) {
-            log.warn("LLM rerank tra ve JSON khong doc duoc -> khong dang tin. Phan hoi: {}",
+            log.warn("LLM rerank batch returned unparseable JSON. Response: {}",
                     truncate(response, 200));
-            return RerankResult.degraded(fallback(candidates, topK), name());
+            return null;
         }
-
-        if (scored == null) {
-            // Khong tim thay mang JSON nao trong phan hoi => coi la loi, khong phai "rong"
-            log.warn("LLM rerank khong tra ve mang JSON -> khong dang tin.");
-            return RerankResult.degraded(fallback(candidates, topK), name());
-        }
-
-        if (scored.isEmpty()) {
-            // ĐÂY la truong hop truoc day bi hieu sai: LLM noi "khong co gi lien quan"
-            log.info("LLM rerank: khong doan nao dat nguong lien quan -> se tra loi "
-                    + "'khong tim thay trong tai lieu'.");
-            return RerankResult.reliable(List.of(), name());
-        }
-
-        List<RetrievedChunk> out = new ArrayList<>();
-        for (Scored s : scored) {
-            if (out.size() >= topK) break;
-            RetrievedChunk chunk = candidates.get(s.index());
-            chunk.setRerankScore(s.score());
-            out.add(chunk);
-        }
-        log.debug("LLM rerank: {} ung vien -> giu {} doan, diem cao nhat {}.",
-                candidates.size(), out.size(),
-                String.format("%.2f", out.isEmpty() ? 0 : out.get(0).getRerankScore()));
-        return RerankResult.reliable(out, name());
     }
 
     private record Scored(int index, double score) {
     }
 
-    /**
-     * @return null neu khong tim thay mang JSON (loi that su);
-     *         danh sach rong neu mang JSON rong (khong co gi lien quan)
-     */
     private List<Scored> parse(String response, int size) throws Exception {
         if (response == null) return null;
         int start = response.indexOf('[');
@@ -148,7 +188,6 @@ public class LlmReranker implements Reranker {
                 index = node.path("i").asInt(node.path("index").asInt(-1));
                 score = node.path("score").asDouble(-1);
             } else if (node.isNumber()) {
-                // Chap nhan ca dinh dang cu [3, 0, 5] de tuong thich nguoc
                 index = node.asInt(-1);
                 score = 0.5;
             } else {
@@ -162,7 +201,6 @@ public class LlmReranker implements Reranker {
         return out;
     }
 
-    /** Khong xep hang lai duoc: giu thu tu gop RRF, diem rerank de la -1 (khong xac dinh). */
     private List<RetrievedChunk> fallback(List<RetrievedChunk> candidates, int topK) {
         List<RetrievedChunk> out = new ArrayList<>(
                 candidates.subList(0, Math.min(topK, candidates.size())));

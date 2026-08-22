@@ -9,11 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Tao va cache {@link LlmClient} theo cap (provider, model).
- *
- * Cache de khong dung lai HTTP client / connection pool moi request.
- */
 @Component
 @Slf4j
 public class LlmClientFactory {
@@ -25,16 +20,9 @@ public class LlmClientFactory {
         this.props = props;
     }
 
-    /**
-     * Xoa toan bo client da cache.
-     *
-     * Cache chi khoa theo (provider, model), khong theo API key - neu admin doi key
-     * qua {@code ProviderSettingsService} ma khong goi ham nay, request tiep theo van
-     * dung client cu (key cu) cho toi khi restart.
-     */
     public void clearCache() {
         cache.clear();
-        log.info("Da xoa cache LlmClient - client moi se duoc tao lai voi cau hinh moi nhat.");
+        log.info("LlmClient cache cleared; the next call rebuilds clients from current config.");
     }
 
     public LlmClient get(LlmProvider provider, String model) {
@@ -55,7 +43,6 @@ public class LlmClientFactory {
         };
     }
 
-    /** Provider co du cau hinh de dung duoc (co API key) hay khong. */
     public boolean isAvailable(LlmProvider provider) {
         return switch (provider) {
             case OPENAI -> hasText(props.getOpenai().getApiKey());
@@ -65,7 +52,6 @@ public class LlmClientFactory {
         };
     }
 
-    /** Danh sach provider + model goi y, cho UI hien dropdown. */
     public List<Map<String, Object>> catalog() {
         List<Map<String, Object>> out = new java.util.ArrayList<>();
         out.add(entry(LlmProvider.ANTHROPIC, List.of(
@@ -89,7 +75,7 @@ public class LlmClientFactory {
     }
 
     private LlmClient build(LlmProvider provider, String model) {
-        log.info("Khoi tao LlmClient moi: provider={}, model={}", provider, model);
+        log.info("Created a new LlmClient: provider={}, model={}", provider, model);
         RagProperties.Llm llm = props.getLlm();
         return switch (provider) {
             case OPENAI -> {

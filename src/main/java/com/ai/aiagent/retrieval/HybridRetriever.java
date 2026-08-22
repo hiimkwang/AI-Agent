@@ -21,33 +21,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Truy xuat lai (hybrid) + multi-query + RRF.
- *
- * Cac diem da sua:
- *   - Hai nhanh vector va full-text chay THUC SU SONG SONG bang CompletableFuture.
- *     Javadoc cu ghi "chay song song" nhung code goi tuan tu, cong them latency vo ich.
- *   - RRF GIU LAI diem goc (cosine tot nhat) ben canh diem thu hang, nho vay van co
- *     mot con so tuyet doi de dat nguong tu choi tra loi - truoc day RRF bo hoan toan
- *     diem goc nen khong con cach nao noi "tai lieu khong du lien quan".
- *   - Gop ket qua cua NHIEU bien the truy van (cau goc + cau viet lai + HyDE).
- *   - Boost tai lieu moi ban hanh, loai tai lieu het hieu luc.
- */
 @Service
 @Slf4j
 public class HybridRetriever {
 
-    /**
-     * @param candidates   ung vien sau khi gop, da cat con {@code candidates}
-     * @param vectorHits   tong so ket qua nhanh vector (de chan doan)
-     * @param fulltextHits tong so ket qua nhanh full-text
-     * @param bestRawScore diem cosine cao nhat gap duoc - dung cho nguong tu choi
-     */
     public record RetrievalResult(
             List<RetrievedChunk> candidates,
             int vectorHits,
             int fulltextHits,
-            double bestRawScore
+            double bestCosine
     ) {
         public boolean isEmpty() {
             return candidates.isEmpty();
@@ -57,7 +39,6 @@ public class HybridRetriever {
     private final EmbeddingService embeddings;
     private final ChunkRepository chunks;
     private final RagProperties props;
-    /** Pool rieng cho hai nhanh tim kiem; daemon nen khong chan luc tat ung dung. */
     private final ExecutorService searchPool = Executors.newFixedThreadPool(
             Math.max(4, Runtime.getRuntime().availableProcessors()), r -> {
                 Thread t = new Thread(r, "retrieval");
@@ -76,11 +57,6 @@ public class HybridRetriever {
         searchPool.shutdownNow();
     }
 
-    /**
-     * @param variants danh sach bien the truy van (cau goc, cau viet lai, HyDE)
-     * @param scope    pham vi truy cap - quyet dinh ACL, KHONG tin category tu client
-     * @param category bo loc category do client yeu cau (se bi thu hep theo scope)
-     */
     public RetrievalResult retrieve(List<String> variants, AccessScope scope, String category) {
         Set<String> categories = scope.narrowTo(category);
         ChunkRepository.SearchFilter filter = new ChunkRepository.SearchFilter(
@@ -96,7 +72,6 @@ public class HybridRetriever {
         for (String variant : variants) {
             if (variant == null || variant.isBlank()) continue;
 
-            // Hai nhanh chay song song
             CompletableFuture<List<RetrievedChunk>> vectorFuture = CompletableFuture.supplyAsync(
                     () -> chunks.vectorSearch(embeddings.embedOne(variant), cfg.getVectorTopK(), filter),
                     searchPool);
@@ -106,12 +81,13 @@ public class HybridRetriever {
                     () -> chunks.fullTextSearch(variant, cfg.getFulltextTopK(), filter), searchPool)
                     : CompletableFuture.completedFuture(List.of());
 
-            // Hai nhanh phai that bai DOC LAP voi nhau. Neu gop hai lenh join vao
-            // cung mot try thi mot nhanh loi se lam MAT LUON ket qua cua nhanh con
-            // lai - dung loi da gap khi thu nghiem: nhanh full-text nem loi va keo
-            // theo ca ket qua vector vua tim duoc.
             List<RetrievedChunk> vectorResults = joinSafely(vectorFuture, "vector", variant);
             List<RetrievedChunk> textResults = joinSafely(textFuture, "full-text", variant);
+
+            // Only the vector branch produces a cosine. The full-text branch scores with
+            // ts_rank_cd, which is unbounded - values above 10 are normal - so the two must not
+            // share one field that the relevance gate later reads as "the best cosine".
+            vectorResults.forEach(c -> c.setCosine(c.getRawScore()));
 
             vectorHits += vectorResults.size();
             fulltextHits += textResults.size();
@@ -123,8 +99,12 @@ public class HybridRetriever {
             return new RetrievalResult(List.of(), vectorHits, fulltextHits, 0);
         }
 
-        List<RetrievedChunk> fused = reciprocalRankFusion(rankedLists);
-        double bestRaw = fused.stream().mapToDouble(RetrievedChunk::getRawScore).max().orElse(0);
+        List<RetrievedChunk> fused = dropTablesOfContents(reciprocalRankFusion(rankedLists));
+        double bestCosine = fused.stream()
+                .map(RetrievedChunk::getCosine)
+                .filter(java.util.Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .max().orElse(0);
 
         if (cfg.isRecencyBoostEnabled()) {
             applyRecencyBoost(fused);
@@ -133,21 +113,13 @@ public class HybridRetriever {
         List<RetrievedChunk> trimmed = fused.size() > cfg.getCandidates()
                 ? new ArrayList<>(fused.subList(0, cfg.getCandidates())) : fused;
 
-        log.debug("Hybrid: {} bien the, vector={}, full-text={}, gop con {} ung vien (best cosine={}).",
+        log.debug("Hybrid search: {} variants, vector={}, fulltext={}, fused to {} candidates "
+                        + "(best cosine={}).",
                 variants.size(), vectorHits, fulltextHits, trimmed.size(),
-                String.format("%.3f", bestRaw));
-        return new RetrievalResult(trimmed, vectorHits, fulltextHits, bestRaw);
+                String.format("%.3f", bestCosine));
+        return new RetrievalResult(trimmed, vectorHits, fulltextHits, bestCosine);
     }
 
-    /**
-     * Reciprocal Rank Fusion.
-     *
-     * Diem = tong tren moi danh sach cua 1/(k + thu_hang). Uu diem: khong can chuan
-     * hoa thang diem giua vector va full-text.
-     *
-     * Khac ban cu: giu lai diem COSINE cao nhat vao {@code rawScore}, vi diem RRF chi
-     * mang y nghia tuong doi trong mot luot truy xuat, khong dung de dat nguong duoc.
-     */
     private List<RetrievedChunk> reciprocalRankFusion(List<List<RetrievedChunk>> lists) {
         Map<Long, RetrievedChunk> byId = new LinkedHashMap<>();
         Map<Long, Double> scoreById = new LinkedHashMap<>();
@@ -162,10 +134,14 @@ public class HybridRetriever {
                 if (existing == null) {
                     byId.put(chunk.getId(), chunk);
                 } else {
-                    // Giu diem cosine tot nhat; ts_rank_cd khong cung thang nen bo qua
                     if ("VECTOR".equals(chunk.getMatchedBy())
                             && chunk.getRawScore() > existing.getRawScore()) {
                         existing.setRawScore(chunk.getRawScore());
+                    }
+                    // A chunk found by both branches must keep its cosine whichever list
+                    // reached the map first.
+                    if (existing.getCosine() == null && chunk.getCosine() != null) {
+                        existing.setCosine(chunk.getCosine());
                     }
                     existing.addMatchedBy(chunk.getMatchedBy());
                 }
@@ -184,12 +160,22 @@ public class HybridRetriever {
     }
 
     /**
-     * Boost nhe tai lieu moi ban hanh.
+     * Remove chunks that are a document's table of contents. They match almost any question about
+     * the document - they repeat all of its section titles - and answer none of them.
      *
-     * Khong co buoc nay, mot quy dinh nam 2019 va ban thay the nam 2026 duoc xep ngang
-     * hang, va cau tra loi co the trich dan ban cu. Boost tinh theo do "moi" cua
-     * {@code effective_date} trong 5 nam gan nhat.
+     * <p>If everything looks like a table of contents the original list is kept: an empty result
+     * would turn into a refusal, which is worse than a useless passage the gate can still reject.
      */
+    private List<RetrievedChunk> dropTablesOfContents(List<RetrievedChunk> fused) {
+        List<RetrievedChunk> kept = fused.stream()
+                .filter(c -> !TableOfContentsFilter.isTableOfContents(c.getContent()))
+                .toList();
+        if (kept.isEmpty() || kept.size() == fused.size()) return fused;
+        log.debug("Dropped {} table-of-contents chunk(s) from {} candidates.",
+                fused.size() - kept.size(), fused.size());
+        return new ArrayList<>(kept);
+    }
+
     private void applyRecencyBoost(List<RetrievedChunk> chunks) {
         double weight = props.getRetrieval().getRecencyBoostWeight();
         if (weight <= 0) return;
@@ -202,21 +188,20 @@ public class HybridRetriever {
             LocalDate effective = chunk.getEffectiveDate();
             if (effective == null) continue;
             long days = ChronoUnit.DAYS.between(effective, today);
-            if (days < 0) continue; // chua co hieu luc
+            if (days < 0) continue;
             double freshness = Math.max(0, 1.0 - (days / (365.0 * 5)));
             chunk.setFinalScore(chunk.getFusedScore() + weight * maxFused * freshness);
         }
         chunks.sort(Comparator.comparingDouble(RetrievedChunk::getFinalScore).reversed());
     }
 
-    /** Lay ket qua mot nhanh; nhanh loi tra ve rong va CHI mat nhanh do. */
     private List<RetrievedChunk> joinSafely(CompletableFuture<List<RetrievedChunk>> future,
                                             String branch, String variant) {
         try {
             return future.join();
         } catch (RuntimeException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
-            log.warn("Nhanh {} loi cho bien the '{}': {}: {}", branch, abbreviate(variant),
+            log.warn("Retrieval branch {} failed for variant '{}': {}: {}", branch, abbreviate(variant),
                     cause.getClass().getSimpleName(), cause.getMessage());
             return List.of();
         }

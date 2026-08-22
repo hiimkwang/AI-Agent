@@ -10,17 +10,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Day la lop tung lam nhanh full-text vo dung (ghep AND) va tung lam no ca nhanh
- * full-text (static initializer nem loi vi {@code Set.of} co phan tu trung).
- * Ca hai loi deu AM THAM - khong co test thi rat kho phat hien.
- */
 class TsQueryBuilderTest {
 
     @Test
     @DisplayName("Nap lop khong nem loi du danh sach stopword co tu trung (loi ExceptionInInitializerError cu)")
     void staticInitDoesNotThrowOnDuplicateStopwords() {
-        // Chi can goi mot ham static la static initializer phai chay xong
         assertFalse(TsQueryBuilder.terms("nghi phep").isEmpty());
     }
 
@@ -64,12 +58,10 @@ class TsQueryBuilderTest {
     @DisplayName("Khong the chen toan tu tsquery qua cau hoi")
     void sanitisesOperators() {
         String query = TsQueryBuilder.orQuery("nghi & phep | (xoa) !không <-> 'quote'");
-        // Moi tu chi con chu va so; cac toan tu bi loai bo hoan toan
         assertFalse(query.contains("&"));
         assertFalse(query.contains("!"));
         assertFalse(query.contains("("));
         assertFalse(query.contains("<->"));
-        // Dau nhay don chi xuat hien o vai tro boc tu
         assertEquals(0, query.replace("'", "").chars().filter(c -> c == '\'').count());
     }
 

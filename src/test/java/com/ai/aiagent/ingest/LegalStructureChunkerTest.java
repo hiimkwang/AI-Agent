@@ -12,12 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Van ban quy che/quy trinh chuyen tu PDF hay Word gan nhu khong bao gio co heading
- * Markdown. Khong nhan ra {@code Dieu N} thi ca tai lieu la MOT section, parent duoc
- * dong thuan theo so ky tu, va chunk bi cat ngang giua mot Dieu - tra loi "theo Dieu 12"
- * ma chi co nua Dieu 12 la kieu sai nghiem trong hon han viec khong tra loi.
- */
 class LegalStructureChunkerTest {
 
     private RagProperties props;
@@ -28,13 +22,8 @@ class LegalStructureChunkerTest {
         props = new RagProperties();
         props.getChunking().setParentMaxChars(600);
         props.getChunking().setChildMaxChars(300);
-        // CO Y giu min-section-chars mac dinh (200) chu khong dat 0: mot Dieu ngan hon
-        // 200 ky tu la chuyen binh thuong, va chinh o do da tung sinh loi gop nham hai
-        // Dieu. Dat 0 se lam bo test khong con bat duoc loi that.
         chunker = new MarkdownChunker(props);
     }
-
-    // ============================================================ Nhan dien moc
 
     @Test
     @DisplayName("Nhan dien Phan / Chuong / Muc / Dieu / Phu luc, long dung thu tu")
@@ -55,10 +44,6 @@ class LegalStructureChunkerTest {
         assertEquals(3, MarkdownChunker.legalHeadingLevel("Chuong I"));
     }
 
-    /**
-     * "Điều này quy định..." la mot CAU trong than bai, khong phai tieu de. Nhan nham
-     * se bam vun tai lieu ra thanh hang tram section mot dong.
-     */
     @Test
     @DisplayName("Khong nham cau van co chua tu 'Dieu'/'Chuong' voi tieu de")
     void doesNotMatchProseContainingKeywords() {
@@ -73,8 +58,6 @@ class LegalStructureChunkerTest {
     void rejectsOverlongLines() {
         assertEquals(0, MarkdownChunker.legalHeadingLevel("Điều 7. " + "x".repeat(300)));
     }
-
-    // ============================================================ Anh huong len chunk
 
     private static final String QUY_CHE = """
             Chương I
@@ -109,10 +92,6 @@ class LegalStructureChunkerTest {
                         + chunks.stream().map(MarkdownChunker.Chunk::headingPath).distinct().toList());
     }
 
-    /**
-     * Day la muc dich chinh cua ca thay doi: parent khong duoc chua noi dung cua hai
-     * Dieu khac nhau, neu khong cau tra loi se tron lan quy dinh cua hai dieu.
-     */
     @Test
     @DisplayName("Parent khong bao gio chua noi dung cua hai Dieu khac nhau")
     void parentNeverSpansTwoArticles() {
@@ -125,14 +104,10 @@ class LegalStructureChunkerTest {
         }
     }
 
-    /**
-     * Loi that da gap khi chay thu tren DB: {@code mergeTinySections} gop Dieu 1 (ngan)
-     * vao Dieu 2 roi giu duong dan CU THE HON, nen noi dung "Pham vi ap dung" cua Dieu 1
-     * bi gan nhan la Dieu 2. Cau tra loi trich dan "theo Dieu 2" cho mot noi dung nam o
-     * Dieu 1 la sai can cu - kieu sai kho phat hien nhat vi cau tra loi van doc rat xuoi.
-     */
     @Test
     @DisplayName("Dieu ngan KHONG bi gop vao Dieu ke tiep va gan nham nhan")
+    // Regression: a short Dieu merged into the next one took its heading, so answers
+    // cited the wrong article. Must run with the default min-section-chars.
     void shortArticleIsNotMergedIntoTheNextOne() {
         List<MarkdownChunker.Chunk> chunks = chunker.chunk(QUY_CHE);
 
@@ -155,13 +130,6 @@ class LegalStructureChunkerTest {
                 "tat co che thi khong duoc sinh duong dan heading nao");
     }
 
-    // ============================================================ Dinh danh tai lieu
-
-    /**
-     * Khong co dong nay thi ten van ban / so hieu / ngay hieu luc KHONG nam trong vector
-     * cua chunk, nen cau hoi "quy dinh so bao nhieu" gan nhu chac chan truot du tai lieu
-     * dung nam ngay do.
-     */
     @Test
     @DisplayName("Dinh danh tai lieu duoc gan vao van ban dem di nhung")
     void embedTextCarriesDocumentIdentity() {

@@ -14,32 +14,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Tu dien thuat ngu / viet tat noi bo.
- *
- * VAN DE NO GIAI: can bo go "UBCK", "CTCK", "margin"; tai lieu viet "Uy ban Chung
- * khoan Nha nuoc", "cong ty chung khoan", "giao dich ky quy". Vector search khong
- * noi duoc cac cap nay mot cach dang tin, con full-text thi cang khong - hai chuoi
- * khong chung mot tu nao. Ket qua la cau hoi go tat gan nhu chac chan truot.
- *
- * Dung o HAI cho, co y:
- *   1) {@link #expand} - mo rong tsquery cua nhanh full-text (khop ngay lap tuc)
- *   2) {@link #hintFor} - chen vao prompt viet lai cau hoi, de cau viet lai dung
- *      dung thuat ngu cua tai lieu (giup ca nhanh vector)
- *
- * Bang rat nho nen giu ban chup trong bo nho, lam moi moi phut - giong
- * {@code PlatformService}.
- */
 @Service
 @Slf4j
 public class GlossaryService {
 
-    /** @param expansions cac cach viet khac cua {@code term}, da chuan hoa chu thuong */
     public record Entry(String term, List<String> expansions, String collectionSlug) {
     }
 
     private final JdbcTemplate jdbc;
-    /** khoa = term chu thuong (khong dau), gia tri = cac ban mo rong */
     private volatile Map<String, List<String>> byTerm = Map.of();
     private volatile List<Entry> entries = List.of();
 
@@ -65,7 +47,6 @@ public class GlossaryService {
 
         Map<String, List<String>> index = new LinkedHashMap<>();
         for (Entry e : loaded) {
-            // Khoa tra cuu da bo dau: nguoi dung go "ky quy" phai khop "ký quỹ".
             String key = normalize(e.term());
             if (key.isBlank()) continue;
             index.computeIfAbsent(key, k -> new ArrayList<>()).addAll(e.expansions());
@@ -78,9 +59,7 @@ public class GlossaryService {
         try {
             refresh();
         } catch (Exception e) {
-            // Luc khoi dong, Flyway co the chua chay xong. Tu dien rong chi lam mat mot
-            // cai thien, khong duoc lam chet ung dung.
-            log.warn("Chua nap duoc tu dien thuat ngu ({}). Se thu lai sau 1 phut.",
+            log.warn("Could not load the glossary ({}). Retrying in one minute.",
                     e.getMessage());
         }
     }
@@ -93,19 +72,12 @@ public class GlossaryService {
         return entries;
     }
 
-    /**
-     * Cac cach viet khac cua nhung thuat ngu xuat hien trong cau hoi.
-     *
-     * @return chuoi da them, KHONG gom cac tu goc - caller tu gop
-     */
     public Set<String> expand(String text) {
         Set<String> out = new LinkedHashSet<>();
         if (text == null || text.isBlank() || byTerm.isEmpty()) return out;
 
         String normalized = normalize(text);
         for (Map.Entry<String, List<String>> e : byTerm.entrySet()) {
-            // So khop theo RANH GIOI TU, khong phai contains(): "kyq" khong duoc khop
-            // trong "kyquyet", va "nd" khong khop moi tu chua "nd".
             if (containsWord(normalized, e.getKey())) {
                 out.addAll(e.getValue());
             }
@@ -113,12 +85,6 @@ public class GlossaryService {
         return out;
     }
 
-    /**
-     * Goi y thuat ngu de chen vao prompt viet lai cau hoi.
-     *
-     * @return chuoi rong khi cau hoi khong chua thuat ngu nao - de khong lam phong
-     *         prompt mot cach vo ich
-     */
     public String hintFor(String question) {
         if (byTerm.isEmpty()) return "";
         String normalized = normalize(question);
@@ -132,7 +98,7 @@ public class GlossaryService {
         return sb.toString();
     }
 
-    /** So khop theo ranh gioi tu tren chuoi da chuan hoa. */
+    // Word-boundary match, not contains(): "ky" must not match inside "kyq".
     static boolean containsWord(String haystack, String needle) {
         if (needle.isBlank()) return false;
         int from = 0;
@@ -148,11 +114,6 @@ public class GlossaryService {
         }
     }
 
-    /**
-     * Chuan hoa de so khop: bo dau, chu thuong, gop khoang trang.
-     *
-     * CO Y giu dau {@code +} va so: "T+2" la mot thuat ngu that trong nganh chung khoan.
-     */
     static String normalize(String text) {
         if (text == null) return "";
         return com.ai.aiagent.store.TsQueryBuilder.stripDiacritics(text)

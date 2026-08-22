@@ -18,10 +18,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/**
- * Day la lop dich "anh A thuoc nhom X" thanh "doc duoc phong nhan-su". Sai o day la
- * sai quyen tren toan he thong, nen kiem tra ky ca duong MO lan duong DONG.
- */
 class EntraScopeServiceTest {
 
     private static final String OID = "11111111-1111-1111-1111-111111111111";
@@ -44,7 +40,6 @@ class EntraScopeServiceTest {
         props.getGroupDepartments().put(KE_TOAN, "ke-toan,cong-no");
         graph = mock(GraphDirectoryClient.class);
         platform = mock(PlatformService.class);
-        // Mac dinh: chua cau hinh ACL trong DB => lui ve rag.entra.group-departments (P1)
         when(platform.hasNoAcl()).thenReturn(true);
         service = new EntraScopeService(props, graph, mock(UserRepository.class), platform);
     }
@@ -64,10 +59,6 @@ class EntraScopeServiceTest {
         assertEquals(Set.of("USER"), scope.roles());
     }
 
-    /**
-     * MAC DINH TU CHOI. Neu cho ai khong khop nhom nao doc het thi mot nguoi moi vao
-     * cong ty, chua duoc gan nhom, se doc duoc toan bo tai lieu noi bo.
-     */
     @Test
     @DisplayName("Khong khop nhom nao va khong phai ADMIN => khong doc duoc gi")
     void unknownGroupsGetNothing() {
@@ -78,10 +69,6 @@ class EntraScopeServiceTest {
         assertTrue(scope.departments().isEmpty());
     }
 
-    /**
-     * Graph loi thi {@link GraphDirectoryClient#memberGroups} tra ve rong. Rong PHAI
-     * nghia la "khong co quyen gi", tuyet doi khong duoc thanh "co moi quyen".
-     */
     @Test
     @DisplayName("Graph loi (khong lay duoc nhom) => dong quyen lai, khong mo ra")
     void graphFailureFailsClosed() {
@@ -157,11 +144,6 @@ class EntraScopeServiceTest {
         org.mockito.Mockito.verify(graph, org.mockito.Mockito.times(1)).memberGroups(OID);
     }
 
-    /**
-     * MOT nguon su that tai mot thoi diem. Khi da co ACL trong DB (P3), cau hinh
-     * {@code group-departments} cua P1 phai NGUNG co tac dung - neu khong, go quyen trong
-     * DB se khong co hieu luc vi properties van mo, va rat kho phat hien.
-     */
     @Test
     @DisplayName("Da co ACL trong DB => dung DB, KHONG cong them cau hinh P1")
     void databaseAclSupersedesProperties() {

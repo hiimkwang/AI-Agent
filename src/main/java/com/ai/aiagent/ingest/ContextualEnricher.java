@@ -14,16 +14,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-/**
- * Contextual Retrieval: nho LLM viet 1-2 cau NGU CANH cho tung chunk.
- *
- * Van de: mot chunk nho tach khoi tai lieu thuong mat ngu canh ("Muc tang la 3%" -
- * tang cai gi, cua ai, ky nao?). Khi nhung se kho khop dung cau hoi.
- *
- * Voi cach bam chunk moi theo heading, chunk da mang san duong dan heading nen loi
- * ich cua buoc nay giam bot - vi vay mac dinh vẫn TAT ({@code contextual-enabled=false}).
- * Bat len khi do bang eval thay thuc su co loi, vi moi chunk ton mot loi goi LLM.
- */
 @Component
 @Slf4j
 public class ContextualEnricher {
@@ -64,10 +54,6 @@ public class ContextualEnricher {
         if (executor != null) executor.shutdownNow();
     }
 
-    /**
-     * @return danh sach cau ngu canh, cung thu tu voi {@code chunks}; phan tu rong
-     *         khi tat hoac khi rieng chunk do bi loi (khong lam chet ca file)
-     */
     public List<String> buildContexts(String fileName, List<MarkdownChunker.Chunk> chunks) {
         int n = chunks.size();
         List<String> results = new ArrayList<>(Collections.nCopies(n, ""));
@@ -90,7 +76,7 @@ public class ContextualEnricher {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.warn("Sinh context bi ngat -> bo qua context cho file {}.", fileName);
+            log.warn("Context generation interrupted, ingesting {} without chunk context.", fileName);
         }
         return results;
     }
@@ -122,7 +108,7 @@ public class ContextualEnricher {
             String context = internalLlm.generate(prompt);
             return context == null ? "" : context.strip();
         } catch (Exception e) {
-            log.debug("Sinh context cho 1 chunk loi ({}) -> bo qua.", e.getMessage());
+            log.debug("Context generation failed for one chunk ({}), skipping it.", e.getMessage());
             return "";
         }
     }

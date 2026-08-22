@@ -3,49 +3,62 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Quản trị trợ lý tài liệu</title>
-    <link rel="stylesheet" href="/app.css">
+    <title>BSC Assistant — Quản trị</title>
+    <link rel="stylesheet" href="app.css">
     <style>
-        .page { max-width: 82rem; margin: 0 auto; padding: 1.2rem clamp(.8rem, 3vw, 2rem) 4rem; }
+        .page { max-width: 84rem; margin: 0 auto; padding: 1.4rem clamp(.8rem, 3vw, 2rem) 4rem; }
 
-        .tabs { display: flex; gap: .2rem; border-bottom: 1px solid var(--rule); margin-bottom: 1.2rem;
-                overflow-x: auto; }
+        /* Segmented pill tabs; they scroll horizontally on narrow screens. */
+        .tabs {
+            display: flex; gap: .25rem; margin-bottom: 1.6rem;
+            overflow-x: auto; padding: .3rem;
+            background: var(--surface); border: 1px solid var(--rule);
+            border-radius: var(--radius-pill);
+            box-shadow: var(--shadow-sm);
+            scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
         .tabs button {
-            border: none; background: transparent; border-bottom: 2px solid transparent;
-            border-radius: 0; padding: .55rem .9rem; color: var(--muted); white-space: nowrap;
-            transition: color .15s ease, border-color .15s ease;
+            border: 1px solid transparent; background: transparent;
+            border-radius: var(--radius-pill); padding: .48rem 1rem;
+            color: var(--muted); white-space: nowrap; font-size: .88rem; font-weight: 550;
         }
-        .tabs button:hover:not(.active) { color: var(--fg); box-shadow: none; }
-        .tabs button.active { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 700; }
-        .panel { display: none; animation: panel-in .15s ease; }
+        .tabs button:hover:not(.active) {
+            color: var(--fg); background: var(--surface-2); border-color: transparent;
+            box-shadow: none;
+        }
+        .tabs button.active,
+        .tabs button.active:hover:not(:disabled) {
+            color: var(--on-accent); background: var(--accent-grad);
+            border-color: transparent; font-weight: 650;
+            box-shadow: 0 2px 8px -4px var(--accent);
+        }
+        .panel { display: none; animation: panel-in .18s var(--ease); }
         .panel.active { display: block; }
-        @keyframes panel-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-        h2 { font-size: 1.15rem; margin: 0 0 .2rem; }
-        .sub { color: var(--muted); font-size: .9rem; margin: 0 0 1rem; max-width: 60ch; }
-        section + section { margin-top: 1.6rem; }
+        h2 { font-size: 1.22rem; margin: 0 0 .3rem; }
+        .sub { color: var(--muted); font-size: .92rem; margin: 0 0 1.2rem; max-width: 70ch; }
+        section + section { margin-top: 1.8rem; }
 
-        /* ------------------------------------------------------- Stat tiles
-           Ô rời nhau, KHÔNG dùng thủ thuật "khe 1px trên nền kẻ": số ô thay đổi
-           theo dữ liệu, nên hàng cuối gần như luôn thiếu ô — và phần thiếu đó
-           hiện ra thành một mảng xám to đúng giữa trang. Lưới có khoảng cách
-           thật thì hàng thiếu ô chỉ đơn giản là kết thúc sớm. */
-        .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
-                 gap: .6rem; margin: 0; }
+        .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
+                 grid-auto-rows: 1fr; gap: .8rem; margin: 0; }
         .tile {
-            background: var(--surface); padding: .75rem .9rem .8rem 1rem;
-            border: 1px solid var(--rule); border-left: 3px solid var(--rule-strong);
+            background: var(--surface); padding: .95rem 1.1rem 1rem;
+            border: 1px solid var(--rule); border-left: 4px solid var(--rule-strong);
             border-radius: var(--radius); box-shadow: var(--shadow-sm);
-            transition: border-color .15s ease;
+            transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
         }
+        .tile:hover { box-shadow: var(--shadow); }
         .tile dt {
-            font-size: .74rem; letter-spacing: .01em; color: var(--muted);
+            font-size: .8rem; font-weight: 550; letter-spacing: .01em; color: var(--muted);
         }
         .tile dd {
-            margin: .25rem 0 0; font-size: 1.6rem; line-height: 1.1; font-weight: 600;
+            margin: .28rem 0 0; font-size: 1.5rem; line-height: 1.15; font-weight: 620;
+            font-family: var(--display);
             font-variant-numeric: lining-nums tabular-nums;
         }
-        .tile dd small { font-size: .8rem; color: var(--muted); font-weight: 400; }
+        .tile dd small { font-size: .8rem; color: var(--muted); font-weight: 450; }
         .tile.warn { border-left-color: var(--ochre); }
         .tile.warn dd { color: var(--ochre); }
         .tile.bad { border-left-color: var(--crimson); }
@@ -53,60 +66,59 @@
         .tile.good { border-left-color: var(--good); }
         .tile.good dd { color: var(--good); }
 
-        /* Cung bang mau voi tile, de bang bao cao va o so lieu khong "noi" khac nhau. */
         td.warn { color: var(--ochre); }
         td.bad  { color: var(--crimson); }
+        td.scan-known.ok  { color: var(--good); font-weight: 600; }
+        td.scan-known.bad { color: var(--crimson); }
+        .warn-line { color: var(--crimson); }
         td.good { color: var(--good); }
         td .sub { font-size: .8rem; }
 
-        /* Giá trị dùng font chữ thường, KHÔNG mono. Trước đây mọi giá trị đều mono nên
-           "bật"/"tắt"/"có" trông như mã lệnh, và cả trang bị nặng vì chữ đẳng khoảng
-           chiếm phần lớn diện tích. Mono chỉ dành cho thứ thật sự là định danh — nơi
-           gọi tự bọc .mono. */
-        .kv { display: grid; grid-template-columns: max-content 1fr; gap: .38rem .9rem; font-size: .88rem;
+        .kv { display: grid; grid-template-columns: max-content 1fr; gap: .4rem .9rem; font-size: .89rem;
               align-items: baseline; }
         .kv dt { color: var(--muted); }
         .kv dd { margin: 0; color: var(--fg); }
 
-        /* Lưới thật, không phải flex-wrap. Hai chục ô có bề rộng khác nhau xếp bằng
-           flex-wrap thì mỗi hàng lại lệch một kiểu và để lại những khoảng hở giữa dòng —
-           đúng cái làm tab Cấu hình trông lộn xộn. */
         #settings-form {
             display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
             gap: 1rem 1.3rem; align-items: start;
         }
         #settings-form .field { flex: none; }
-        .setting-key { font-size: .72rem; margin-top: .15rem; }
+        .setting-key { font-size: .8rem; margin-top: .2rem; }
 
         .drop {
             border: 2px dashed var(--rule-strong);
-            border-radius: var(--radius);
-            padding: 1.6rem 1rem;
+            border-radius: var(--radius-lg);
+            padding: 2.2rem 1rem;
             text-align: center;
+            font-size: .93rem;
             color: var(--muted);
             cursor: pointer;
-            background: var(--surface);
+            background: var(--sunk);
+            transition: border-color .16s var(--ease), background-color .16s var(--ease);
         }
+        .drop:hover { border-color: var(--accent); }
         .drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
-        .filelist { margin-top: .6rem; font-size: .85rem; }
+        .filelist { margin-top: .7rem; font-size: .87rem; }
 
-        .job { padding: .7rem .9rem; display: flex; flex-direction: column; gap: .4rem; }
-        .job .top { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-        .job .top b { font-family: var(--mono); font-size: .8rem; }
+        .job { padding: .85rem 1rem; display: flex; flex-direction: column; gap: .45rem; }
+        .job .top { display: flex; gap: .55rem; align-items: center; flex-wrap: wrap; }
+        .job .top b { font-family: var(--mono); font-size: .88rem; }
 
-        .chunk-preview { display: flex; flex-direction: column; gap: .5rem; }
+        .chunk-preview { display: flex; flex-direction: column; gap: .6rem; }
         .chunk-preview .c {
             border: 1px solid var(--rule); border-left: 3px solid var(--accent);
-            padding: .5rem .7rem; background: var(--surface);
+            border-radius: var(--radius-sm);
+            padding: .65rem .85rem; background: var(--sunk);
         }
         .chunk-preview .c .h {
-            font-family: var(--mono); font-size: .7rem; color: var(--faint);
-            display: flex; gap: .5rem; margin-bottom: .3rem; flex-wrap: wrap;
+            font-family: var(--mono); font-size: .78rem; color: var(--faint);
+            display: flex; gap: .6rem; margin-bottom: .35rem; flex-wrap: wrap;
         }
-        .chunk-preview .c .t { font-size: .85rem; white-space: pre-wrap; }
+        .chunk-preview .c .t { font-size: .92rem; white-space: pre-wrap; }
 
-        /* ------------------------------------------------- Provider & API key */
-        #provider-select { max-width: 22rem; }
+        /* The select is display:none behind the custom listbox, so size the wrapper. */
+        #provider-select, #provider-select + .dd-btn { max-width: 22rem; }
         .provider-panel {
             display: none;
             flex-direction: column;
@@ -119,7 +131,7 @@
         .provider-panel .field { flex: 0 0 auto; max-width: 26rem; }
         .provider-panel .key-row { display: flex; gap: .4rem; }
         .provider-panel .key-row input { flex: 1; }
-        .provider-panel .hint { font-size: .78rem; color: var(--faint); margin: .3rem 0 0; }
+        .provider-panel .hint { font-size: .83rem; color: var(--faint); margin: .35rem 0 0; }
         .provider-panel .hint.error { color: var(--crimson); }
         .provider-panel .hint.ok { color: var(--good); }
         .provider-panel .connect-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
@@ -128,14 +140,15 @@
 </head>
 <body>
 
-<div class="topbar">
-    <div class="brand"><span class="dot"></span> Trợ lý tài liệu <small>quản trị</small></div>
+<div class="topbar" data-topbar>
+    <div class="brand"><span class="dot"></span> BSC Assistant <small>quản trị</small></div>
     <nav>
-        <a href="/">Hỏi đáp</a>
-        <a href="/admin.html" class="active">Quản trị</a>
+        <a href="./">Hỏi đáp</a>
+        <a href="my.html">Nhóm của tôi</a>
+        <a href="admin.html" class="active">Quản trị</a>
     </nav>
     <div class="spacer"></div>
-    <button class="ghost tiny" id="theme-toggle">Tối</button>
+    <button class="ghost icon" id="theme-toggle" title="Đổi sáng/tối"></button>
     <button class="ghost tiny" onclick="promptForKey()">API key</button>
 </div>
 
@@ -154,7 +167,6 @@
         <button data-tab="audit">Nhật ký</button>
     </div>
 
-    <!-- ============================================================ TỔNG QUAN -->
     <div class="panel active" id="tab-overview">
         <h2>Tổng quan hệ thống</h2>
         <p class="sub">Số liệu tính từ lần khởi động gần nhất. Chi tiết dạng Prometheus có ở
@@ -162,9 +174,7 @@
 
         <dl class="tiles" id="tiles"></dl>
 
-        <!-- flex-start chứ không stretch: ba thẻ có lượng nội dung rất khác nhau, kéo
-             bằng chiều cao thẻ dài nhất chỉ tạo ra hai mảng trắng to dưới hai thẻ kia. -->
-        <section class="row" style="align-items:flex-start; margin-top:1.2rem">
+        <section class="row" style="align-items:stretch; margin-top:1.2rem">
             <div class="card" style="flex:1 1 320px">
                 <h3>Pipeline đang chạy</h3>
                 <dl class="kv" id="pipeline-kv"></dl>
@@ -188,7 +198,6 @@
         </section>
     </div>
 
-    <!-- ======================================================= NẠP TÀI LIỆU -->
     <div class="panel" id="tab-ingest">
         <h2>Nạp tài liệu</h2>
         <p class="sub">Mọi định dạng đều được chuyển sang Markdown trước khi băm chunk — heading và
@@ -258,13 +267,18 @@
                 <div style="flex:0 0 auto">
                     <label class="inline"><input type="checkbox" id="folder-recursive" checked> Gồm thư mục con</label>
                 </div>
-                <button class="primary" onclick="ingestFolder()">Nạp thư mục</button>
+                <button class="primary" onclick="scanFolder()">Quét thư mục</button>
             </div>
             <p class="faint" style="font-size:.82rem" id="roots-hint"></p>
+            <p class="faint" style="font-size:.82rem">
+                Quét trước rồi mới nạp: nhóm tài liệu quyết định <b>ai đọc được</b>, mà đặt sai
+                thì chỉ lộ ra rất muộn — tài liệu nạp xong, quản trị viên vẫn thấy bình thường
+                còn người dùng và bot Teams thì luôn nhận “không tìm thấy”.
+            </p>
+            <div id="scan-out"></div>
         </section>
     </div>
 
-    <!-- =========================================================== TÀI LIỆU -->
     <div class="panel" id="tab-documents">
         <h2>Tài liệu đã nạp</h2>
         <p class="sub">Mỗi tài liệu giữ cả bản Markdown đã chuyển đổi, nên kiểm tra được bộ chuyển
@@ -276,18 +290,28 @@
                 <select id="doc-category"><option value="">Tất cả</option></select></div>
             <button onclick="loadDocuments()">Tìm</button>
         </div>
+        <div class="row" id="doc-bulkbar" style="display:none;align-items:center;margin-bottom:.6rem">
+            <b id="doc-selcount"></b>
+            <button onclick="moveSelectedCategory()">Đổi nhóm</button>
+            <button class="danger solid" onclick="bulkDeleteSelected()">Xoá đã chọn</button>
+            <button class="danger" id="doc-delall" style="display:none"
+                onclick="bulkDeleteAllMatching()">Xoá tất cả khớp bộ lọc</button>
+            <button class="ghost" onclick="clearDocSelection()">Bỏ chọn</button>
+            <span class="faint" style="font-size:.82rem" id="doc-bulkhint"></span>
+        </div>
         <div class="card scroll" style="padding:0">
             <table>
                 <thead><tr>
+                    <th style="width:2.2rem"><input type="checkbox" id="doc-checkall"
+                        title="Chọn tất cả dòng đang hiển thị" onclick="toggleAllDocs(this)"></th>
                     <th>Tên file</th><th>Nhóm</th><th>Số hiệu / bản</th><th>Hiệu lực</th>
                     <th>Trạng thái</th><th class="num">Chunk</th><th>Định dạng</th><th></th>
                 </tr></thead>
-                <tbody id="doc-rows"><tr><td colspan="8" class="empty">Đang tải…</td></tr></tbody>
+                <tbody id="doc-rows"><tr><td colspan="9" class="empty">Đang tải…</td></tr></tbody>
             </table>
         </div>
     </div>
 
-    <!-- ================================================================ JOB -->
     <div class="panel" id="tab-platform">
         <h2>Bot &amp; phân quyền</h2>
         <p class="sub">Nhóm tài liệu quyết định <em>ai đọc được gì</em>; bot quyết định
@@ -310,6 +334,12 @@
                 <div class="field"><label for="col-name">Tên hiển thị</label>
                     <input id="col-name" placeholder="Nhân sự"></div>
                 <button class="primary" onclick="createCollection()">Tạo nhóm</button>
+            </div>
+            <div class="row" id="col-bulkbar" style="display:none;align-items:center;margin-bottom:.6rem">
+                <b id="col-selcount"></b>
+                <button class="danger solid" onclick="bulkDeleteCollections()">Xoá nhóm đã chọn</button>
+                <button class="ghost" onclick="clearColSelection()">Bỏ chọn</button>
+                <span class="faint" style="font-size:.82rem" id="col-bulkhint"></span>
             </div>
             <div class="scroll"><table id="collections-table"></table></div>
         </section>
@@ -348,6 +378,76 @@
             </div>
             <div class="scroll"><table id="bindings-table"></table></div>
         </section>
+
+        <section class="card" style="margin-top:1.2rem">
+            <h3>Uỷ quyền cho người khác</h3>
+            <p class="faint" style="margin-top:0;font-size:.84rem">
+                Giao một nhóm tài liệu (hoặc một bot) cho người ngoài đội quản trị. Họ đăng nhập
+                bằng tài khoản công ty rồi vào <a href="my.html">Nhóm của tôi</a> để nạp tài liệu,
+                chọn nhóm Entra được đọc và gán bot cho Team của họ — <strong>không</strong> thấy và
+                <strong>không</strong> sửa được gì của phòng khác.
+                Đây là cách thay cho việc thêm họ vào nhóm quản trị, vì nhóm quản trị là toàn quyền
+                trên cả hệ thống.
+            </p>
+            <div class="row" style="margin-bottom:.6rem">
+                <div class="field"><label for="grant-type">Đối tượng</label>
+                    <select id="grant-type" onchange="grantTypeChanged()">
+                        <option value="USER">Một người (nhập email)</option>
+                        <option value="GROUP">Một nhóm Entra (nhập Object ID)</option>
+                    </select></div>
+                <div class="field"><label for="grant-principal" id="grant-principal-label">Email</label>
+                    <input id="grant-principal" placeholder="ten.nguoidung@bsc.com.vn"></div>
+                <div class="field"><label for="grant-scope-type">Phạm vi</label>
+                    <select id="grant-scope-type" onchange="renderGrantTargets()">
+                        <option value="COLLECTION">Nhóm tài liệu</option>
+                        <option value="BOT">Bot</option>
+                    </select></div>
+                <div class="field"><label for="grant-scope">Đối tượng được giao</label>
+                    <select id="grant-scope"></select></div>
+                <div class="field"><label for="grant-role">Vai trò</label>
+                    <select id="grant-role">
+                        <option value="OWNER">OWNER — quản lý</option>
+                        <option value="EDITOR">EDITOR — quản lý</option>
+                        <option value="VIEWER">VIEWER — chỉ xem, không sửa</option>
+                    </select></div>
+                <button class="primary" onclick="createGrant()">Cấp quyền</button>
+            </div>
+            <div class="scroll"><table id="grants-table"></table></div>
+        </section>
+
+        <section class="card" style="margin-top:1.2rem">
+            <h3>Cấp tiền tố để người đó tự tạo nhóm tài liệu</h3>
+            <p class="faint" style="margin-top:0;font-size:.84rem">
+                Cách dùng bình thường: cấp <strong>một tiền tố</strong> cho mỗi bộ phận rồi để họ
+                tự tạo nhóm tài liệu bên trong — bạn không phải tạo từng nhóm hộ họ.
+                Ví dụ cấp tiền tố <span class="mono">phap-che</span> thì họ tạo được
+                <span class="mono">phap-che</span>, <span class="mono">phap-che-hop-dong</span>,
+                <span class="mono">phap-che-noi-bo</span>… và <strong>không</strong> tạo được
+                <span class="mono">nhan-su</span>.
+                Người tạo tự động thành OWNER của nhóm mình vừa tạo.
+            </p>
+            <p class="faint" style="margin-top:0;font-size:.82rem">
+                Có tiền tố là vì <span class="mono">rag_collections.slug</span> chính là cột
+                <span class="mono">category</span> mà mọi câu truy vấn lọc theo — một namespace
+                dùng chung. Để ai cũng đặt tuỳ ý thì hai bộ phận sẽ tranh nhau
+                <span class="mono">quy-trinh</span>, và sau khi đã nạp tài liệu thì không sửa lại được.
+            </p>
+            <div class="row" style="margin-bottom:.6rem">
+                <div class="field"><label for="ns-type">Đối tượng</label>
+                    <select id="ns-type" onchange="nsTypeChanged()">
+                        <option value="USER">Một người (nhập email)</option>
+                        <option value="GROUP">Một nhóm Entra (Object ID)</option>
+                    </select></div>
+                <div class="field"><label for="ns-principal" id="ns-principal-label">Email</label>
+                    <input id="ns-principal" placeholder="ten.nguoidung@bsc.com.vn"></div>
+                <div class="field"><label for="ns-prefix">Tiền tố</label>
+                    <input id="ns-prefix" placeholder="phap-che"></div>
+                <div class="field"><label for="ns-max">Số nhóm tối đa</label>
+                    <input id="ns-max" type="number" value="20" min="1" max="500"></div>
+                <button class="primary" onclick="createNamespaceGrant()">Cấp tiền tố</button>
+            </div>
+            <div class="scroll"><table id="ns-table"></table></div>
+        </section>
     </div>
 
     <div class="panel" id="tab-jobs">
@@ -361,7 +461,6 @@
         <div class="grid" id="jobs" style="grid-template-columns:1fr"></div>
     </div>
 
-    <!-- ================================================ NHÀ CUNG CẤP & API KEY -->
     <div class="panel" id="tab-providers">
         <h2>Nhà cung cấp &amp; API key</h2>
         <p class="sub">Nhập API key rồi bấm <b>Kết nối</b> — hệ thống gọi thẳng API của nhà cung
@@ -508,7 +607,6 @@
         </section>
     </div>
 
-    <!-- =========================================================== CẤU HÌNH -->
     <div class="panel" id="tab-settings">
         <h2>Cấu hình runtime</h2>
         <p class="sub">Đổi ở đây áp dụng <b>ngay</b>, không cần khởi động lại, và được lưu vào DB nên
@@ -525,7 +623,6 @@
         </div>
     </div>
 
-    <!-- =========================================================== ĐÁNH GIÁ -->
     <div class="panel" id="tab-eval">
         <h2>Đánh giá chất lượng</h2>
         <p class="sub">Bộ câu hỏi chuẩn lưu trong DB. Mỗi lần chạy được ghi lại kèm tham số retrieval,
@@ -582,7 +679,6 @@
         </section>
     </div>
 
-    <!-- ============================================================ BÁO CÁO -->
     <div class="panel" id="tab-reports">
         <h2>Báo cáo theo bot</h2>
         <p class="sub">Số liệu đọc từ lịch sử hội thoại trong DB nên <b>không mất khi khởi động lại</b>
@@ -633,7 +729,6 @@
         </section>
     </div>
 
-    <!-- =========================================================== PHẢN HỒI -->
     <div class="panel" id="tab-feedback">
         <h2>Phản hồi người dùng</h2>
         <p class="sub">Các câu trả lời bị đánh giá xấu — đây là danh sách việc cần xem lại, và là
@@ -666,11 +761,13 @@
             <button onclick="loadAudit()">Tìm</button>
         </div>
 
+        <div class="card scroll" style="padding:0">
         <table id="audit-table" class="mono" style="font-size:.8rem"></table>
+    </div>
 
         <h3 style="margin-top:1.6rem">Vòng đời dữ liệu</h3>
         <p class="sub">Chạy tự động hằng ngày. Xoá hội thoại, nhật ký và job cũ hơn thời hạn đã đặt.</p>
-        <div id="retention-status"></div>
+        <div id="retention-status" class="scroll"></div>
         <div class="row" style="margin-top:.6rem">
             <button class="ghost" onclick="runRetention()">Chạy dọn ngay</button>
         </div>
@@ -679,9 +776,8 @@
 
 <div id="toasts"></div>
 
-<script src="/app.js"></script>
+<script src="app.js"></script>
 <script>
-    /* ------------------------------------------------------------- Tabs */
     const tabLoaders = {
         overview: loadOverview, documents: loadDocuments, jobs: loadJobs,
         settings: loadSettings, eval: loadEval, feedback: loadFeedback,
@@ -705,26 +801,186 @@
     });
 
     const initialTab = location.hash.replace('#', '');
-    if (initialTab && document.getElementById('tab-' + initialTab)) {
-        activateTab(initialTab, false);
-    }
-
-    /* ------------------------------------------------- Bot & phân quyền */
+    const deepLinked = !!(initialTab && document.getElementById('tab-' + initialTab));
+    if (deepLinked) activateTab(initialTab, false);
 
     let platformState = { collections: [], bots: [], channelBindings: [] };
 
+    let groupNames = {};
+
     async function loadPlatform() {
         platformState = await api('/api/v1/rag/admin/platform');
+        await resolveGroupNames();
         renderPlatformWarnings();
         renderCollections();
         renderBots();
         renderBindings();
+        renderGrants();
+        renderGrantTargets();
+        renderNamespaceGrants();
     }
 
-    /**
-     * Ba trạng thái làm hệ thống "chạy nhưng không trả lời được gì", và triệu chứng của
-     * cả ba đều giống nhau ("hỏi không ra"). Nói thẳng ra đây thay vì để người dùng đoán.
-     */
+    function nsTypeChanged() {
+        const isUser = document.getElementById('ns-type').value === 'USER';
+        document.getElementById('ns-principal-label').textContent = isUser ? 'Email' : 'Object ID nhóm';
+        document.getElementById('ns-principal').placeholder = isUser
+            ? 'ten.nguoidung@bsc.com.vn' : '00000000-0000-0000-0000-000000000000';
+    }
+
+    async function createNamespaceGrant() {
+        const type = document.getElementById('ns-type').value;
+        const principal = document.getElementById('ns-principal').value.trim();
+        const prefix = document.getElementById('ns-prefix').value.trim();
+        if (!principal || !prefix) return toast('Nhập đối tượng và tiền tố.', 'warn');
+
+        const body = {
+            principalType: type,
+            slugPrefix: prefix,
+            maxCollections: Number(document.getElementById('ns-max').value) || 20
+        };
+        if (type === 'USER') body.principalUpn = principal;
+        else { body.principalId = principal; body.displayName = groupLabel(principal); }
+
+        const r = await api('/api/v1/rag/admin/namespace-grants',
+            { method: 'POST', body: JSON.stringify(body) });
+        toast(r.message);
+        document.getElementById('ns-principal').value = '';
+        document.getElementById('ns-prefix').value = '';
+        loadPlatform();
+    }
+
+    function renderNamespaceGrants() {
+        const list = platformState.namespaceGrants || [];
+        const rows = list.map(n => `
+            <tr>
+              <td>${escapeHtml(n.principalType)}</td>
+              <td>${escapeHtml(n.displayName || (n.principalType === 'GROUP'
+                    ? groupLabel(n.principalId) : n.principalId))}
+                  <br><span class="mono faint" style="font-size:.72rem">${escapeHtml(n.principalId)}</span></td>
+              <td class="mono">${escapeHtml(n.slugPrefix)}-*</td>
+              <td class="tabular">${n.maxCollections}</td>
+              <td style="text-align:right">
+                <button class="ghost tiny danger" onclick="revokeNamespace(${n.id})">Thu hồi</button></td>
+            </tr>`).join('');
+
+        document.getElementById('ns-table').innerHTML = list.length
+            ? `<thead><tr><th>Loại</th><th>Ai</th><th>Tiền tố</th><th>Tối đa</th><th></th></tr></thead>
+               <tbody>${rows}</tbody>`
+            : '<tbody><tr><td class="empty">Chưa cấp tiền tố cho ai.</td></tr></tbody>';
+    }
+
+    async function revokeNamespace(id) {
+        const ok = await confirmDialog({
+            title: 'Thu hồi tiền tố',
+            message: 'Người này sẽ không tạo thêm được nhóm tài liệu mới. '
+                + 'Các nhóm đã tạo vẫn còn nguyên.',
+            confirmLabel: 'Thu hồi'
+        });
+        if (!ok) return;
+        toast((await api('/api/v1/rag/admin/namespace-grants/' + id, { method: 'DELETE' })).message);
+        loadPlatform();
+    }
+
+    // GUIDs are unreadable; resolve them once per load so every table can show names.
+    async function resolveGroupNames() {
+        const ids = new Set();
+        (platformState.collections || []).forEach(c => (c.aclGroups || []).forEach(g => ids.add(g)));
+        (platformState.bots || []).forEach(b => (b.audienceGroups || []).forEach(g => ids.add(g)));
+        (platformState.grants || []).forEach(g => {
+            if (g.principalType === 'GROUP') ids.add(g.principalId);
+        });
+        if (!ids.size) { groupNames = {}; return; }
+        try {
+            const r = await api('/api/v1/rag/admin/group-names',
+                { method: 'POST', body: JSON.stringify(Array.from(ids)) });
+            groupNames = r.names || {};
+        } catch (e) {
+            groupNames = {};   // Graph tat hoac loi: hien GUID, khong lam hong ca trang
+        }
+    }
+
+    function groupLabel(id) {
+        const name = groupNames[(id || '').toLowerCase()];
+        return name ? name : id;
+    }
+
+    function grantTypeChanged() {
+        const isUser = document.getElementById('grant-type').value === 'USER';
+        document.getElementById('grant-principal-label').textContent = isUser ? 'Email' : 'Object ID nhóm';
+        document.getElementById('grant-principal').placeholder = isUser
+            ? 'ten.nguoidung@bsc.com.vn' : '00000000-0000-0000-0000-000000000000';
+    }
+
+    function renderGrantTargets() {
+        const isCollection = document.getElementById('grant-scope-type').value === 'COLLECTION';
+        const items = isCollection
+            ? (platformState.collections || []).map(c => ({ id: c.id, label: c.slug }))
+            : (platformState.bots || []).map(b => ({ id: b.id, label: b.slug }));
+        document.getElementById('grant-scope').innerHTML = items.length
+            ? items.map(i => '<option value="' + i.id + '">' + escapeHtml(i.label) + '</option>').join('')
+            : '<option value="">— chưa có —</option>';
+    }
+
+    async function createGrant() {
+        const type = document.getElementById('grant-type').value;
+        const principal = document.getElementById('grant-principal').value.trim();
+        const scopeId = document.getElementById('grant-scope').value;
+        if (!principal) return toast('Nhập email hoặc Object ID.', 'warn');
+        if (!scopeId) return toast('Chưa có đối tượng nào để giao.', 'warn');
+
+        const body = {
+            principalType: type,
+            scopeType: document.getElementById('grant-scope-type').value,
+            scopeId: Number(scopeId),
+            role: document.getElementById('grant-role').value
+        };
+        if (type === 'USER') body.principalUpn = principal;
+        else { body.principalId = principal; body.displayName = groupLabel(principal); }
+
+        const r = await api('/api/v1/rag/admin/grants',
+            { method: 'POST', body: JSON.stringify(body) });
+        toast(r.message + ' (' + r.principalId + ')');
+        document.getElementById('grant-principal').value = '';
+        loadPlatform();
+    }
+
+    function renderGrants() {
+        const grants = platformState.grants || [];
+        const nameOf = (type, id) => type === 'GROUP' ? groupLabel(id) : id;
+        const scopeOf = (g) => {
+            const list = g.scopeType === 'COLLECTION' ? platformState.collections : platformState.bots;
+            const hit = (list || []).find(x => x.id === g.scopeId);
+            return hit ? hit.slug : ('#' + g.scopeId);
+        };
+        const rows = grants.map(g => `
+            <tr>
+              <td>${escapeHtml(g.principalType)}</td>
+              <td>${escapeHtml(g.displayName || nameOf(g.principalType, g.principalId))}
+                  <br><span class="mono faint" style="font-size:.72rem">${escapeHtml(g.principalId)}</span></td>
+              <td>${escapeHtml(g.scopeType)}</td>
+              <td class="mono">${escapeHtml(scopeOf(g))}</td>
+              <td>${escapeHtml(g.role)}</td>
+              <td style="text-align:right">
+                <button class="ghost tiny danger" onclick="revokeGrant(${g.id})">Thu hồi</button></td>
+            </tr>`).join('');
+
+        document.getElementById('grants-table').innerHTML = grants.length
+            ? `<thead><tr><th>Loại</th><th>Ai</th><th>Phạm vi</th><th>Đối tượng</th>
+                 <th>Vai trò</th><th></th></tr></thead><tbody>${rows}</tbody>`
+            : '<tbody><tr><td class="empty">Chưa uỷ quyền cho ai.</td></tr></tbody>';
+    }
+
+    async function revokeGrant(id) {
+        const ok = await confirmDialog({
+            title: 'Thu hồi quyền',
+            message: 'Người/nhóm này sẽ không còn quản lý được đối tượng đã giao.',
+            confirmLabel: 'Thu hồi'
+        });
+        if (!ok) return;
+        toast((await api('/api/v1/rag/admin/grants/' + id, { method: 'DELETE' })).message);
+        loadPlatform();
+    }
+
     function renderPlatformWarnings() {
         const host = document.getElementById('platform-warnings');
         const items = [];
@@ -737,20 +993,52 @@
             items.push('Bot <strong>' + escapeHtml(slug) + '</strong> chưa được gán nhóm tài liệu nào '
                 + 'nên sẽ từ chối mọi câu hỏi.');
         });
-        (platformState.orphanCategories || []).forEach(cat => {
-            items.push('Có tài liệu thuộc <span class="mono">' + escapeHtml(cat) + '</span> nhưng chưa '
-                + 'khai báo nhóm tài liệu tương ứng — không ai đọc được số tài liệu này.');
-        });
+        const orphans = platformState.orphanCategories || [];
+        if (orphans.length) {
+            items.push('Có tài liệu thuộc ' + orphans.length + ' nhóm chưa được khai báo nên '
+                + '<strong>chỉ quản trị viên đọc được</strong>: '
+                + orphans.map(c => '<span class="mono">' + escapeHtml(c) + '</span>').join(', ')
+                + '.');
+        }
 
         host.innerHTML = items.length === 0 ? '' :
             '<div class="card" style="border-left:3px solid var(--ochre);margin-bottom:1.2rem">'
             + '<h3 style="margin-bottom:.4rem">Cần xử lý</h3><ul style="margin:0;padding-left:1.1rem">'
-            + items.map(t => '<li style="margin:.25rem 0">' + t + '</li>').join('') + '</ul></div>';
+            + items.map(t => '<li style="margin:.25rem 0">' + t + '</li>').join('') + '</ul>'
+            + (orphans.length
+                ? '<div class="row" style="margin-top:.8rem;align-items:center">'
+                  + '<button class="primary" onclick="declareMissingCollections()">Khai '
+                  + orphans.length + ' nhóm còn thiếu</button>'
+                  + '<span class="faint" style="font-size:.82rem">Tạo nhóm với đúng mã đang có '
+                  + 'trên tài liệu. Nhóm tạo ra <b>chưa cấp quyền cho ai</b> — vẫn phải chọn nhóm '
+                  + 'Entra được đọc ở bảng dưới.</span></div>'
+                : '')
+            + '</div>';
+    }
+
+    async function declareMissingCollections() {
+        const orphans = platformState.orphanCategories || [];
+        const ok = await confirmDialog({
+            title: 'Khai ' + orphans.length + ' nhóm tài liệu còn thiếu?',
+            message: 'Tạo nhóm cho: ' + orphans.slice(0, 8).join(', ')
+                + (orphans.length > 8 ? ' và ' + (orphans.length - 8) + ' nhóm khác. ' : '. ')
+                + 'Nhóm tạo ra ở trạng thái ĐÓNG — chưa ai đọc được cho tới khi bạn chọn nhóm '
+                + 'Entra được đọc.',
+            confirmLabel: 'Khai nhóm',
+            danger: false
+        });
+        if (!ok) return;
+        const r = await api('/api/v1/rag/admin/collections/declare-missing', { method: 'POST' });
+        toast(r.message);
+        loadPlatform();
     }
 
     function renderCollections() {
         const rows = platformState.collections.map(c => `
             <tr>
+              <td style="width:2.2rem"><input type="checkbox" class="col-pick" value="${c.id}"
+                     data-slug="${escapeHtml(c.slug)}" data-docs="${c.documentCount || 0}"
+                     onclick="refreshColSelection()"></td>
               <td class="mono">${escapeHtml(c.slug)}</td>
               <td>${escapeHtml(c.name || '')}</td>
               <td class="tabular">${fmtInt(c.documentCount)}</td>
@@ -765,16 +1053,85 @@
                 <input class="mono" style="font-size:.78rem" value="${escapeHtml((c.aclGroups || []).join(', '))}"
                        placeholder="objectId nhóm Entra, cách nhau dấu phẩy"
                        onchange="saveAcl(${c.id}, this.value)">
+                ${(c.aclGroups || []).length
+                    ? '<div class="faint" style="font-size:.76rem;margin-top:.25rem">'
+                      + (c.aclGroups || []).map(g => escapeHtml(groupLabel(g))).join(' · ') + '</div>'
+                    : '<div class="faint" style="font-size:.76rem;margin-top:.25rem">chưa cấp cho ai</div>'}
               </td>
               <td style="text-align:right">
-                <button class="ghost tiny danger" onclick="deleteCollection(${c.id}, '${escapeHtml(c.slug)}')">Xoá</button>
+                <button class="ghost tiny danger" onclick="deleteCollection(${c.id})">Xoá</button>
               </td>
             </tr>`).join('');
 
         document.getElementById('collections-table').innerHTML = platformState.collections.length
-            ? `<thead><tr><th>Mã nhóm</th><th>Tên</th><th>Tài liệu</th><th>Kênh Teams</th>
+            ? `<thead><tr>
+                 <th style="width:2.2rem"><input type="checkbox" id="col-checkall"
+                     title="Chọn tất cả nhóm" onclick="toggleAllCols(this)"></th>
+                 <th>Mã nhóm</th><th>Tên</th><th>Tài liệu</th><th>Kênh Teams</th>
                  <th>Nhóm Entra được đọc</th><th></th></tr></thead><tbody>${rows}</tbody>`
             : '<tbody><tr><td class="empty">Chưa có nhóm tài liệu nào.</td></tr></tbody>';
+        refreshColSelection();
+    }
+
+    function toggleAllCols(box) {
+        document.querySelectorAll('.col-pick').forEach(c => { c.checked = box.checked; });
+        refreshColSelection();
+    }
+
+    function clearColSelection() {
+        document.querySelectorAll('.col-pick').forEach(c => { c.checked = false; });
+        const all = document.getElementById('col-checkall');
+        if (all) { all.checked = false; all.indeterminate = false; }
+        refreshColSelection();
+    }
+
+    function refreshColSelection() {
+        const picked = Array.prototype.slice.call(
+            document.querySelectorAll('.col-pick:checked'));
+        const boxes = document.querySelectorAll('.col-pick');
+        const bar = document.getElementById('col-bulkbar');
+        if (!bar) return;
+        bar.style.display = picked.length ? 'flex' : 'none';
+
+        const docs = picked.reduce((n, c) => n + Number(c.dataset.docs || 0), 0);
+        document.getElementById('col-selcount').textContent =
+            'Đã chọn ' + picked.length + ' nhóm';
+        // Xoa nhom KHONG xoa tai lieu: noi truoc con so se thanh mo coi.
+        document.getElementById('col-bulkhint').textContent = docs
+            ? docs + ' tài liệu trong các nhóm này sẽ ở lại kho và chỉ quản trị viên đọc được.'
+            : 'Các nhóm này đang không có tài liệu nào.';
+
+        const all = document.getElementById('col-checkall');
+        if (all) {
+            all.checked = boxes.length > 0 && picked.length === boxes.length;
+            all.indeterminate = picked.length > 0 && picked.length < boxes.length;
+        }
+    }
+
+    async function bulkDeleteCollections() {
+        const picked = Array.prototype.slice.call(
+            document.querySelectorAll('.col-pick:checked'));
+        if (!picked.length) { toast('Chưa chọn nhóm nào.', 'warn'); return; }
+        const docs = picked.reduce((n, c) => n + Number(c.dataset.docs || 0), 0);
+        const slugs = picked.slice(0, 6).map(c => c.dataset.slug).join(', ');
+        const ok = await confirmDialog({
+            title: 'Xoá ' + picked.length + ' nhóm tài liệu?',
+            message: 'Gồm: ' + slugs
+                + (picked.length > 6 ? ' và ' + (picked.length - 6) + ' nhóm khác. ' : '. ')
+                + (docs
+                    ? 'Tài liệu KHÔNG bị xoá theo: ' + docs + ' tài liệu sẽ ở lại kho nhưng '
+                      + 'không nhóm nào khai, nên chỉ quản trị viên đọc được.'
+                    : 'Các nhóm này không có tài liệu nào.'),
+            confirmLabel: 'Xoá ' + picked.length + ' nhóm',
+            cancelLabel: 'Huỷ'
+        });
+        if (!ok) return;
+        const r = await api('/api/v1/rag/admin/collections/bulk-delete', {
+            method: 'POST',
+            body: JSON.stringify({ ids: picked.map(c => Number(c.value)) })
+        });
+        toast(r.message);
+        loadPlatform();
     }
 
     function renderBots() {
@@ -790,11 +1147,16 @@
             <div class="row">
               <div class="field">
                 <label>Nhóm tài liệu bot được đọc</label>
-                <select multiple size="${Math.min(5, Math.max(2, slugs.length))}"
-                        id="bot-cols-${b.id}" onchange="saveBotCollections(${b.id})">
-                  ${slugs.map(s => `<option value="${escapeHtml(s)}"
-                     ${b.collectionSlugs.includes(s) ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}
-                </select>
+                <div class="pick-bar">
+                  <button type="button" class="ghost tiny" onclick="pickAllBotCollections(${b.id}, true)">Chọn tất cả</button>
+                  <button type="button" class="ghost tiny" onclick="pickAllBotCollections(${b.id}, false)">Bỏ chọn</button>
+                  <span class="count" id="bot-cols-count-${b.id}"></span>
+                </div>
+                <div class="pick-grid" id="bot-cols-${b.id}">
+                  ${slugs.map(s => `<label class="inline"><input type="checkbox" value="${escapeHtml(s)}"
+                     ${b.collectionSlugs.includes(s) ? 'checked' : ''}
+                     onchange="saveBotCollections(${b.id})"> ${escapeHtml(s)}</label>`).join('')}
+                </div>
               </div>
               <div class="field">
                 <label>Đối tượng sử dụng (objectId nhóm Entra, để trống = mọi người)</label>
@@ -819,9 +1181,11 @@
                        value="${escapeHtml(b.teamsAppId || '')}"></div>
               <button class="primary" onclick="saveBot(${b.id})">Lưu</button>
               ${b.isDefault ? '' : `<button class="ghost tiny" onclick="makeDefault(${b.id})">Đặt mặc định</button>`}
-              ${b.isDefault ? '' : `<button class="ghost tiny danger" onclick="deleteBot(${b.id}, '${escapeHtml(b.slug)}')">Xoá</button>`}
+              ${b.isDefault ? '' : `<button class="ghost tiny danger" onclick="deleteBot(${b.id})">Xoá</button>`}
             </div>
           </div>`).join('');
+
+        platformState.bots.forEach(b => updateBotColsCount(b.id));
 
         document.getElementById('bind-bot').innerHTML = platformState.bots
             .map(b => `<option value="${b.id}">${escapeHtml(b.displayName)}</option>`).join('');
@@ -879,9 +1243,15 @@
         loadPlatform();
     }
 
-    async function deleteCollection(id, slug) {
-        if (!confirm('Xoá cấu hình nhóm "' + slug + '"?\n\nTài liệu KHÔNG bị xoá, nhưng sẽ không ai '
-            + 'đọc được cho tới khi khai báo lại nhóm này.')) return;
+    async function deleteCollection(id) {
+        const hit = platformState.collections.find(c => c.id === id);
+        const ok = await confirmDialog({
+            title: 'Xoá nhóm tài liệu',
+            message: 'Xoá cấu hình nhóm "' + ((hit && hit.slug) || id) + '"? Tài liệu KHÔNG bị xoá, '
+                + 'nhưng sẽ không ai đọc được cho tới khi khai báo lại nhóm này.',
+            confirmLabel: 'Xoá nhóm'
+        });
+        if (!ok) return;
         toast((await api('/api/v1/rag/admin/collections/' + id, { method: 'DELETE' })).message);
         loadPlatform();
     }
@@ -918,9 +1288,37 @@
         loadPlatform();
     }
 
+    function botColsBoxes(id) {
+        return Array.from(document.querySelectorAll('#bot-cols-' + id + ' input[type=checkbox]'));
+    }
+
+    function updateBotColsCount(id) {
+        const boxes = botColsBoxes(id);
+        const el = document.getElementById('bot-cols-count-' + id);
+        if (!el) return;
+        const n = boxes.filter(b => b.checked).length;
+        el.textContent = n + '/' + boxes.length + ' nhóm';
+        el.style.color = n ? '' : 'var(--crimson)';
+    }
+
+    function pickAllBotCollections(id, on) {
+        botColsBoxes(id).forEach(b => { b.checked = on; });
+        saveBotCollections(id);
+    }
+
     async function saveBotCollections(id) {
-        const select = document.getElementById('bot-cols-' + id);
-        const slugs = Array.from(select.selectedOptions).map(o => o.value);
+        const slugs = botColsBoxes(id).filter(b => b.checked).map(b => b.value);
+        // Empty means the bot refuses every question (BotAccessResolver intersects on this set),
+        // so it must be a deliberate choice, not one stray click.
+        if (!slugs.length && !await confirmDialog({
+            title: 'Bỏ hết nhóm tài liệu?',
+            message: 'Bot sẽ từ chối MỌI câu hỏi vì không còn nhóm tài liệu nào để tra cứu.',
+            confirmLabel: 'Vẫn bỏ hết', cancelLabel: 'Huỷ'
+        })) {
+            loadPlatform();
+            return;
+        }
+        updateBotColsCount(id);
         toast((await api('/api/v1/rag/admin/bots/' + id + '/collections', {
             method: 'PUT', body: JSON.stringify(slugs)
         })).message);
@@ -939,8 +1337,15 @@
         loadPlatform();
     }
 
-    async function deleteBot(id, slug) {
-        if (!confirm('Xoá bot "' + slug + '"?')) return;
+    async function deleteBot(id) {
+        const hit = platformState.bots.find(b => b.id === id);
+        const ok = await confirmDialog({
+            title: 'Xoá bot',
+            message: 'Xoá bot "' + ((hit && hit.slug) || id) + '"? Số liệu lịch sử của bot này '
+                + 'vẫn giữ lại trong báo cáo.',
+            confirmLabel: 'Xoá bot'
+        });
+        if (!ok) return;
         toast((await api('/api/v1/rag/admin/bots/' + id, { method: 'DELETE' })).message);
         loadPlatform();
     }
@@ -966,7 +1371,6 @@
         loadPlatform();
     }
 
-    /* --------------------------------------------------------- Tổng quan */
     async function loadOverview() {
         const o = await api('/api/v1/rag/admin/overview');
         const m = o.metrics || {}, c = o.corpus || {}, cache = o.cache || {}, fb = o.feedback || {};
@@ -976,8 +1380,6 @@
             ['Đoạn (chunk)', fmtInt(c.chunksInIndex)],
             ['Câu hỏi', fmtInt(m.questions)],
             ['Tỷ lệ từ chối', fmtPercent(m.abstainRate), m.abstainRate > 40 ? 'warn' : ''],
-            // Chỉ tô xanh khi thật sự có cache hit. Tô xanh cho số 0 là báo "ổn" cho một
-            // con số chưa nói lên điều gì.
             ['Cache hit', fmtInt((m.cacheHitsExact || 0) + (m.cacheHitsSemantic || 0)),
                 (m.cacheHitsExact || 0) + (m.cacheHitsSemantic || 0) > 0 ? 'good' : ''],
             ['Chi phí ước tính', fmtMoney(m.costUsd), 'warn'],
@@ -1012,8 +1414,6 @@
             'Thư mục cho phép': (o.ingest.allowedRoots || []).join(', ') || '(chưa cấu hình)',
             'Bỏ qua file không đổi': bool(o.ingest.skipUnchanged),
             'Định dạng hỗ trợ': (o.ingest.supportedExtensions || []).join(' '),
-            // PDF bản scan không nạp được nếu OCR tắt — nói rõ ở đây thay vì để người
-            // dùng tự đoán khi thấy job báo "thất bại".
             'OCR cho PDF scan': o.ingest.ocrEnabled
                 ? 'bật (' + o.ingest.ocrModel + ')' : 'tắt — PDF bản scan sẽ không nạp được',
             'Quét virus': o.ingest.antivirusEnabled ? 'bật' : 'tắt',
@@ -1036,8 +1436,6 @@
             '<div class="tile ' + (cls || '') + '"><dt>' + escapeHtml(label) + '</dt><dd>'
             + escapeHtml(String(value)) + '</dd></div>').join('');
     }
-
-    /* ------------------------------------------------------------ Báo cáo */
 
     async function loadReports() {
         const days = document.getElementById('rep-days').value;
@@ -1070,7 +1468,6 @@
             return;
         }
         host.innerHTML = rows.map(b => {
-            // Ngưỡng cảnh báo giống tab Tổng quan để hai chỗ không "nói" khác nhau.
             const abstainCls = b.abstainRate > 40 ? 'bad' : (b.abstainRate > 20 ? 'warn' : '');
             const satCls = b.satisfactionRate == null ? ''
                 : (b.satisfactionRate < 70 ? 'bad' : 'good');
@@ -1117,12 +1514,17 @@
     }
 
     async function purgeConversations() {
-        if (!confirm('Xoá toàn bộ hội thoại không hoạt động quá 90 ngày?')) return;
+        const ok = await confirmDialog({
+            title: 'Dọn hội thoại cũ',
+            message: 'Xoá toàn bộ hội thoại không hoạt động quá 90 ngày, của mọi người dùng. '
+                + 'Không hoàn tác được.',
+            confirmLabel: 'Dọn hội thoại'
+        });
+        if (!ok) return;
         const r = await api('/api/v1/rag/admin/conversations/purge?olderThanDays=90', { method: 'DELETE' });
         toast(r.message);
     }
 
-    /* ------------------------------------------------------- Nạp tài liệu */
     async function loadAllowedRoots() {
         try {
             const r = await api('/api/v1/rag/admin/allowed-roots');
@@ -1132,7 +1534,7 @@
                 ? 'Thư mục được phép: ' + r.roots.join(' · ')
                 : 'Chưa cấu hình rag.ingestion.allowed-roots — endpoint này sẽ từ chối mọi đường dẫn. '
                   + 'Đặt biến môi trường RAG_ALLOWED_ROOTS để bật.';
-        } catch (e) { /* toast da hien */ }
+        } catch (e) { /* toast already shown */ }
     }
 
     async function previewConvert() {
@@ -1215,26 +1617,182 @@
         }
     }
 
-    async function ingestFolder() {
+    /* Quét thư mục: chỉ đọc, không nạp gì. Người vận hành sửa nhóm tài liệu rồi mới xác nhận. */
+    async function scanFolder() {
         const path = document.getElementById('folder-path').value.trim();
         if (!path) { toast('Nhập đường dẫn thư mục.', 'warn'); return; }
+        const out = document.getElementById('scan-out');
+        out.innerHTML = '<p class="faint">Đang quét…</p>';
+        try {
+            const r = await api('/api/v1/rag/admin/ingest-folder/scan', {
+                method: 'POST',
+                body: JSON.stringify({
+                    path,
+                    recursive: document.getElementById('folder-recursive').checked
+                })
+            });
+            renderScan(r, path);
+        } catch (e) {
+            out.innerHTML = '';
+        }
+    }
+
+    function renderScan(r, path) {
+        const out = document.getElementById('scan-out');
+        out.innerHTML = '';
+        if (!r.groups || !r.groups.length) {
+            out.innerHTML = '<p class="faint">Không tìm thấy file nào được hỗ trợ.</p>';
+            return;
+        }
+
+        const missing = r.groups.filter(g => !g.collectionExists).length;
+        const head = document.createElement('p');
+        head.className = missing ? 'warn-line' : 'faint';
+        head.style.fontSize = '.86rem';
+        head.textContent = r.message;
+        out.appendChild(head);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'card scroll';
+        wrap.style.padding = '0';
+        wrap.style.marginTop = '.6rem';
+        wrap.innerHTML = '<table><thead><tr>'
+            + '<th>Thư mục</th><th>Nhóm tài liệu</th>'
+            + '<th style="text-align:right">Số file</th><th>Đã khai nhóm</th><th>File mẫu</th>'
+            + '</tr></thead><tbody></tbody></table>';
+        const tbody = wrap.querySelector('tbody');
+
+        const list = (r.knownCategories || []);
+        r.groups.forEach((g, i) => {
+            const tr = document.createElement('tr');
+
+            const tdFolder = document.createElement('td');
+            tdFolder.className = 'mono';
+            tdFolder.textContent = g.folder || '(gốc)';
+            tr.appendChild(tdFolder);
+
+            // Sua duoc tung nhom: gia tri nay chinh la thu se duoc gui lai khi xac nhan.
+            const tdCat = document.createElement('td');
+            const input = document.createElement('input');
+            input.className = 'mono scan-cat';
+            input.style.minWidth = '14rem';
+            input.value = g.suggestedCategory || '';
+            input.setAttribute('list', 'known-categories');
+            input.dataset.folder = g.folder;
+            input.oninput = () => markKnown(input, list);
+            tdCat.appendChild(input);
+            tr.appendChild(tdCat);
+
+            const tdCount = document.createElement('td');
+            tdCount.style.textAlign = 'right';
+            tdCount.textContent = g.fileCount;
+            tr.appendChild(tdCount);
+
+            const tdOk = document.createElement('td');
+            tdOk.className = 'scan-known';
+            tr.appendChild(tdOk);
+
+            const tdFiles = document.createElement('td');
+            tdFiles.className = 'faint';
+            tdFiles.style.fontSize = '.8rem';
+            tdFiles.textContent = (g.sampleFiles || []).join(', ')
+                + (g.fileCount > (g.sampleFiles || []).length ? ' …' : '');
+            tr.appendChild(tdFiles);
+
+            tbody.appendChild(tr);
+            markKnown(input, list);
+        });
+        out.appendChild(wrap);
+
+        const dl = document.createElement('datalist');
+        dl.id = 'known-categories';
+        list.forEach(c => {
+            const o = document.createElement('option');
+            o.value = c;
+            dl.appendChild(o);
+        });
+        out.appendChild(dl);
+
+        if (r.unsupported && r.unsupported.length) {
+            const skipped = document.createElement('details');
+            skipped.style.marginTop = '.6rem';
+            skipped.innerHTML = '<summary class="faint" style="font-size:.82rem">'
+                + r.unsupported.length + ' file bị bỏ qua vì không hỗ trợ định dạng</summary>';
+            const pre = document.createElement('pre');
+            pre.className = 'mono';
+            pre.style.fontSize = '.78rem';
+            pre.textContent = r.unsupported.join('\n');
+            skipped.appendChild(pre);
+            out.appendChild(skipped);
+        }
+
+        const bar = document.createElement('div');
+        bar.className = 'row';
+        bar.style.marginTop = '.8rem';
+        bar.style.alignItems = 'center';
+        const btn = document.createElement('button');
+        btn.className = 'primary';
+        btn.textContent = 'Xác nhận nạp ' + r.fileCount + ' file';
+        btn.onclick = () => confirmFolderIngest(path);
+        bar.appendChild(btn);
+        const note = document.createElement('span');
+        note.className = 'faint';
+        note.style.fontSize = '.82rem';
+        note.textContent = 'Nhóm để trống ⇒ file trong thư mục đó bị từ chối, không nạp âm thầm.';
+        bar.appendChild(note);
+        out.appendChild(bar);
+    }
+
+    function markKnown(input, known) {
+        const cell = input.closest('tr').querySelector('.scan-known');
+        const v = input.value.trim().toLowerCase();
+        if (!v) {
+            cell.textContent = '— thiếu';
+            cell.className = 'scan-known bad';
+        } else if (known.indexOf(v) >= 0) {
+            cell.textContent = '✓';
+            cell.className = 'scan-known ok';
+        } else {
+            cell.textContent = 'chưa có';
+            cell.className = 'scan-known bad';
+        }
+    }
+
+    async function confirmFolderIngest(path) {
+        const map = {};
+        let blank = 0;
+        document.querySelectorAll('.scan-cat').forEach(i => {
+            const v = i.value.trim();
+            if (v) map[i.dataset.folder] = v; else blank++;
+        });
+        if (blank) {
+            const ok = await confirmDialog({
+                title: 'Có ' + blank + ' thư mục chưa điền nhóm',
+                message: 'File trong những thư mục đó sẽ bị từ chối và ghi vào lỗi của job. '
+                    + 'Tiếp tục nạp phần còn lại?',
+                confirmLabel: 'Nạp phần còn lại',
+                cancelLabel: 'Quay lại điền',
+                danger: false
+            });
+            if (!ok) return;
+        }
         try {
             const r = await api('/api/v1/rag/admin/ingest-folder', {
                 method: 'POST',
                 body: JSON.stringify({
                     path,
                     recursive: document.getElementById('folder-recursive').checked,
-                    category: document.getElementById('up-category').value || null,
+                    categoryFromFolder: true,
+                    categoryByFolder: map,
                     roles: document.getElementById('up-roles').value || null,
                     force: document.getElementById('up-force').checked
                 })
             });
             toast(r.message);
             document.querySelector('.tabs button[data-tab=jobs]').click();
-        } catch (e) { /* toast da hien */ }
+        } catch (e) { /* toast already shown */ }
     }
 
-    /* ------------------------------------------------------------ Tài liệu */
     async function loadDocuments() {
         const search = document.getElementById('doc-search').value.trim();
         const category = document.getElementById('doc-category').value;
@@ -1263,6 +1821,8 @@
                 : (d.status === 'ACTIVE' ? '<span class="chip good">đang áp dụng</span>'
                     : '<span class="chip ochre">' + escapeHtml(d.status || '?') + '</span>');
             return '<tr>'
+                + '<td><input type="checkbox" class="doc-pick" value="' + d.id
+                + '" data-name="' + escapeHtml(d.fileName) + '" onclick="refreshDocSelection()"></td>'
                 + '<td><b>' + escapeHtml(d.fileName) + '</b>'
                 + (d.title && d.title !== d.fileName
                     ? '<br><small class="faint">' + escapeHtml(d.title) + '</small>' : '')
@@ -1279,11 +1839,137 @@
                 + '<td><span class="chip">' + escapeHtml(d.sourceFormat || '?') + '</span></td>'
                 + '<td style="white-space:nowrap">'
                 + '<button class="tiny" onclick="viewMarkdown(' + d.id + ')">Markdown</button> '
-                + '<button class="tiny danger" onclick="deleteDoc(' + d.id + ',\''
-                + escapeHtml(d.fileName).replace(/'/g, "\\'") + '\')">Xoá</button></td>'
+                + '<button class="tiny danger" onclick="deleteDoc(' + d.id + ')">Xoá</button></td>'
                 + '</tr>';
-        }).join('') : '<tr><td colspan="8" class="empty">Chưa có tài liệu nào. '
+        }).join('') : '<tr><td colspan="9" class="empty">Chưa có tài liệu nào. '
             + 'Sang tab “Nạp tài liệu” để bắt đầu.</td></tr>';
+
+        // Tong so khop bo loc co the lon hon so dong dang hien -> can biet de canh bao dung.
+        docFilterTotal = typeof r.matching === 'number' ? r.matching : rows.length;
+        docMaxBulk = typeof r.maxBulkDelete === 'number' ? r.maxBulkDelete : 500;
+        clearDocSelection();
+    }
+
+    let docFilterTotal = 0;
+    let docMaxBulk = 500;
+
+    function toggleAllDocs(box) {
+        document.querySelectorAll('.doc-pick').forEach(c => { c.checked = box.checked; });
+        refreshDocSelection();
+    }
+
+    function clearDocSelection() {
+        document.querySelectorAll('.doc-pick').forEach(c => { c.checked = false; });
+        const all = document.getElementById('doc-checkall');
+        if (all) { all.checked = false; all.indeterminate = false; }
+        refreshDocSelection();
+    }
+
+    function selectedDocs() {
+        return Array.prototype.slice.call(document.querySelectorAll('.doc-pick:checked'));
+    }
+
+    function refreshDocSelection() {
+        const picked = selectedDocs();
+        const boxes = document.querySelectorAll('.doc-pick');
+        const bar = document.getElementById('doc-bulkbar');
+        bar.style.display = picked.length ? 'flex' : 'none';
+        document.getElementById('doc-selcount').textContent =
+            'Đã chọn ' + picked.length + ' tài liệu';
+
+        const all = document.getElementById('doc-checkall');
+        if (all) {
+            all.checked = boxes.length > 0 && picked.length === boxes.length;
+            all.indeterminate = picked.length > 0 && picked.length < boxes.length;
+        }
+
+        // Noi ro gioi han: tich "tat ca" chi tich duoc nhung dong dang tai ve.
+        const more = picked.length > 0 && picked.length === boxes.length
+            && docFilterTotal > boxes.length;
+        document.getElementById('doc-bulkhint').textContent = more
+            ? 'Chỉ ' + boxes.length + ' dòng đang hiển thị được chọn, kho có ' + docFilterTotal
+              + ' tài liệu.'
+            : '';
+        const allBtn = document.getElementById('doc-delall');
+        allBtn.style.display = more ? '' : 'none';
+        allBtn.textContent = 'Xoá tất cả ' + docFilterTotal + ' tài liệu khớp bộ lọc';
+        allBtn.title = docFilterTotal > docMaxBulk
+            ? 'Mỗi lượt xoá tối đa ' + docMaxBulk + ' tài liệu — bấm lại để xoá tiếp.' : '';
+    }
+
+    /** Xoá theo bộ lọc ở phía máy chủ, không phụ thuộc số dòng đang hiển thị. */
+    async function bulkDeleteAllMatching() {
+        const search = document.getElementById('doc-search').value.trim();
+        const category = document.getElementById('doc-category').value;
+        const scope = category ? 'nhóm "' + category + '"'
+            : (search ? 'kết quả tìm "' + search + '"' : 'TOÀN BỘ kho tài liệu');
+        const batch = Math.min(docFilterTotal, docMaxBulk);
+        const ok = await confirmDialog({
+            title: 'Xoá tất cả tài liệu khớp bộ lọc?',
+            message: 'Sẽ xoá ' + batch + ' tài liệu thuộc ' + scope
+                + ', kèm toàn bộ đoạn đã đánh chỉ mục. Không hoàn tác được. '
+                + 'Chỉ nạp lại được những tài liệu còn file gốc trên máy chủ.'
+                + (docFilterTotal > docMaxBulk
+                    ? ' Bộ lọc khớp ' + docFilterTotal + ' tài liệu, mỗi lượt chỉ xoá được '
+                      + docMaxBulk + ' — bấm lại để xoá tiếp.' : ''),
+            confirmLabel: 'Xoá tất cả',
+            cancelLabel: 'Huỷ'
+        });
+        if (!ok) return;
+        const r = await api('/api/v1/rag/admin/documents/bulk-delete', {
+            method: 'POST',
+            body: JSON.stringify({
+                allMatching: true,
+                category: category || null,
+                search: search || null
+            })
+        });
+        toast(r.message);
+        loadDocuments();
+    }
+
+    /* Truoc day nhom tai lieu chi dat duoc luc nap: quet thu muc ra sai ma nhom thi cach duy
+       nhat la xoa het roi nap lai. */
+    async function moveSelectedCategory() {
+        const picked = selectedDocs();
+        if (!picked.length) { toast('Chưa chọn tài liệu nào.', 'warn'); return; }
+        const known = Array.from(document.querySelectorAll('#doc-category option'))
+            .map(o => o.value).filter(Boolean);
+        const target = await promptDialog({
+            title: 'Đổi nhóm cho ' + picked.length + ' tài liệu',
+            message: 'Nhập mã nhóm đích. Nhóm chưa có sẽ được tạo (ở trạng thái đóng).'
+                + (known.length ? ' Nhóm đang có: ' + known.join(', ') : ''),
+            placeholder: 'vd: nhan-su',
+            confirmLabel: 'Chuyển'
+        });
+        if (!target) return;
+        const r = await api('/api/v1/rag/admin/documents/move-category', {
+            method: 'POST',
+            body: JSON.stringify({ ids: picked.map(c => Number(c.value)), category: target })
+        });
+        toast(r.message);
+        loadDocuments();
+    }
+
+    async function bulkDeleteSelected() {
+        const picked = selectedDocs();
+        if (!picked.length) { toast('Chưa chọn tài liệu nào.', 'warn'); return; }
+        const names = picked.slice(0, 5).map(c => c.dataset.name).join(', ');
+        const ok = await confirmDialog({
+            title: 'Xoá ' + picked.length + ' tài liệu?',
+            message: 'Xoá cả các đoạn đã đánh chỉ mục của chúng. Không hoàn tác được — muốn có '
+                + 'lại thì phải nạp lại từ file gốc. Gồm: ' + names
+                + (picked.length > 5 ? ' và ' + (picked.length - 5) + ' tài liệu khác.' : '.'),
+            confirmLabel: 'Xoá ' + picked.length + ' tài liệu',
+            cancelLabel: 'Huỷ'
+        });
+        if (!ok) return;
+        const r = await api('/api/v1/rag/admin/documents/bulk-delete', {
+            method: 'POST',
+            body: JSON.stringify({ ids: picked.map(c => Number(c.value)) })
+        });
+        toast(r.message);
+        loadDocuments();
     }
 
     async function viewMarkdown(id) {
@@ -1294,8 +1980,16 @@
                 : '<p class="muted">' + escapeHtml(r.note || 'Không có bản Markdown.') + '</p>');
     }
 
-    async function deleteDoc(id, name) {
-        if (!confirm('Xoá tài liệu "' + name + '" và toàn bộ đoạn của nó?')) return;
+    async function deleteDoc(id) {
+        const box = document.querySelector('.doc-pick[value="' + id + '"]');
+        const name = (box && box.dataset.name) || ('#' + id);
+        const ok = await confirmDialog({
+            title: 'Xoá tài liệu',
+            message: 'Xoá "' + name + '" và toàn bộ đoạn đã đánh chỉ mục của nó? '
+                + 'Muốn có lại thì phải nạp lại từ file gốc.',
+            confirmLabel: 'Xoá tài liệu'
+        });
+        if (!ok) return;
         const r = await api('/api/v1/rag/admin/documents/' + id, { method: 'DELETE' });
         toast(r.message);
         loadDocuments();
@@ -1424,7 +2118,13 @@
     }
 
     async function resetSettings() {
-        if (!confirm('Xoá cấu hình đã lưu trong DB? Cần khởi động lại để trở về giá trị trong file.')) return;
+        const ok = await confirmDialog({
+            title: 'Xoá cấu hình đã lưu',
+            message: 'Xoá cấu hình runtime đã lưu trong DB. Cần khởi động lại ứng dụng để trở về '
+                + 'giá trị khai trong file cấu hình.',
+            confirmLabel: 'Xoá cấu hình'
+        });
+        if (!ok) return;
         const r = await api('/api/v1/rag/settings', { method: 'DELETE' });
         toast(r.message);
     }
@@ -1573,7 +2273,13 @@
     }
 
     async function clearProviderKey(provider) {
-        if (!confirm('Xoá hẳn API key của ' + provider + '?')) return;
+        const ok = await confirmDialog({
+            title: 'Xoá API key',
+            message: 'Xoá hẳn API key của ' + provider + '. Mọi câu hỏi định tuyến sang nhà cung '
+                + 'cấp này sẽ lỗi cho tới khi nhập key mới.',
+            confirmLabel: 'Xoá key'
+        });
+        if (!ok) return;
         const r = await api('/api/v1/rag/admin/providers/' + provider + '/api-key', { method: 'DELETE' });
         toast(r.message);
         loadProviders();
@@ -1737,8 +2443,26 @@
             + '<tr><td>Hội thoại</td><td>giữ ' + p.conversationDays + ' ngày</td></tr>'
             + '<tr><td>Nhật ký kiểm toán</td><td>giữ ' + p.auditDays + ' ngày</td></tr>'
             + '<tr><td>Job nạp liệu</td><td>giữ ' + p.jobDays + ' ngày</td></tr>'
-            + '<tr><td>Lần chạy gần nhất</td><td>' + escapeHtml(JSON.stringify(last)) + '</td></tr>'
+            + '<tr><td>Lần chạy gần nhất</td><td>' + escapeHtml(lastRunText(last)) + '</td></tr>'
             + '</tbody></table>';
+    }
+
+    /** {"at":…,"conversations":0,…} l\u00e0 th\u1ee9 d\u00e0nh cho log, kh\u00f4ng ph\u1ea3i cho ng\u01b0\u1eddi v\u1eadn h\u00e0nh. */
+    function lastRunText(last) {
+        const when = last && (last.finishedAt || last.at);
+        const counts = [
+            ['hội thoại', last && last.conversations],
+            ['dòng nhật ký', last && last.auditEntries],
+            ['job', last && last.jobs]
+        ].filter(([, n]) => typeof n === 'number')
+         .map(([label, n]) => fmtInt(n) + ' ' + label);
+        // Truoc khi chay lan dau, server tra {"state":"chua chay lan nao"} — khong co moc
+        // thoi gian lan con so nao.
+        if (!when && !counts.length) return 'chưa chạy lần nào';
+        const parts = [];
+        if (when) parts.push(fmtDate(when));
+        parts.push(counts.length ? 'đã xoá ' + counts.join(', ') : 'không xoá gì');
+        return parts.join(' — ');
     }
 
     async function runRetention() {
@@ -1748,8 +2472,12 @@
         loadAudit();
     }
 
-    loadOverview();
-    loadAllowedRoots();
+    // activateTab() already ran the loader for a deep-linked tab; without this guard
+    // opening admin.html#audit also fetched the overview and the ingest roots.
+    if (!deepLinked) {
+        loadOverview();
+        loadAllowedRoots();
+    }
 </script>
 </body>
 </html>

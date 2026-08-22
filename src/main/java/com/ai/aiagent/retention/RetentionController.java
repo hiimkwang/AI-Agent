@@ -10,12 +10,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Xem va chay tay chinh sach luu tru (chi ADMIN).
- *
- * Co duong chay tay khong phai de thay the lich - ma de KIEM CHUNG duoc rang lich
- * dang lam dung viec, ma khong phai doi den 2 gio sang.
- */
 @RestController
 @RequestMapping("/api/v1/rag/admin")
 @Slf4j
@@ -48,7 +42,7 @@ public class RetentionController {
 
     @PostMapping("/retention/run")
     public Map<String, Object> runNow() {
-        log.info("Don du lieu qua han: chay tay theo yeu cau tu man quan tri.");
+        log.info("Retention sweep started manually from the admin screen.");
         return retention.run();
     }
 }

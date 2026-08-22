@@ -3,7 +3,6 @@ package com.ai.aiagent.ingest;
 import java.util.Locale;
 import java.util.Set;
 
-/** Dinh dang file nguon duoc ho tro, nhan dien theo duoi file. */
 public enum DocumentFormat {
 
     MARKDOWN("md", "markdown", "mdx"),
@@ -34,7 +33,6 @@ public enum DocumentFormat {
         return fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
-    /** @return null neu duoi file khong duoc ho tro. */
     public static DocumentFormat fromFileName(String fileName) {
         String ext = extensionOf(fileName);
         if (ext.isEmpty()) return null;
@@ -48,7 +46,6 @@ public enum DocumentFormat {
         return fromFileName(fileName) != null;
     }
 
-    /** Danh sach duoi file duoc ho tro, de hien tren UI. */
     public static java.util.List<String> allExtensions() {
         return java.util.Arrays.stream(values())
                 .flatMap(f -> f.extensions.stream())

@@ -7,6 +7,8 @@ import com.ai.aiagent.ingest.IngestionJobService;
 import com.ai.aiagent.ingest.IngestionService;
 import com.ai.aiagent.ingest.MarkdownChunker;
 import com.ai.aiagent.observability.RagMetrics;
+import com.ai.aiagent.platform.PlatformModels.CollectionDef;
+import com.ai.aiagent.platform.PlatformService;
 import com.ai.aiagent.security.CurrentScope;
 import com.ai.aiagent.security.PathAllowlist;
 import com.ai.aiagent.store.JobRepository;
@@ -23,10 +25,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
-/**
- * API nap tai lieu (chi ADMIN - xem {@code SecurityConfig}).
- */
 @RestController
 @RequestMapping("/api/v1/rag/admin")
 @Slf4j
@@ -39,11 +40,13 @@ public class IngestionController {
     private final MarkdownChunker chunker;
     private final PathAllowlist allowlist;
     private final RagMetrics metrics;
+    private final PlatformService platform;
 
     public IngestionController(IngestionService ingestion, IngestionJobService jobService,
                                JobRepository jobs, DocumentConverterService converter,
                                MarkdownChunker chunker, PathAllowlist allowlist,
-                               RagMetrics metrics) {
+                               RagMetrics metrics, PlatformService platform) {
+        this.platform = platform;
         this.ingestion = ingestion;
         this.jobService = jobService;
         this.jobs = jobs;
@@ -53,12 +56,6 @@ public class IngestionController {
         this.metrics = metrics;
     }
 
-    /**
-     * XEM TRUOC ket qua chuyen doi sang Markdown, KHONG nap vao vector DB.
-     *
-     * Rat huu ich khi ban tu chuyen tai lieu sang .md: kiem tra xem bo chuyen doi co
-     * lay dung heading va bang khong, va xem chunk se duoc cat o dau, TRUOC khi nap.
-     */
     @PostMapping(value = "/convert", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, Object> convertPreview(
             @RequestParam("file") MultipartFile file,
@@ -93,7 +90,6 @@ public class IngestionController {
         return out;
     }
 
-    /** Nap 1 file, DONG BO - tien cho thu nghiem. */
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, Object> upload(@RequestParam("file") MultipartFile file,
                                       @RequestParam(value = "category", required = false) String category,
@@ -131,7 +127,6 @@ public class IngestionController {
         return out;
     }
 
-    /** Nap NHIEU file, chay nen. Tra ve jobId de theo doi. */
     @PostMapping(value = "/upload-batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> uploadBatch(
             @RequestParam("files") MultipartFile[] files,
@@ -174,19 +169,56 @@ public class IngestionController {
     }
 
     /**
-     * Nap toan bo thu muc tren MAY CHU, chay nen.
-     *
-     * Duong dan phai nam trong {@code rag.ingestion.allowed-roots}. Truoc day endpoint
-     * nay nhan duong dan TUY Y - ai goi duoc API cung bat server nhung file bat ky roi
-     * doc lai noi dung qua /chat.
+     * Xem trước: quét thư mục, gom theo thư mục con và đề xuất nhóm tài liệu, KHÔNG nạp gì.
+     * Có tồn tại vì bước sai duy nhất ở đây (nhóm tài liệu) chỉ lộ ra rất muộn - tài liệu nạp
+     * xong mà người dùng thường không đọc được, còn quản trị viên thì vẫn thấy bình thường.
      */
+    @PostMapping("/ingest-folder/scan")
+    public Map<String, Object> scanFolder(@RequestBody FolderRequest request) {
+        IngestionJobService.FolderScan scan = jobService.scanFolder(
+                request.path(), request.recursive() == null || request.recursive());
+
+        Set<String> known = platform.snapshot().collections().stream()
+                .filter(CollectionDef::isActive)
+                .map(CollectionDef::slug)
+                .collect(Collectors.toSet());
+
+        List<Map<String, Object>> groups = new ArrayList<>();
+        for (IngestionJobService.FolderGroup g : scan.groups()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("folder", g.folder());
+            row.put("suggestedCategory", g.suggestedCategory());
+            row.put("fileCount", g.fileCount());
+            row.put("sampleFiles", g.sampleFiles());
+            row.put("collectionExists", g.suggestedCategory() != null
+                    && known.contains(g.suggestedCategory()));
+            groups.add(row);
+        }
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("root", scan.root());
+        out.put("fileCount", scan.fileCount());
+        out.put("groups", groups);
+        out.put("unsupported", scan.unsupported());
+        out.put("knownCategories", known.stream().sorted().toList());
+        long missing = groups.stream().filter(g -> !(Boolean) g.get("collectionExists")).count();
+        out.put("message", missing == 0
+                ? "Quét xong " + scan.fileCount() + " file. Mọi nhóm tài liệu đều đã tồn tại."
+                : "Quét xong " + scan.fileCount() + " file. " + missing + " nhóm CHƯA có trong "
+                  + "màn quản trị — nạp vào đó thì chỉ quản trị viên đọc được. Hãy tạo nhóm "
+                  + "trước, hoặc sửa lại nhóm cho đúng.");
+        return out;
+    }
+
     @PostMapping("/ingest-folder")
     public ResponseEntity<Map<String, Object>> ingestFolder(@RequestBody FolderRequest request) {
         String jobId = jobService.submitFolder(request.path(),
                 request.recursive() == null || request.recursive(),
                 options(request.category(), request.department(), request.roles(),
                         request.effectiveDate(), request.expiresDate(),
-                        Boolean.TRUE.equals(request.force())));
+                        Boolean.TRUE.equals(request.force())),
+                Boolean.TRUE.equals(request.categoryFromFolder()),
+                request.categoryByFolder());
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("jobId", jobId);
@@ -195,12 +227,17 @@ public class IngestionController {
         return ResponseEntity.accepted().body(out);
     }
 
+    /**
+     * @param categoryFromFolder nạp cả cây một lần: mỗi file lấy nhóm tài liệu theo thư mục chứa
+     *                           nó (<code>ptpm/Core FDS</code> ⇒ <code>ptpm-core-fds</code>).
+     *                           Bỏ qua nếu đã chỉ định <code>category</code>.
+     */
     public record FolderRequest(String path, String category, String department, String roles,
                                 String effectiveDate, String expiresDate, Boolean recursive,
-                                Boolean force) {
+                                Boolean force, Boolean categoryFromFolder,
+                                Map<String, String> categoryByFolder) {
     }
 
-    /** Cac thu muc duoc phep nap - de UI hien goi y thay vi de nguoi dung doan. */
     @GetMapping("/allowed-roots")
     public Map<String, Object> allowedRoots() {
         return Map.of(
@@ -208,8 +245,6 @@ public class IngestionController {
                 "configured", allowlist.hasRoots(),
                 "supportedExtensions", DocumentFormat.allExtensions());
     }
-
-    // ------------------------------------------------------------ Jobs
 
     @GetMapping("/jobs")
     public Map<String, Object> recentJobs(@RequestParam(defaultValue = "20") int limit) {
@@ -223,7 +258,6 @@ public class IngestionController {
         return toMap(status);
     }
 
-    /** Yeu cau dung job - truoc day khong the dung mot khi da chay. */
     @PostMapping("/jobs/{jobId}/cancel")
     public Map<String, Object> cancelJob(@PathVariable String jobId) {
         jobs.find(jobId).orElseThrow(() -> new NotFoundException("Khong tim thay job " + jobId));

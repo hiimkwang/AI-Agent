@@ -4,6 +4,7 @@ import com.ai.aiagent.platform.PlatformModels.BotDef;
 import com.ai.aiagent.platform.PlatformModels.ChannelBinding;
 import com.ai.aiagent.platform.PlatformModels.CollectionDef;
 import com.ai.aiagent.platform.PlatformModels.Grant;
+import com.ai.aiagent.platform.PlatformModels.NamespaceGrant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -18,13 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Doc/ghi cau hinh nen tang: collection, bot, ACL, doi tuong su dung, rang buoc kenh.
- *
- * Cac bang nay rat nho (hang chuc dong) nhung duoc doc o MOI request, nen
- * {@link PlatformService} giu mot ban chup trong bo nho; repository nay chi lam viec
- * voi DB.
- */
 @Repository
 @Slf4j
 public class PlatformRepository {
@@ -34,8 +28,6 @@ public class PlatformRepository {
     public PlatformRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
-
-    // ============================================================ Collection
 
     public List<CollectionDef> collections() {
         Map<Long, Set<String>> acl = aclByCollection();
@@ -65,7 +57,6 @@ public class PlatformRepository {
         return out;
     }
 
-    /** So tai lieu theo category - de giao dien canh bao collection rong. */
     private Map<String, Long> documentCountBySlug() {
         Map<String, Long> out = new LinkedHashMap<>();
         jdbc.query("""
@@ -81,8 +72,8 @@ public class PlatformRepository {
                                  boolean channelAllowed, String createdBy) {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(connection -> {
-            // Postgres tra ve MOI cot voi RETURN_GENERATED_KEYS => KeyHolder.getKey() no.
-            // Phai chi dinh ro cot "id" - cung cach lam voi ChunkRepository.
+            // Key column named explicitly: with RETURN_GENERATED_KEYS Postgres returns
+            // every column and KeyHolder.getKey() then throws.
             PreparedStatement ps = connection.prepareStatement("""
                     INSERT INTO rag_collections (slug, name, description, channel_allowed, created_by)
                     VALUES (?, ?, ?, ?, ?)
@@ -106,10 +97,6 @@ public class PlatformRepository {
                 """, name, description, channelAllowed, status, id);
     }
 
-    /**
-     * Xoa cau hinh collection. KHONG xoa tai lieu: tai lieu la du lieu, cau hinh la
-     * chinh sach. Xoa nham chinh sach thi khai bao lai; xoa nham tai lieu thi phai nap lai.
-     */
     public int deleteCollection(long id) {
         return jdbc.update("DELETE FROM rag_collections WHERE id = ?", id);
     }
@@ -128,8 +115,6 @@ public class PlatformRepository {
                     """, collectionId, id.strip(), name, grantedBy);
         }
     }
-
-    // ============================================================ Bot
 
     public List<BotDef> bots() {
         Map<Long, Set<String>> collections = botCollections();
@@ -182,6 +167,8 @@ public class PlatformRepository {
     public long createBot(String slug, String displayName, String description, String createdBy) {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(connection -> {
+            // Key column named explicitly: with RETURN_GENERATED_KEYS Postgres returns
+            // every column and KeyHolder.getKey() then throws.
             PreparedStatement ps = connection.prepareStatement("""
                     INSERT INTO rag_bots (slug, display_name, description, created_by)
                     VALUES (?, ?, ?, ?)
@@ -207,10 +194,6 @@ public class PlatformRepository {
                 blankToNull(llmProvider), blankToNull(llmModel), status, id);
     }
 
-    /**
-     * Dat bot mac dinh. Bo co cu TRUOC trong cung mot transaction cua caller, neu khong
-     * chi muc {@code idx_rag_bots_one_default} se chan.
-     */
     public void setDefaultBot(long id) {
         jdbc.update("UPDATE rag_bots SET is_default = false WHERE is_default");
         jdbc.update("UPDATE rag_bots SET is_default = true WHERE id = ?", id);
@@ -254,8 +237,6 @@ public class PlatformRepository {
         }
     }
 
-    // ============================================================ Rang buoc kenh
-
     public List<ChannelBinding> channelBindings() {
         return jdbc.query("""
                 SELECT bc.id, bc.bot_id, b.slug, bc.team_aad_group_id, bc.channel_id
@@ -278,8 +259,6 @@ public class PlatformRepository {
     public int unbindChannel(long id) {
         return jdbc.update("DELETE FROM rag_bot_channels WHERE id = ?", id);
     }
-
-    // ============================================================ Grant
 
     public List<Grant> grants() {
         return jdbc.query("""
@@ -307,12 +286,52 @@ public class PlatformRepository {
         return jdbc.update("DELETE FROM rag_grants WHERE id = ?", id);
     }
 
-    /** Danh sach category dang thuc su co trong kho tai lieu, ke ca chua khai collection. */
+    public List<NamespaceGrant> namespaceGrants() {
+        return jdbc.query("""
+                SELECT id, principal_type, principal_id, slug_prefix, max_collections, display_name
+                  FROM rag_namespace_grants ORDER BY slug_prefix
+                """, (rs, i) -> new NamespaceGrant(
+                rs.getLong("id"), rs.getString("principal_type"),
+                rs.getString("principal_id").toLowerCase(), rs.getString("slug_prefix"),
+                rs.getInt("max_collections"), rs.getString("display_name")));
+    }
+
+    public void grantNamespace(String principalType, String principalId, String slugPrefix,
+                               int maxCollections, String displayName, String grantedBy) {
+        jdbc.update("""
+                INSERT INTO rag_namespace_grants (principal_type, principal_id, slug_prefix,
+                                                  max_collections, display_name, granted_by)
+                VALUES (?, ?::uuid, ?, ?, ?, ?)
+                ON CONFLICT (principal_type, principal_id, slug_prefix)
+                DO UPDATE SET max_collections = EXCLUDED.max_collections,
+                              display_name    = EXCLUDED.display_name
+                """, principalType, principalId.strip(), slugPrefix.strip().toLowerCase(),
+                maxCollections, displayName, grantedBy);
+    }
+
+    public int revokeNamespace(long id) {
+        return jdbc.update("DELETE FROM rag_namespace_grants WHERE id = ?", id);
+    }
+
     public List<String> orphanCategories() {
         return jdbc.queryForList("""
                 SELECT DISTINCT d.category FROM rag_documents d
                  WHERE d.category IS NOT NULL AND d.category <> ''
                    AND NOT EXISTS (SELECT 1 FROM rag_collections c WHERE c.slug = d.category)
+                 ORDER BY 1
+                """, String.class);
+    }
+
+    /**
+     * Documents with no category at all. Deliberately separate from {@link #orphanCategories()}:
+     * there is no category string to report, yet the consequence is worse - the document is
+     * invisible to every non-admin, silently, because retrieval matches category against the
+     * caller's collection slugs and NULL matches none.
+     */
+    public List<String> uncategorizedDocuments() {
+        return jdbc.queryForList("""
+                SELECT coalesce(d.file_name, d.doc_key, 'id=' || d.id) FROM rag_documents d
+                 WHERE d.category IS NULL OR d.category = ''
                  ORDER BY 1
                 """, String.class);
     }

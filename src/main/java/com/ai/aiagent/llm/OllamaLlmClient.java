@@ -14,7 +14,6 @@ import dev.langchain4j.model.output.Response;
 
 import java.time.Duration;
 
-/** Ollama chay local - khong ton chi phi, dung khi khong muon du lieu ra ngoai. */
 public class OllamaLlmClient implements LlmClient {
 
     private final String modelName;
@@ -70,6 +69,8 @@ public class OllamaLlmClient implements LlmClient {
         streaming.generate(OpenAiLlmClient.toMessages(request), new StreamingResponseHandler<AiMessage>() {
             @Override
             public void onNext(String token) {
+                // LangChain4j 0.31 khong co cach huy request dang chay: chi ngung chuyen tiep.
+                if (sink.cancelled()) return;
                 buffer.append(token);
                 sink.onToken(token);
             }
@@ -89,7 +90,6 @@ public class OllamaLlmClient implements LlmClient {
         });
     }
 
-    /** Ollama chay local: chi phi 0, chi dem token de theo doi khoi luong. */
     private LlmUsage usage(LlmRequest request, String output) {
         int in = ModelPricing.estimateTokens(
                 OpenAiLlmClient.nullToEmpty(request.system()) + OpenAiLlmClient.nullToEmpty(request.user()));

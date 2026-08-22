@@ -1,20 +1,10 @@
 package com.ai.aiagent.llm;
 
-/**
- * Cac kieu du lieu dung chung cho tang LLM. Gom vao 1 file cho gon.
- */
 public final class LlmDtos {
 
     private LlmDtos() {
     }
 
-    /**
-     * Mot yeu cau sinh van ban.
-     *
-     * @param system         chi thi he thong (co the null)
-     * @param user           noi dung nguoi dung
-     * @param maxOutputTokens null = dung mac dinh cua cau hinh
-     */
     public record LlmRequest(String system, String user, Integer maxOutputTokens) {
 
         public static LlmRequest of(String user) {
@@ -26,12 +16,6 @@ public final class LlmDtos {
         }
     }
 
-    /**
-     * So token va chi phi cua mot lan goi.
-     *
-     * @param costUsd chi phi UOC TINH theo bang gia niem yet trong {@link ModelPricing};
-     *                khong phai so tien thuc tren hoa don (co the co chiet khau, cache...).
-     */
     public record LlmUsage(int inputTokens, int outputTokens, double costUsd) {
 
         public static final LlmUsage EMPTY = new LlmUsage(0, 0, 0.0);
@@ -52,12 +36,19 @@ public final class LlmDtos {
     public record LlmResponse(String text, LlmUsage usage, String provider, String model, long latencyMs) {
     }
 
-    /** Nhan token khi stream. */
     public interface StreamSink {
         void onToken(String token);
 
         void onComplete(LlmResponse response);
 
         void onError(Throwable error);
+
+        /**
+         * True khi nguoi dung da bam "dung". Client streaming phai kiem tra giua cac
+         * token va thoat vong lap, de khong tra tien cho phan sinh ra khong ai doc.
+         */
+        default boolean cancelled() {
+            return false;
+        }
     }
 }

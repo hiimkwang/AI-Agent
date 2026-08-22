@@ -5,13 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Hai phep bien doi thuan tuy cua {@link AuditFilter}: che secret va chuan hoa duong dan.
- *
- * Phep che secret dac biet dang duoc test: nhat ky kiem toan bi doc boi nhieu nguoi hon
- * la so nguoi duoc biet secret, nen mot lo hong o day bien chinh cong cu kiem soat
- * thanh cho ro ri.
- */
 class AuditFilterTest {
 
     @Test
@@ -24,7 +17,6 @@ class AuditFilterTest {
 
         assertThat(redacted).doesNotContain("sk-abc123");
         assertThat(redacted).contains("\"apiKey\":\"***\"");
-        // Truong khong phai secret phai con nguyen - nhat ky che het thi vo dung.
         assertThat(redacted).contains("\"provider\":\"OPENAI\"");
         assertThat(redacted).contains("\"model\":\"gpt-4o-mini\"");
     }
@@ -51,6 +43,27 @@ class AuditFilterTest {
     }
 
     @Test
+    @DisplayName("Truong 'path' KHONG bi che - da tung bi che nham vi chua chuoi 'pat'")
+    void doesNotRedactPathField() {
+        String json = """
+                {"path":"D:/tai-lieu/nhan-su","category":"nhan-su"}""";
+
+        assertThat(AuditFilter.redact(json)).isEqualTo(json);
+    }
+
+    @Test
+    @DisplayName("Nhung ten KET THUC bang 'pat' thi van bi che")
+    void stillRedactsRealPatFields() {
+        String json = """
+                {"pat":"ghp_abc","devops_pat":"xyz","azurePat":"123","sourcePath":"D:/a"}""";
+
+        String redacted = AuditFilter.redact(json);
+
+        assertThat(redacted).doesNotContain("ghp_abc", "xyz", "123");
+        assertThat(redacted).contains("\"sourcePath\":\"D:/a\"");
+    }
+
+    @Test
     @DisplayName("Doan duong dan la SO duoc thay bang {id} de gom nhom duoc")
     void normalizesNumericSegments() {
         assertThat(AuditFilter.normalize("/api/v1/rag/admin/documents/42"))
@@ -64,8 +77,6 @@ class AuditFilterTest {
     @Test
     @DisplayName("Slug co chua so KHONG bi coi la id")
     void keepsNonNumericSegments() {
-        // "bp-ptpm-2024" la mot slug, khong phai khoa chinh. Thay no bang {id} se lam
-        // hai hanh dong khac nhau bi gom lam mot trong bao cao.
         assertThat(AuditFilter.normalize("/api/v1/rag/admin/collections/bp-ptpm-2024"))
                 .isEqualTo("/admin/collections/bp-ptpm-2024");
     }

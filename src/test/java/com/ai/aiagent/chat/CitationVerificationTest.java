@@ -9,11 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Mo hinh thinh thoang ghi {@code [3]} trong khi prompt chi co 2 nguon. Voi tai lieu
- * noi quy, mot can cu SAI nguy hiem hon khong co can cu: nguoi doc thay so hieu thi tin
- * va se khong di kiem chung.
- */
 class CitationVerificationTest {
 
     private PromptBuilder.CitationCheck check(String answer, int sources) {
@@ -39,10 +34,6 @@ class CitationVerificationTest {
         assertEquals("Nghỉ 12 ngày [1]. Theo quy định mới.", r.answer());
     }
 
-    /**
-     * Chi bo MOC chu khong bo ca cau: cau van co the dung, chi la nguon bi ghi nham.
-     * Bo ca cau se lam mat thong tin dung ma khong bao cho ai biet.
-     */
     @Test
     @DisplayName("Chi bo moc, khong bo cau chua moc do")
     void keepsSentenceWhenCitationIsDropped() {

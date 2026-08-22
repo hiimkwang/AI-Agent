@@ -10,10 +10,7 @@ import org.springframework.stereotype.Component;
 @Getter
 @Setter
 public class TeamsProperties {
-    /** Tat hoan toan endpoint webhook neu false. */
     private boolean enabled = false;
-    /** Secret cua Outgoing Webhook trong Teams (chuoi base64). Rong = tu choi moi request. */
     private String hmacSecret = "";
-    /** Danh cho phuong thuc xac thuc bang JWT cua Bot Framework (chua dung o che do HMAC). */
     private int maxClockSkewSeconds = 300;
 }

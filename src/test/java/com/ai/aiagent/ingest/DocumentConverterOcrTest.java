@@ -17,14 +17,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Kiem tra QUYET DINH co goi OCR hay khong.
- *
- * Day la cho dat tien nhat cua ca pipeline nap lieu - moi trang la mot loi goi model
- * thi giac - nen viec no chi chay dung luc can phai duoc bao ve bang test, khong phai
- * bang su can than cua nguoi doc code. Ban than chat luong OCR khong kiem tra o day
- * (do phu thuoc model); thu duoc kiem tra la LUAT KICH HOAT.
- */
 class DocumentConverterOcrTest {
 
     private RagProperties props;
@@ -88,9 +80,6 @@ class DocumentConverterOcrTest {
     @Test
     @DisplayName("PDF 'lai': co it text tren nhieu trang van phai OCR")
     void mostlyScannedPdfStillTriggersOcr() {
-        // 10 trang nhung tong cong chi vai chuc ky tu -> trung binh moi trang rat thap.
-        // Neu tinh theo TONG so ky tu thi truong hop nay lot luoi, va do la loai file
-        // hay gap nhat: vai trang danh may + phan con lai la ban scan dinh kem.
         StringBuilder thin = new StringBuilder();
         for (int page = 1; page <= 10; page++) {
             thin.append("<!-- page ").append(page).append(" -->\n\nBIDV\n\n");
@@ -134,7 +123,6 @@ class DocumentConverterOcrTest {
         assertThat(result.warnings()).anyMatch(w -> w.contains("OCR khong doc duoc"));
     }
 
-    /** Doan van du dai de vuot nguong min-chars-per-page. */
     private String longText(int pages) {
         StringBuilder sb = new StringBuilder();
         for (int page = 1; page <= pages; page++) {

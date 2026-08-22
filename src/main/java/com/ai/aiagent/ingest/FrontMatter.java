@@ -10,30 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Doc khoi front-matter dau file Markdown.
- *
- * Vi ban se tu chuyen tai lieu sang Markdown truoc khi nap, day la cho de ban
- * KHAI BAO METADATA ma he thong khong the tu suy ra duoc:
- *
- * <pre>
- * ---
- * title: Noi quy lao dong 2026
- * category: nhan-su
- * department: nhan-su
- * doc_number: 12/2026/QD-BSC
- * version: 2.1
- * effective_date: 2026-01-01
- * expires_date: 2027-12-31
- * status: ACTIVE
- * roles: HR, ADMIN
- * ---
- * </pre>
- *
- * Nho {@code effective_date} + {@code status}, he thong moi tra loi duoc "quy dinh
- * MOI NHAT la gi" va khong con trich dan van ban da het hieu luc ngang hang voi
- * van ban dang ap dung.
- */
 @Slf4j
 public final class FrontMatter {
 
@@ -45,11 +21,6 @@ public final class FrontMatter {
             DateTimeFormatter.ofPattern("yyyy/MM/dd")
     };
 
-    /**
-     * @param fields   cac cap key/value da doc duoc (key da lowercase)
-     * @param body     phan Markdown con lai sau khi bo front-matter
-     * @param hadBlock co ton tai khoi front-matter hay khong
-     */
     public record Parsed(Map<String, String> fields, String body, boolean hadBlock) {
 
         public String text(String key) {
@@ -114,10 +85,9 @@ public final class FrontMatter {
             try {
                 return LocalDate.parse(v, f);
             } catch (DateTimeParseException ignored) {
-                // thu dinh dang tiep theo
             }
         }
-        log.debug("Khong doc duoc ngay '{}' - bo qua.", value);
+        log.debug("Unparseable front-matter date '{}', ignored.", value);
         return null;
     }
 }

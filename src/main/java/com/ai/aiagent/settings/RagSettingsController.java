@@ -8,12 +8,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * API cau hinh.
- *
- * GET  duoc phep voi moi nguoi dung da xac thuc (UI can biet model nao dang dung).
- * PUT/POST chi ADMIN - xem {@code SecurityConfig}.
- */
 @RestController
 @RequestMapping("/api/v1/rag/settings")
 public class RagSettingsController {
@@ -33,10 +27,11 @@ public class RagSettingsController {
         out.put("model", settings.current().model());
         out.put("settings", settings.snapshot());
         out.put("editableKeys", settings.editableKeys());
+        // What a blank override falls back to, so the admin screen can show it.
+        out.put("defaults", settings.textDefaults());
         return out;
     }
 
-    /** Doi nhanh provider/model tra loi mac dinh. */
     @PutMapping
     public Map<String, Object> updateModel(@RequestBody ModelRequest request) {
         LlmProvider provider = LlmProvider.fromString(request.provider());
@@ -51,11 +46,6 @@ public class RagSettingsController {
     public record ModelRequest(String provider, String model) {
     }
 
-    /**
-     * Doi nhieu tham so mot luc, ap NGAY khong can restart.
-     *
-     * Vi du: {@code {"retrieval.topK": 8, "retrieval.minRerankScore": 0.4}}
-     */
     @PostMapping
     public Map<String, Object> update(@RequestBody Map<String, Object> changes) {
         if (changes == null || changes.isEmpty()) {

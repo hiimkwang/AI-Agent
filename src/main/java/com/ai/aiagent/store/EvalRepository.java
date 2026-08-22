@@ -13,14 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Golden dataset va ket qua eval, luu ben.
- *
- * Truoc day eval co san nhung phai TRUYEN CASE BANG TAY moi lan goi API, nen tren
- * thuc te khong ai chay dinh ky va khong so sanh duoc giua cac lan. Gio bo cau hoi
- * chuan nam trong DB, moi lan chay duoc luu lai kem tham so, nen thay ngay diem
- * tang hay tut sau khi doi chunk-size / top-k / model.
- */
 @Repository
 @Slf4j
 public class EvalRepository {
@@ -37,13 +29,11 @@ public class EvalRepository {
         this.mapper = mapper;
     }
 
-    // ------------------------------------------------------------- Cases
-
     public long addCase(EvalCase c) {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(connection -> {
-            // Chi ro cot khoa: Postgres voi RETURN_GENERATED_KEYS tra ve moi cot,
-            // khi do KeyHolder.getKey() se nem loi vi co nhieu khoa.
+            // Key column named explicitly: with RETURN_GENERATED_KEYS Postgres returns
+            // every column and KeyHolder.getKey() then throws.
             PreparedStatement ps = connection.prepareStatement("""
                     INSERT INTO rag_eval_cases
                         (suite, question, expected_source, expected_answer, category, active)
@@ -84,13 +74,10 @@ public class EvalRepository {
         return jdbc.queryForList("SELECT DISTINCT suite FROM rag_eval_cases ORDER BY suite", String.class);
     }
 
-    // -------------------------------------------------------------- Runs
-
     public long createRun(String suite, String provider, String model, int total, Object params) {
         return createRun(suite, provider, model, total, params, "ANSWER");
     }
 
-    /** @param kind {@code ANSWER} (co giam khao LLM) hoac {@code RETRIEVAL} (chi do truy xuat) */
     public long createRun(String suite, String provider, String model, int total, Object params,
                           String kind) {
         String paramsJson;
@@ -102,7 +89,8 @@ public class EvalRepository {
         final String json = paramsJson;
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(connection -> {
-            // Postgres tra ve MOI cot voi RETURN_GENERATED_KEYS => phai chi dinh ro "id".
+            // Key column named explicitly: with RETURN_GENERATED_KEYS Postgres returns
+            // every column and KeyHolder.getKey() then throws.
             PreparedStatement ps = connection.prepareStatement("""
                     INSERT INTO rag_eval_runs (suite, provider, model, total, params, kind)
                     VALUES (?, ?, ?, ?, ?::jsonb, ?)
@@ -119,12 +107,6 @@ public class EvalRepository {
         return id == null ? -1 : id.longValue();
     }
 
-    /**
-     * Ghi ket qua mot lan do TRUY XUAT.
-     *
-     * @param recall   ty le tai lieu dung nam trong top 1/3/5/10, theo dung thu tu do
-     * @param mrrAfter MRR sau rerank; null khi lan chay khong bat rerank
-     */
     public void completeRetrievalRun(long runId, int measured, int skipped, double[] recall,
                                      Double mrr, Double mrrAfter, Integer avgLatencyMs) {
         jdbc.update("""
@@ -135,8 +117,6 @@ public class EvalRepository {
                  WHERE id = ?
                 """, measured, skipped, recall[0], recall[1], recall[2], recall[3],
                 mrr, mrrAfter,
-                // context_recall giu dung nghia cu "co truy xuat duoc nguon mong doi
-                // khong", bang recall@10 - de so sanh duoc voi cac lan chay ANSWER cu.
                 recall[3], avgLatencyMs, runId);
     }
 

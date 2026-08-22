@@ -11,27 +11,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.DoubleAdder;
 
-/**
- * Do luong: so cau hoi, do tre tung buoc, token, chi phi, ty le tu choi, cache hit.
- *
- * Truoc day khong do gi ca - khong biet buoc nao cham thi khong toi uu duoc buoc nao,
- * va khong biet cau hoi nao dat. Toan bo so lieu vao Micrometer nen lay duoc qua
- * {@code /actuator/prometheus}, va cung duoc tong hop cho trang quan tri.
- *
- * <h2>The {@code bot}</h2>
- * Moi so do cua mot luot hoi-dap deu mang the {@code bot}. Ly do: voi nen tang nhieu
- * bot, so lieu GOP khong con dung de chan doan - ty le tu choi toan he 8% co the la
- * moi bot deu 8%, hoac la bot Phap che 40% con lai binh thuong. Truong hop thu hai
- * co nghia la collection cua bot do thieu tai lieu, va so lieu gop giau mat dieu do.
- *
- * The luon co gia tri ({@code "web"} cho duong khong qua bot) chu khong bao gio rong:
- * cung mot ten metric ma luc co luc khong co the se lam hong chuoi so lieu Prometheus.
- * So bot la huu han va nho nen khong co nguy co bung no so chuoi (cardinality).
- */
 @Component
 public class RagMetrics {
 
-    /** Duong web/goi noi bo: khong thuoc bot nao. Xem {@code BotProfile.label()}. */
     public static final String WEB = "web";
 
     private final MeterRegistry registry;
@@ -50,18 +32,17 @@ public class RagMetrics {
 
         registry.gauge("rag.tokens.input.total", inputTokens, AtomicLong::doubleValue);
         registry.gauge("rag.tokens.output.total", outputTokens, AtomicLong::doubleValue);
-        registry.gauge("rag.cost.usd.total", costUsd, DoubleAdder::doubleValue);
+        // No gauge for cost: Micrometer exports a counter with a "_total" suffix, so a gauge
+        // named rag.cost.usd.total would claim the same Prometheus name as the rag.cost.usd
+        // counter below. Prometheus then rejects the counter and the per-bot cost series
+        // disappears from /actuator/prometheus with only a warning. Use sum(rag_cost_usd_total)
+        // for the grand total; snapshot() still reports it from costUsd directly.
     }
 
     public void recordQuestion(String bot) {
         counter("rag.questions", "bot", label(bot)).increment();
     }
 
-    /**
-     * @param reason ly do tu choi ({@code RelevanceGate.Decision.reason()})
-     * @param bot    bot tra loi; ty le tu choi tang vot o MOT bot la dau hieu collection
-     *               cua bot do thieu tai lieu, khong phai loi cua bo truy xuat
-     */
     public void recordAbstained(String reason, String bot) {
         counter("rag.questions.abstained", "bot", label(bot)).increment();
         Counter.builder("rag.abstain.reason")
@@ -81,13 +62,6 @@ public class RagMetrics {
         counter("rag.errors", "bot", label(bot)).increment();
     }
 
-    /**
-     * So cau tra loi dan nguon KHONG ton tai (da bi bo moc).
-     *
-     * Ty le nay tang la dau hieu som prompt hoac model dang xuong cap - de nhan ra hon
-     * nhieu so voi viec doc tung cau tra loi. Gan the bot vi persona rieng cua tung bot
-     * la mot trong nhung thu de lam hong cach dan nguon nhat.
-     */
     public void recordInvalidCitation(String bot) {
         counter("rag.citations.invalid", "bot", label(bot)).increment();
     }
@@ -97,7 +71,6 @@ public class RagMetrics {
         chunksIndexed.increment(chunks);
     }
 
-    /** Do tre TOAN LUOT, gan the bot: mot bot dung model cham keo p95 rieng no len. */
     public void recordTotal(long ms, String bot) {
         stage("total", bot).record(ms, TimeUnit.MILLISECONDS);
     }
@@ -114,15 +87,8 @@ public class RagMetrics {
         stage("generation", bot).record(ms, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * MOI chuoi {@code rag.latency} phai co DU CA HAI the {@code stage} va {@code bot}.
-     *
-     * Day khong phai lua chon phong cach. Prometheus doi moi chuoi cung mot ten metric
-     * phai co cung bo KHOA tag; de {@code stage=total} mang them the {@code bot} con ba
-     * buoc kia thi khong, va chuoi total bi LOAI BO IM LANG khoi
-     * {@code /actuator/prometheus} - da xay ra that, phat hien khi doi chieu endpoint.
-     * Khong co canh bao nao o muc log mac dinh.
-     */
+    // Every series of a metric must carry the same tag keys. Prometheus drops
+    // mismatched series silently, so both stage and bot are always tagged.
     private Timer stage(String stage, String bot) {
         return Timer.builder("rag.latency")
                 .tag("stage", stage)
@@ -140,7 +106,6 @@ public class RagMetrics {
                 .register(registry).increment(cost);
     }
 
-    /** Tom tat de hien tren trang quan tri (khong can Prometheus). */
     public Map<String, Object> snapshot() {
         double questions = sum("rag.questions");
         double abstained = sum("rag.questions.abstained");
@@ -166,8 +131,6 @@ public class RagMetrics {
         return out;
     }
 
-    // ============================================================ Noi bo
-
     private Counter counter(String name, String tag, String value) {
         return Counter.builder(name).tag(tag, value).register(registry);
     }
@@ -185,7 +148,6 @@ public class RagMetrics {
         return bot == null || bot.isBlank() ? WEB : bot;
     }
 
-    /** Cong don moi chuoi cua mot metric - so gop van la so gop du da tach the bot. */
     private double sum(String name) {
         double total = 0;
         for (Counter c : registry.find(name).counters()) total += c.count();
@@ -198,16 +160,6 @@ public class RagMetrics {
         return total;
     }
 
-    /**
-     * Trung binh mot buoc, GOP MOI BOT - trung binh co trong so theo so luot.
-     *
-     * Khong lay trung binh cong cua cac trung binh: mot bot tra loi 3 cau se keo con so
-     * toan he lech han.
-     *
-     * Timer mac dinh khong luu histogram nen o day khong co percentile that; con so
-     * CHINH XAC lay tu DB qua bao cao theo bot ({@code UsageReportRepository}) - o do co
-     * {@code percentile_cont} that su.
-     */
     private long stageMean(String stage) {
         double weighted = 0;
         long count = 0;
@@ -218,7 +170,6 @@ public class RagMetrics {
         return count == 0 ? 0 : Math.round(weighted / count);
     }
 
-    /** Xap xi p95 thuc dung: gia tri lon nhat quan sat duoc tren moi bot. */
     private long stageMax(String stage) {
         long max = 0;
         for (Timer t : registry.find("rag.latency").tag("stage", stage).timers()) {

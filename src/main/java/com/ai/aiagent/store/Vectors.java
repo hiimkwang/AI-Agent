@@ -1,12 +1,10 @@
 package com.ai.aiagent.store;
 
-/** Chuyen doi giua {@code float[]} va literal cua kieu {@code vector} trong pgvector. */
 public final class Vectors {
 
     private Vectors() {
     }
 
-    /** {@code [0.1,-0.2,...]} - dang literal de cast {@code ?::vector}. */
     public static String toLiteral(float[] vector) {
         StringBuilder sb = new StringBuilder(vector.length * 9 + 2);
         sb.append('[');
@@ -44,7 +42,6 @@ public final class Vectors {
         return dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
-    /** Literal mang text cua Postgres, dung cho {@code ?::text[]}. */
     public static String toTextArrayLiteral(java.util.Collection<String> values) {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;

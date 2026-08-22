@@ -1,5 +1,6 @@
 package com.ai.aiagent.security;
 
+import com.ai.aiagent.common.RequestPaths;
 import com.ai.aiagent.config.SecurityProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -20,13 +21,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Gioi han so request moi phut theo client (hoac theo IP voi webhook).
- *
- * Cua so co dinh 1 phut, dem bang AtomicInteger trong cache tu het han. Don gian
- * nhung du chan lam dung: moi cau hoi chat tieu 3-4 loi goi LLM, khong the de
- * mot client bat tan quay tien LLM.
- */
 @Component
 @Order(1)
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -44,17 +38,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.mapper = mapper;
     }
 
-    /**
-     * Bo qua {@code /api/messages}.
-     *
-     * Moi tin nhan Teams deu den tu vai dia chi IP cua Azure Bot Service, nen dem theo IP
-     * o day se gom CA CONG TY vao mot o dem: mot phong hop soi noi la ca to chuc bi chan.
-     * Gioi han cua bot duoc dat theo TUNG NGUOI dung trong
-     * {@link com.ai.aiagent.bot.TeamsBotService}, la don vi dung nghia.
-     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String p = request.getRequestURI();
+        String p = RequestPaths.within(request);
         return !p.startsWith("/api/") || p.startsWith("/api/messages");
     }
 
@@ -67,20 +53,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        String path = request.getRequestURI();
-        int limit;
-        String bucket;
-
-        if (path.startsWith("/api/v1/rag/teams-webhook")) {
-            limit = cfg.getWebhookPerMinute();
-            bucket = "webhook:" + clientIp(request);
-        } else if (path.startsWith("/api/v1/rag/admin")) {
-            limit = cfg.getAdminPerMinute();
-            bucket = "admin:" + principalId();
-        } else {
-            limit = cfg.getChatPerMinute();
-            bucket = "chat:" + principalId();
-        }
+        String path = RequestPaths.within(request);
+        Bucket b = bucketFor(path, request.getMethod(), cfg);
+        int limit = b.limit();
+        String bucket = b.kind() + ":"
+                + ("webhook".equals(b.kind()) ? clientIp(request) : principalId());
 
         String key = bucket + ":" + (System.currentTimeMillis() / 60_000L);
         AtomicInteger counter = counters.get(key, k -> new AtomicInteger());
@@ -95,6 +72,34 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    record Bucket(String kind, int limit) {
+    }
+
+    /**
+     * Chon gio dem. Tach ro thanh hai loai:
+     *
+     * - "chat": chi endpoint SINH cau tra loi. Day moi la thu goi model va ton tien,
+     *   nen dang han muc chat (mac dinh 30/phut).
+     * - "other": moi lenh doc con lai ma giao dien can de ve trang. Truoc day chung
+     *   bi dem chung voi chat, ma mot lan tai trang la ~5 request, nen chi can F5
+     *   sau lan trong mot phut la 429 du nguoi dung chua hoi gi ca.
+     *
+     * Tach ra ham rieng, khong phu thuoc servlet, de test duoc.
+     */
+    static Bucket bucketFor(String path, String method, SecurityProperties.RateLimit cfg) {
+        if (path.startsWith("/api/v1/rag/teams-webhook")) {
+            return new Bucket("webhook", cfg.getWebhookPerMinute());
+        }
+        if (path.startsWith("/api/v1/rag/admin")) {
+            return new Bucket("admin", cfg.getAdminPerMinute());
+        }
+        boolean generating = "POST".equalsIgnoreCase(method)
+                && (path.equals("/api/v1/rag/chat") || path.equals("/api/v1/rag/chat/stream"));
+        return generating
+                ? new Bucket("chat", cfg.getChatPerMinute())
+                : new Bucket("other", cfg.getOtherPerMinute());
     }
 
     private String principalId() {

@@ -12,7 +12,6 @@ public final class ChatDtos {
     private ChatDtos() {
     }
 
-    /** Yeu cau hoi-dap. Chi {@code question} la bat buoc. */
     public static class ChatRequest {
         @NotBlank(message = "Cau hoi khong duoc de trong")
         @Size(max = 4000, message = "Cau hoi qua dai (toi da 4000 ky tu)")
@@ -21,7 +20,6 @@ public final class ChatDtos {
         private String model;
         private String conversationId;
         private String category;
-        /** Cho phep tat cache cho mot request (dung khi debug). */
         private Boolean useCache;
 
         public String getQuestion() { return question; }
@@ -42,10 +40,6 @@ public final class ChatDtos {
         }
     }
 
-    /**
-     * Thong tin chan doan mot luot truy xuat - tra ve de nhin thay he thong dang lam gi
-     * thay vi phai doc log.
-     */
     public record RetrievalDebug(
             String rewrittenQuery,
             int queryVariants,
@@ -72,16 +66,15 @@ public final class ChatDtos {
             String cacheHit,
             Long messageId,
             String conversationId,
-            RetrievalDebug debug
+            RetrievalDebug debug,
+            /** Cau hoi goi y, chi co khi he thong tu choi tra loi. */
+            List<String> suggestions
     ) {
     }
 
-    /** Nhan su kien khi stream cau tra loi. */
     public interface ChatStreamListener {
-        /** Bao tien do de nguoi dung khong nhin man hinh trang trong luc cho. */
         void onStatus(String stage, String detail);
 
-        /** Gui trich dan TRUOC khi sinh chu, de UI hien nguon ngay. */
         void onCitations(List<Citation> citations);
 
         void onToken(String token);
@@ -89,5 +82,10 @@ public final class ChatDtos {
         void onDone(ChatResponse response);
 
         void onError(String message);
+
+        /** True khi client da ngat ket noi (bam "dung" hoac dong tab). */
+        default boolean cancelled() {
+            return false;
+        }
     }
 }

@@ -1,7 +1,7 @@
 services:
   postgres:
-    # Image pgvector chinh thuc, dua tren Postgres 17.
-    # Da co san extension vector; unaccent va pg_trgm nam trong contrib cua Postgres.
+    # Official pgvector image: ships the vector extension; unaccent and pg_trgm
+    # come from Postgres contrib.
     image: pgvector/pgvector:pg17
     container_name: rag-postgres
     restart: unless-stopped
@@ -9,7 +9,6 @@ services:
       POSTGRES_DB: rag_db
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: ${DB_PASSWORD:-admin}
-      # Collation phu hop tieng Viet
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
       TZ: Asia/Ho_Chi_Minh
     ports:
@@ -23,7 +22,7 @@ services:
       retries: 20
     command:
       - "postgres"
-      # HNSW can maintenance_work_mem kha lon khi build index
+      # HNSW index builds need a large maintenance_work_mem.
       - "-c"
       - "maintenance_work_mem=512MB"
       - "-c"
@@ -31,13 +30,9 @@ services:
       - "-c"
       - "max_connections=100"
 
-  # -------------------------------------------------------------------
-  # Ung dung. Nam trong profile "app" nen `docker compose up -d` van chi
-  # dung Postgres nhu truoc - luong dev (chay bang ./mvnw spring-boot:run)
-  # khong doi gi.
-  #
-  # Chay ca cum:  docker compose --profile app up -d --build
-  # -------------------------------------------------------------------
+  # In the "app" profile, so `docker compose up -d` still starts Postgres only
+  # and the dev loop (./mvnw spring-boot:run) is unaffected.
+  #   docker compose --profile app up -d --build
   app:
     profiles: ["app"]
     build:
@@ -50,7 +45,7 @@ services:
     ports:
       - "${SERVER_PORT:-8080}:8080"
     environment:
-      # Trong mang cua compose, host cua DB la ten dich vu chu khong phai localhost.
+      # Inside the compose network the database host is the service name.
       DB_URL: jdbc:postgresql://postgres:5432/rag_db
       DB_USERNAME: admin
       DB_PASSWORD: ${DB_PASSWORD:-admin}
@@ -60,23 +55,20 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       COHERE_API_KEY: ${COHERE_API_KEY:-}
-      # Dang nhap Entra (de trong = tat, he thong chay bang API key nhu cu)
       ENTRA_ENABLED: ${ENTRA_ENABLED:-false}
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
       ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
-      # Bot Teams (de trong = tat, khong co endpoint /api/messages)
       BOT_ENABLED: ${BOT_ENABLED:-false}
       BOT_APP_ID: ${BOT_APP_ID:-}
       BOT_APP_PASSWORD: ${BOT_APP_PASSWORD:-}
-      # Dung sau reverse proxy: bat buoc, neu khong redirect_uri se la http://
-      # va Microsoft tra AADSTS50011.
+      # Required behind a reverse proxy, otherwise redirect_uri is http:// and
+      # Microsoft returns AADSTS50011.
       SERVER_FORWARD_HEADERS_STRATEGY: ${FORWARD_HEADERS:-NATIVE}
       RAG_TRUST_PROXY: ${RAG_TRUST_PROXY:-true}
     volumes:
       - rag_logs:/app/logs
-      # Thu muc tai lieu tren may chu de dung /admin/ingest-folder.
-      # Chi doc: ung dung khong bao gio can ghi vao kho tai lieu goc.
+      # Read-only: the app never writes to the source document store.
       - ${RAG_DOCS_DIR:-./docs}:/data/docs:ro
 
 volumes:

@@ -12,13 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Job nap lieu, luu trong DB.
- *
- * Truoc day trang thai job nam trong {@code ConcurrentHashMap}: mat khi restart,
- * khong cancel duoc, khong xem lai duoc lich su. Gio job ton tai qua restart va
- * co co che yeu cau dung ({@code cancel_requested}).
- */
 @Repository
 @Slf4j
 public class JobRepository {
@@ -38,7 +31,6 @@ public class JobRepository {
                 """, id, kind, category, total, createdBy);
     }
 
-    /** Cap nhat tien do sau moi file. */
     public void progress(String id, String currentFile, int processed, int succeeded,
                          int failed, int skipped, int totalChunks) {
         jdbc.update("""
@@ -54,7 +46,6 @@ public class JobRepository {
                 ? message.substring(0, 500) : message);
         try {
             String json = mapper.writeValueAsString(List.of(trimmed));
-            // Gioi han 200 loi de cot jsonb khong phinh vo han
             jdbc.update("""
                     UPDATE rag_ingest_jobs
                        SET errors = CASE
@@ -64,7 +55,7 @@ public class JobRepository {
                      WHERE id = ?
                     """, json, id);
         } catch (Exception e) {
-            log.warn("Khong ghi duoc loi vao job {}: {}", id, e.getMessage());
+            log.warn("Could not append the error to job {}: {}", id, e.getMessage());
         }
     }
 
@@ -95,10 +86,6 @@ public class JobRepository {
                 ROW_MAPPER, Math.min(Math.max(limit, 1), 100));
     }
 
-    /**
-     * Job dang RUNNING luc khoi dong la job bi chet giua duong o lan chay truoc
-     * (worker khong con) -> danh dau INTERRUPTED de khong hien tien do dung mai mai.
-     */
     public int markOrphanedAsInterrupted() {
         return jdbc.update("""
                 UPDATE rag_ingest_jobs
@@ -107,12 +94,6 @@ public class JobRepository {
                 """);
     }
 
-    /**
-     * Xoa lich su job DA KET THUC cu hon N ngay.
-     *
-     * Chi dong toi job da ket thuc: mot job dang chay ma bi xoa ban ghi thi worker van
-     * chay tiep nhung khong con cho bao tien do, va nguoi dung se thay job "bien mat".
-     */
     public int purgeFinishedOlderThanDays(int days) {
         return jdbc.update("""
                 DELETE FROM rag_ingest_jobs

@@ -11,17 +11,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Chan doc file tuy y tren may chu.
- *
- * Endpoint {@code /admin/ingest-folder} truoc day nhan DUONG DAN BAT KY, nghia la
- * ai goi duoc API cung bat server nhung file Office o cho nao cung duoc vao vector
- * store roi doc lai qua {@code /chat}. Gio moi duong dan phai:
- *   1) nam trong mot trong cac thu muc goc da khai bao ({@code rag.ingestion.allowed-roots}),
- *   2) sau khi chuan hoa (resolve symlink, bo {@code ..}) VAN nam trong thu muc do.
- *
- * Khong khai bao thu muc goc nao => chan hoan toan.
- */
 @Component
 @Slf4j
 public class PathAllowlist {
@@ -37,15 +26,15 @@ public class PathAllowlist {
                 try {
                     roots.add(Paths.get(trimmed).toAbsolutePath().normalize().toRealPath());
                 } catch (IOException e) {
-                    log.warn("Thu muc goc '{}' khong ton tai -> bo qua.", trimmed);
+                    log.warn("Allowed root '{}' does not exist, ignoring it.", trimmed);
                 }
             }
         }
         if (roots.isEmpty()) {
-            log.warn("rag.ingestion.allowed-roots dang rong -> endpoint /admin/ingest-folder "
-                    + "se tu choi moi duong dan. Dat RAG_ALLOWED_ROOTS de bat.");
+            log.warn("rag.ingestion.allowed-roots is empty, so /admin/ingest-folder will reject "
+                    + "every path. Set RAG_ALLOWED_ROOTS to enable it.");
         } else {
-            log.info("Thu muc duoc phep nap tu may chu: {}", roots);
+            log.info("Folders allowed for server-side ingest: {}", roots);
         }
     }
 
@@ -57,10 +46,6 @@ public class PathAllowlist {
         return roots.stream().map(Path::toString).toList();
     }
 
-    /**
-     * @return duong dan da chuan hoa neu hop le
-     * @throws SecurityException neu duong dan nam ngoai cac thu muc duoc phep
-     */
     public Path requireAllowedDirectory(String candidate) {
         if (candidate == null || candidate.isBlank()) {
             throw new IllegalArgumentException("Duong dan trong.");
@@ -86,7 +71,6 @@ public class PathAllowlist {
         throw new SecurityException("Duong dan nam ngoai cac thu muc duoc phep: " + candidate);
     }
 
-    /** Chan ky tu duong dan trong ten file upload (chong ghi ra ngoai thu muc tam). */
     public static String sanitizeFileName(String original) {
         if (original == null || original.isBlank()) return "upload.bin";
         String name = Paths.get(original).getFileName().toString();

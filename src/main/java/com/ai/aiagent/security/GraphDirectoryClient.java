@@ -1,5 +1,6 @@
 package com.ai.aiagent.security;
 
+import com.ai.aiagent.common.HttpTimeouts;
 import com.ai.aiagent.config.EntraProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
@@ -10,29 +11,18 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-/**
- * Doc thong tin nguoi dung va thanh vien nhom tu Microsoft Graph, che do APP-ONLY
- * (client credentials).
- *
- * TAI SAO APP-ONLY chu khong dung claim {@code groups} trong token:
- *
- *  1) Bot Teams (P2) chi co {@code aadObjectId} cua nguoi gui, KHONG co token cua
- *     nguoi dung - khong co claim nao ma doc. Da buoc phai co duong app-only thi
- *     dung chung cho ca web, de web va bot phan quyen bang DUNG MOT logic.
- *  2) Claim {@code groups} bi Entra thay bang {@code _claim_names}/{@code _claim_sources}
- *     khi nguoi dung thuoc qua ~200 nhom, luc do van phai goi Graph. Viet mot duong
- *     luon dung tot hon hai duong ma mot duong chi dung 95% truong hop.
- *
- * Quyen can admin consent: {@code User.Read.All} + {@code GroupMember.Read.All}.
- *
- * Bean nay chi ton tai khi {@code rag.entra.enabled=true}.
- */
 @Component
 @ConditionalOnProperty(prefix = "rag.entra", name = "enabled", havingValue = "true")
 @Slf4j
@@ -40,38 +30,32 @@ public class GraphDirectoryClient {
 
     private static final String GRAPH = "https://graph.microsoft.com/v1.0";
 
-    /**
-     * @param department phong ban theo ho so Entra - chi de hien thi/audit, KHONG dung
-     *                   phan quyen (phan quyen dua tren nhom, xem {@link EntraScopeService})
-     */
     public record Profile(String upn, String displayName, String department, String jobTitle) {
     }
 
     private final EntraProperties props;
     private final RestClient http;
 
-    /** Token app-only, dung chung cho moi nguoi dung nen cache o cap client. */
     private volatile String cachedToken;
     private volatile Instant tokenExpiresAt = Instant.EPOCH;
 
+    // Group names change rarely; a permission screen asks for the same ones repeatedly.
+    private final Cache<String, String> nameCache = Caffeine.newBuilder()
+            .maximumSize(2000)
+            .expireAfterWrite(Duration.ofHours(6))
+            .build();
+
     public GraphDirectoryClient(EntraProperties props, RestClient.Builder builder) {
         this.props = props;
-        this.http = builder.build();
+        this.http = builder
+                .requestFactory(HttpTimeouts.factory(props.getGraphTimeoutSeconds()))
+                .build();
     }
 
     public boolean isReady() {
         return props.isGraphEnabled() && props.hasGraphCredentials();
     }
 
-    /**
-     * Nhom TRANSITIVE cua nguoi dung (gom ca nhom long trong nhom).
-     *
-     * Dung {@code getMemberGroups} thay vi {@code transitiveMemberOf} vi no chi tra ve
-     * danh sach objectId - nhe hon nhieu va dung du dung cho phan quyen.
-     *
-     * @return objectId chu thuong; rong khi Graph loi (goi ham phai coi "rong" la
-     *         "khong co quyen gi", KHONG duoc coi la "co moi quyen")
-     */
     public Set<String> memberGroups(String userObjectId) {
         if (!isReady() || userObjectId == null || userObjectId.isBlank()) return Set.of();
         try {
@@ -92,14 +76,13 @@ public class GraphDirectoryClient {
             }
             return out;
         } catch (Exception e) {
-            // Fail CLOSED: khong biet nguoi nay thuoc nhom nao thi khong mo quyen nao.
-            log.warn("Graph: khong lay duoc nhom cua {}: {}: {}", userObjectId,
+            log.warn("Could not read the groups of {}: {}: {}", userObjectId,
                     e.getClass().getSimpleName(), e.getMessage());
+            // Fail closed: unknown group membership grants nothing, not everything.
             return Set.of();
         }
     }
 
-    /** Ho so nguoi dung. Null khi khong lay duoc - goi ham phai fallback sang claim trong token. */
     public Profile profile(String userObjectId) {
         if (!isReady() || userObjectId == null || userObjectId.isBlank()) return null;
         try {
@@ -116,15 +99,11 @@ public class GraphDirectoryClient {
                     text(u, "department"),
                     text(u, "jobTitle"));
         } catch (Exception e) {
-            log.warn("Graph: khong lay duoc ho so cua {}: {}", userObjectId, e.getMessage());
+            log.warn("Could not read the profile of {}: {}", userObjectId, e.getMessage());
             return null;
         }
     }
 
-    /**
-     * Ten hien thi cua nhom - CHI de hien trong giao dien quan tri, khong bao gio dung
-     * de phan quyen (ten nhom doi duoc, objectId thi khong).
-     */
     public String groupName(String groupObjectId) {
         if (!isReady()) return null;
         try {
@@ -135,19 +114,44 @@ public class GraphDirectoryClient {
                     .body(JsonNode.class);
             return g == null ? null : text(g, "displayName");
         } catch (Exception e) {
-            log.debug("Graph: khong lay duoc ten nhom {}: {}", groupObjectId, e.getMessage());
+            log.debug("Could not read the name of group {}: {}", groupObjectId, e.getMessage());
             return null;
         }
     }
 
-    // ============================================================ Token app-only
-
     /**
-     * Access token app-only, cache den truoc han 60 giay.
-     *
-     * @throws IllegalStateException khi khong lay duoc token - de goi ham log warn va
-     *         tra ve "khong co quyen", chu khong am tham bo qua ACL
+     * Display names for group object ids, cached because a permission screen asks for the
+     * same 15-20 groups on every page load. Ids Graph cannot resolve are simply absent -
+     * the caller falls back to showing the raw id rather than hiding the group.
      */
+    public Map<String, String> groupNames(Collection<String> groupObjectIds) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (!isReady() || groupObjectIds == null) return out;
+        for (String raw : groupObjectIds) {
+            if (raw == null || raw.isBlank()) continue;
+            String id = raw.strip().toLowerCase();
+            String name = nameCache.get(id, this::groupName);
+            if (name != null && !name.isBlank()) out.put(id, name);
+        }
+        return out;
+    }
+
+    /** Object id for a UPN, so an admin can grant by email instead of GUID. */
+    public String objectIdOfUpn(String upn) {
+        if (!isReady() || upn == null || upn.isBlank()) return null;
+        try {
+            JsonNode u = http.get()
+                    .uri(GRAPH + "/users/{upn}?$select=id", upn.strip())
+                    .header("Authorization", "Bearer " + token())
+                    .retrieve()
+                    .body(JsonNode.class);
+            return u == null ? null : text(u, "id");
+        } catch (Exception e) {
+            log.warn("Could not find the user '{}': {}", upn, e.getMessage());
+            return null;
+        }
+    }
+
     private String token() {
         String current = cachedToken;
         if (current != null && Instant.now().isBefore(tokenExpiresAt)) {
@@ -178,7 +182,7 @@ public class GraphDirectoryClient {
             long expiresIn = body.path("expires_in").asLong(3600);
             cachedToken = token;
             tokenExpiresAt = Instant.now().plus(Duration.ofSeconds(Math.max(60, expiresIn - 60)));
-            log.debug("Graph: lay token app-only moi, han {}.", tokenExpiresAt);
+            log.debug("Fetched a new app-only Graph token, expires at {}.", tokenExpiresAt);
             return token;
         }
     }
@@ -188,7 +192,6 @@ public class GraphDirectoryClient {
         return v == null || v.isBlank() ? null : v;
     }
 
-    /** Chuan hoa danh sach objectId ve chu thuong de so khop khong phu thuoc chu hoa. */
     static Set<String> normalizeIds(List<String> ids) {
         Set<String> out = new LinkedHashSet<>();
         if (ids == null) return out;

@@ -4,13 +4,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
-/** Cac model cua tang luu tru. Gom vao mot file cho de doi chieu voi schema. */
 public final class StoreModels {
 
     private StoreModels() {
     }
 
-    /** Metadata muc tai lieu. {@code docKey} la khoa on dinh de ghi de. */
     public record DocumentMeta(
             Long id,
             String docKey,
@@ -38,7 +36,6 @@ public final class StoreModels {
         }
     }
 
-    /** Mot chunk chuan bi ghi vao DB. */
     public record ChunkToInsert(
             Long documentId,
             String docKey,
@@ -54,12 +51,6 @@ public final class StoreModels {
     ) {
     }
 
-    /**
-     * Chunk lay ra tu DB kem diem.
-     *
-     * Dung class (khong phai record) vi diem duoc CAP NHAT nhieu lan trong pipeline:
-     * diem goc -> diem RRF -> diem rerank -> diem sau boost do moi.
-     */
     public static final class RetrievedChunk {
         private final long id;
         private final Long documentId;
@@ -77,15 +68,10 @@ public final class StoreModels {
         private final LocalDate effectiveDate;
         private final String status;
 
-        /** Diem goc tu nhanh tim kiem: cosine (0..1) hoac ts_rank_cd. */
         private double rawScore;
-        /** Diem sau khi gop RRF. */
         private double fusedScore;
-        /** Diem do rerank tra ve (0..1). Day la diem dung de so voi nguong tu choi. */
         private double rerankScore = -1;
-        /** Diem cuoi cung sau boost do moi. */
         private double finalScore;
-        /** Nhanh nao tim ra chunk nay: VECTOR, FULLTEXT hoac ca hai. */
         private String matchedBy = "";
 
         public RetrievedChunk(long id, Long documentId, String docKey, String fileName, String category,
@@ -110,6 +96,8 @@ public final class StoreModels {
             this.rawScore = rawScore;
         }
 
+        private Double cosine;
+
         public long getId() { return id; }
         public Long getDocumentId() { return documentId; }
         public String getDocKey() { return docKey; }
@@ -128,6 +116,13 @@ public final class StoreModels {
 
         public double getRawScore() { return rawScore; }
         public void setRawScore(double v) { this.rawScore = v; }
+        /**
+         * Cosine similarity, set only for chunks the vector branch returned. Null for a
+         * full-text-only hit: {@code rawScore} then holds a {@code ts_rank_cd} value, which is
+         * unbounded and must never be compared against a cosine threshold.
+         */
+        public Double getCosine() { return cosine; }
+        public void setCosine(Double v) { this.cosine = v; }
         public double getFusedScore() { return fusedScore; }
         public void setFusedScore(double v) { this.fusedScore = v; }
         public double getRerankScore() { return rerankScore; }
@@ -145,12 +140,10 @@ public final class StoreModels {
             }
         }
 
-        /** Doan lon dung de tra loi; quay ve child neu tai lieu cu khong co parent. */
         public String answerText() {
             return parentContent != null && !parentContent.isBlank() ? parentContent : content;
         }
 
-        /** Van ban dua cho bo rerank doc: co duong dan heading nen bot "mat goc". */
         public String rerankText() {
             StringBuilder sb = new StringBuilder();
             if (headingPath != null && !headingPath.isBlank()) sb.append('[').append(headingPath).append("]\n");
@@ -159,7 +152,6 @@ public final class StoreModels {
             return sb.toString();
         }
 
-        /** Nhan nguon hien cho nguoi dung: uu tien so hieu van ban neu co. */
         public String sourceLabel() {
             StringBuilder sb = new StringBuilder(fileName == null ? "?" : fileName);
             if (docNumber != null && !docNumber.isBlank()) sb.append(" (").append(docNumber).append(')');
@@ -168,11 +160,9 @@ public final class StoreModels {
         }
     }
 
-    /** Mot luot hoi-dap trong lich su hoi thoai. */
     public record Turn(String role, String content) {
     }
 
-    /** Trich dan tra ve cho nguoi dung - du chi tiet de kiem chung. */
     public record Citation(
             long chunkId,
             Long documentId,
@@ -184,11 +174,9 @@ public final class StoreModels {
     ) {
     }
 
-    /** Ban ghi mot cau tra loi da luu, dung de gan feedback. */
     public record StoredMessage(long id, String conversationId) {
     }
 
-    /** Trang thai job nap lieu. */
     public record JobStatus(
             String id,
             String state,

@@ -9,22 +9,10 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Ghi nhat ky thao tac.
- *
- * GHI O LUONG NEN: mot lan INSERT khong duoc phep cong them do tre vao thao tac
- * cua nguoi dung, va cang khong duoc lam hong thao tac do khi DB cham.
- *
- * NHUNG khi hang doi day thi GHI THANG trong luong request thay vi vut bo. Day la
- * khac biet co chu dinh so voi cac buoc phu tro khac cua he thong (rewrite, HyDE,
- * cache - nhung thu duoc phep that bai im lang): mot nhat ky kiem toan mat dong
- * ngay luc he thong dang qua tai la mat dung doan can nhat. Tha cham con hon thung.
- */
 @Service
 @Slf4j
 public class AuditService {
 
-    /** Du lon de nuot cac cum thao tac hang loat, du nho de khong an nhieu bo nho. */
     private static final int QUEUE_CAPACITY = 10_000;
 
     private final AuditRepository repository;
@@ -45,8 +33,8 @@ public class AuditService {
         if (!props.getAudit().isEnabled()) return;
         if (queue.offer(event)) return;
 
-        // Hang doi day: ghi dong bo. Cham hon nhung khong mat vet.
-        log.warn("Audit: hang doi day ({} muc), ghi dong bo.", QUEUE_CAPACITY);
+        log.warn("Audit queue full ({} entries), falling back to a synchronous write.",
+                    QUEUE_CAPACITY);
         writeSafely(event);
     }
 
@@ -59,9 +47,7 @@ public class AuditService {
                 Thread.currentThread().interrupt();
                 return;
             } catch (RuntimeException e) {
-                // Vong lap ghi khong duoc chet - neu chet thi tu do tro di khong con
-                // nhat ky nao ma khong ai biet.
-                log.error("Audit: loi trong vong lap ghi", e);
+                log.error("Audit writer loop failed", e);
             }
         }
     }
@@ -70,9 +56,7 @@ public class AuditService {
         try {
             repository.insert(event);
         } catch (RuntimeException e) {
-            // Khong nem ra ngoai: mot loi ghi nhat ky khong duoc lam hong thao tac
-            // that. Nhung PHAI la ERROR de con nhin thay tren giam sat.
-            log.error("Audit: khong ghi duoc nhat ky cho '{}' cua {}: {}",
+            log.error("Could not persist the audit entry for '{}' by {}: {}",
                     event.action(), event.actorUpn(), e.getMessage());
         }
     }
@@ -81,17 +65,15 @@ public class AuditService {
     public void shutdown() {
         running = false;
         writer.interrupt();
-        // Vet con lai trong hang doi: ghi not truoc khi tat, khong bo.
         AuditEvent remaining;
         int flushed = 0;
         while ((remaining = queue.poll()) != null) {
             writeSafely(remaining);
             flushed++;
         }
-        if (flushed > 0) log.info("Audit: da ghi not {} muc truoc khi tat.", flushed);
+        if (flushed > 0) log.info("Flushed {} pending audit entries during shutdown.", flushed);
     }
 
-    /** So muc dang cho ghi - hien o man quan tri de biet co dang un khong. */
     public int pending() {
         return queue.size();
     }

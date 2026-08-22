@@ -14,7 +14,13 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PlatformServiceTest {
@@ -33,7 +39,6 @@ class PlatformServiceTest {
                 collection(1, "nhan-su", Set.of(GROUP_HR), false),
                 collection(2, "ke-toan", Set.of(GROUP_ACC), false),
                 collection(3, "noi-quy-chung", Set.of(GROUP_HR, GROUP_ACC), true),
-                // Chua gan nhom nao -> khong ai doc duoc
                 collection(4, "mat", Set.of(), false)));
         when(repository.bots()).thenReturn(List.of(
                 bot(10, "chung", true, null),
@@ -54,8 +59,6 @@ class PlatformServiceTest {
                 "ACTIVE", Set.of(), Set.of(), Set.of());
     }
 
-    // ============================================================ Quyen doc
-
     @Test
     @DisplayName("Doc duoc dung nhung tap co nhom Entra cua minh")
     void readableSlugsFollowGroups() {
@@ -63,9 +66,6 @@ class PlatformServiceTest {
         assertEquals(Set.of("ke-toan", "noi-quy-chung"), service.readableSlugs(Set.of(GROUP_ACC)));
     }
 
-    /**
-     * Mot tap vua tao ma mac dinh ai cung doc duoc la kieu mac dinh sai o cho ton kem nhat.
-     */
     @Test
     @DisplayName("Tap chua gan nhom nao thi khong ai doc duoc")
     void collectionWithoutAclIsClosed() {
@@ -84,8 +84,6 @@ class PlatformServiceTest {
         assertEquals(Set.of("noi-quy-chung"), service.channelAllowedSlugs());
     }
 
-    // ============================================================ Dinh tuyen
-
     @Test
     @DisplayName("Khong khop luat nao => bot mac dinh")
     void fallsBackToDefaultBot() {
@@ -101,10 +99,6 @@ class PlatformServiceTest {
                 service.resolveBot(null, TEAM_HR, "19:kenh-bat-ky").orElseThrow().slug());
     }
 
-    /**
-     * Neu chon nham thu tu, mot channel da duoc gan bot rieng se bi bot cua ca team
-     * chiem mat - va trieu chung ("bot tra loi sai persona") rat kho lan ra nguyen nhan.
-     */
     @Test
     @DisplayName("Rang buoc den dung channel thang rang buoc ca team")
     void channelBindingBeatsTeamBinding() {
@@ -120,10 +114,6 @@ class PlatformServiceTest {
         assertEquals("phap-che", bot.orElseThrow().slug());
     }
 
-    /**
-     * {@code recipient.id} cua Teams co dang {@code 28:<app-id>}. Khong bo tien to thi
-     * dinh tuyen theo app id khong bao gio khop, va bieu hien la "moi bot deu giong nhau".
-     */
     @Test
     @DisplayName("So khop app id bo duoc tien to 28: cua Teams")
     void appIdPrefixIsStripped() {
@@ -140,5 +130,32 @@ class PlatformServiceTest {
         when(repository.collections()).thenReturn(List.of(collection(1, "a", Set.of(), false)));
         service.refresh();
         assertTrue(service.hasNoAcl());
+    }
+
+    @Test
+    @DisplayName("Nhom da co thi khong tao lai - khong duoc de mat ACL dang co")
+    void ensureCollectionIsANoOpWhenItAlreadyExists() {
+        assertFalse(service.ensureCollection("nhan-su", "ingest"));
+        verify(repository, never()).createCollection(any(), any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("Nhom chua khai thi tao, va tao o trang thai DONG (khong ACL)")
+    void ensureCollectionDeclaresAClosedCollection() {
+        assertTrue(service.ensureCollection("chatbot-giai-dieu", "ingest"));
+
+        verify(repository).createCollection(eq("chatbot-giai-dieu"), eq("chatbot-giai-dieu"),
+                any(), eq(false), eq("ingest"));
+        // Khong co loi goi nao cap quyen doc: khai nhom chi cham dut trang thai mo coi,
+        // no khong duoc tu mo du lieu cho bat ky ai.
+        verify(repository, never()).setCollectionAcl(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Ma nhom rong thi bo qua, khong tao nhom rac")
+    void ensureCollectionIgnoresBlankSlugs() {
+        assertFalse(service.ensureCollection(null, "ingest"));
+        assertFalse(service.ensureCollection("   ", "ingest"));
+        verify(repository, never()).createCollection(any(), any(), any(), anyBoolean(), any());
     }
 }

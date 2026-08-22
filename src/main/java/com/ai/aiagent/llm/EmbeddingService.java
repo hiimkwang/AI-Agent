@@ -12,24 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Sinh vector nhung: CHIA LO, RETRY, va khong con phu thuoc mot nha cung cap duy nhat.
- *
- * Hai van de cua ban cu duoc sua o day:
- *
- *  1) {@code embedAll} goi MOT LAN cho toan bo chunk cua ca file. File lon vuot gioi
- *     han 2048 input / 300k token moi request cua OpenAI va lam hong CA luot nap, khong
- *     chi mot chunk. Gio chia lo theo {@code rag.ingestion.embed-batch-size} va retry
- *     co backoff khi bi rate-limit.
- *
- *  2) Embedding BAT BUOC qua OpenAI, ke ca khi chat bang Ollama - nghia la OpenAI la
- *     single point of failure cho ca he thong. Gio co 3 duong:
- *       OPENAI - chat luong tot nhat, can API key
- *       OLLAMA - chay local, bge-m3 rat tot voi tieng Viet
- *       LOCAL  - ONNX trong tien trinh, khong can API key va khong can mang
- *
- * Bat bien khong doi: vector cua CAU HOI va cua TAI LIEU phai cung mot model.
- */
 @Service
 @Slf4j
 public class EmbeddingService {
@@ -58,13 +40,13 @@ public class EmbeddingService {
             if ("OPENAI".equals(provider)) {
                 log.error("""
                         ============================================================
-                        THIEU OPENAI_API_KEY - embedding chua san sang, chuc nang nap
-                        tai lieu va hoi dap se KHONG hoat dong.
-                        Cach xu ly, chon mot trong ba:
-                          1) dat bien moi truong OPENAI_API_KEY
-                          2) rag.embedding.provider=OLLAMA (can Ollama chay local)
+                        OPENAI_API_KEY is missing. Embedding is not ready, so document
+                        ingest and question answering will NOT work.
+                        Pick one of:
+                          1) set the OPENAI_API_KEY environment variable
+                          2) rag.embedding.provider=OLLAMA (needs Ollama running locally)
                           3) rag.embedding.provider=LOCAL + rag.embedding.dimensions=384
-                             (khong can API key, chi dung de thu nghiem)
+                             (no API key, suitable for smoke tests only)
                         ============================================================""");
             }
             return;
@@ -73,9 +55,8 @@ public class EmbeddingService {
         this.activeProvider = provider;
         if ("LOCAL".equals(provider)) {
             warnIfDimensionMismatch(384);
-            log.warn("Embedding dang dung model LOCAL (all-MiniLM-L6-v2, 384 chieu). "
-                    + "Khong can API key nhung CHAT LUONG TIENG VIET KEM - "
-                    + "chi nen dung de thu nghiem pipeline.");
+            log.warn("Embedding is using the LOCAL model (all-MiniLM-L6-v2, 384 dims). No API key "
+                    + "needed, but Vietnamese quality is POOR - smoke tests only.");
         }
     }
 
@@ -83,10 +64,10 @@ public class EmbeddingService {
         if (props.getEmbedding().getDimensions() != actual) {
             log.error("""
                     ============================================================
-                    SO CHIEU KHONG KHOP: model '{}' sinh vector {} chieu nhung
+                    DIMENSION MISMATCH: model '{}' produces {}-dimension vectors but
                     rag.embedding.dimensions = {}.
-                    Sua rag.embedding.dimensions thanh {} roi TAO LAI schema
-                    (schema duoc sinh theo so chieu nay) va nap lai tai lieu.
+                    Set rag.embedding.dimensions to {}, then RECREATE the schema
+                    (the DDL is generated from this number) and re-ingest everything.
                     ============================================================""",
                     props.getEmbedding().modelName(), actual,
                     props.getEmbedding().getDimensions(), actual);
@@ -109,17 +90,11 @@ public class EmbeddingService {
         return activeProvider;
     }
 
-    /** Nhung mot doan van (cau hoi, hoac khoa cho semantic cache). */
     public float[] embedOne(String text) {
         requireReady();
         return withRetry(() -> model.embed(text).content().vector(), 1);
     }
 
-    /**
-     * Nhung mot danh sach van ban, tu dong chia lo.
-     *
-     * @param onProgress goi sau moi lo voi so van ban da xong (co the null)
-     */
     public List<float[]> embedAll(List<String> texts, java.util.function.IntConsumer onProgress) {
         requireReady();
         int batchSize = Math.max(1, props.getIngestion().getEmbedBatchSize());
@@ -160,10 +135,6 @@ public class EmbeddingService {
         }
     }
 
-    /**
-     * Retry voi backoff luy tien. Rate-limit (429) va loi mang tam thoi la chuyen binh
-     * thuong khi nap hang tram file - khong duoc de no lam chet ca job.
-     */
     private <T> T withRetry(java.util.function.Supplier<T> action, int count) {
         int maxRetries = Math.max(0, props.getIngestion().getEmbedMaxRetries());
         long base = Math.max(100, props.getIngestion().getEmbedRetryBaseDelayMs());
@@ -179,7 +150,7 @@ public class EmbeddingService {
                 last = e;
                 if (attempt == maxRetries) break;
                 long delay = base * (1L << attempt);
-                log.warn("Embedding loi ({}), thu lai lan {}/{} sau {}ms",
+                log.warn("Embedding call failed ({}), retry {}/{} in {}ms",
                         e.getMessage(), attempt + 1, maxRetries, delay);
                 try {
                     Thread.sleep(delay);

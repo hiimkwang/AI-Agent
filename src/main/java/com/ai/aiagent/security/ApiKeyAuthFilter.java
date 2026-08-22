@@ -24,18 +24,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Xac thuc bang API key trong header (mac dinh {@code X-API-Key}).
- *
- * So sanh key bang {@link java.security.MessageDigest#isEqual} de tranh
- * timing attack. Khong tao session - moi request tu xac thuc lai.
- */
 @Component
 @Slf4j
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     private final SecurityProperties properties;
-    /** key -> scope, dung LinkedHashMap vi phai so sanh tuan tu bang constant-time. */
     private final Map<String, AccessScope> byKey = new LinkedHashMap<>();
 
     public ApiKeyAuthFilter(SecurityProperties properties) {
@@ -57,17 +50,17 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
             if (properties.isAllowAnonymous()) {
                 log.warn("""
                         ============================================================
-                        CANH BAO BAO MAT: khong co API key nao duoc cau hinh va
-                        rag.security.allow-anonymous=true. MOI request se co quyen
-                        ADMIN. Chi dung tren may dev.
-                        Dat RAG_ADMIN_API_KEY / RAG_USER_API_KEY truoc khi trien khai.
+                        SECURITY WARNING: no API key is configured and
+                        rag.security.allow-anonymous=true, so EVERY request gets
+                        ADMIN rights. Development machines only.
+                        Set RAG_ADMIN_API_KEY / RAG_USER_API_KEY before deploying.
                         ============================================================""");
             } else {
-                log.error("Khong co API key nao duoc cau hinh -> MOI request se bi tu choi 401. "
-                        + "Dat bien moi truong RAG_ADMIN_API_KEY (va RAG_USER_API_KEY).");
+                log.error("No API key configured, so EVERY request will be rejected with 401. "
+                        + "Set RAG_ADMIN_API_KEY (and RAG_USER_API_KEY).");
             }
         } else {
-            log.info("Da nap {} API key: {}", byKey.size(),
+            log.info("Loaded {} API key(s) for: {}", byKey.size(),
                     byKey.values().stream().map(AccessScope::clientId).collect(Collectors.joining(", ")));
         }
     }
@@ -96,15 +89,8 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    /**
-     * Khong co API key hop le tren request nay.
-     *
-     * CHI duoc xoa context do CHINH filter nay dat truoc do. Truoc day o day goi thang
-     * {@code SecurityContextHolder.clearContext()}, nghia la moi request khong kem API key
-     * deu xoa sach xac thuc - ke ca PHIEN DANG NHAP ENTRA vua duoc
-     * {@code SecurityContextHolderFilter} nap tu session. Hau qua: bat dau ho tro SSO thi
-     * nguoi dung dang nhap xong van bi 401 o moi loi goi API.
-     */
+    // Only clears a context this filter set itself. Clearing unconditionally would
+    // wipe the OIDC session loaded for requests that carry no API key.
     private void clearStaleApiKeyContext() {
         var existing = SecurityContextHolder.getContext().getAuthentication();
         if (existing == null || existing.getPrincipal() instanceof AccessScope) {
@@ -115,7 +101,6 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
     private String header(HttpServletRequest request) {
         String v = request.getHeader(properties.getHeaderName());
         if (StringUtils.hasText(v)) return v.trim();
-        // Ho tro ca "Authorization: Bearer <key>" cho tien khi goi tu cong cu khac
         String auth = request.getHeader("Authorization");
         if (StringUtils.hasText(auth) && auth.regionMatches(true, 0, "Bearer ", 0, 7)) {
             return auth.substring(7).trim();
@@ -123,7 +108,6 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         return null;
     }
 
-    /** So sanh constant-time voi tung key da cau hinh. */
     private AccessScope resolve(String presented) {
         if (presented == null || presented.isEmpty()) return null;
         byte[] given = presented.getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -147,11 +131,6 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         SecurityContextHolder.getContext().setAuthentication(token);
     }
 
-    /**
-     * @param upper true cho ROLE (quy uoc Spring Security la chu hoa),
-     *              false cho phong ban (chuan hoa ve chu thuong de khop du lieu
-     *              san co dang "nhan-su", "ke-toan").
-     */
     private static Set<String> splitToSet(String csv, boolean upper) {
         if (csv == null || csv.isBlank()) return Set.of();
         return Arrays.stream(csv.split(","))

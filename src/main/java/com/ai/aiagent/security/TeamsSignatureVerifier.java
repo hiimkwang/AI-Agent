@@ -10,15 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
 
-/**
- * Xac thuc chu ky HMAC-SHA256 cua Microsoft Teams Outgoing Webhook.
- *
- * Teams gui: {@code Authorization: HMAC <base64-signature>}, trong do
- * signature = HMAC-SHA256(raw body bytes, base64Decode(secret)).
- *
- * Truoc day endpoint webhook khong xac thuc gi ca, nghia la bat ky ai biet URL
- * cung goi duoc va moi request tieu 3-4 loi goi LLM.
- */
 @Component
 @Slf4j
 public class TeamsSignatureVerifier {
@@ -34,21 +25,17 @@ public class TeamsSignatureVerifier {
         return properties.isEnabled();
     }
 
-    /**
-     * @param rawBody       body THO, nguyen ven tung byte (khong duoc parse roi serialize lai)
-     * @param authorization gia tri header Authorization
-     */
     public boolean verify(byte[] rawBody, String authorization) {
         if (!properties.isEnabled()) {
             return false;
         }
         String secret = properties.getHmacSecret();
         if (secret == null || secret.isBlank()) {
-            log.warn("Teams webhook: chua cau hinh TEAMS_HMAC_SECRET -> tu choi request.");
+            log.warn("TEAMS_HMAC_SECRET is not configured, rejecting the request.");
             return false;
         }
         if (authorization == null || !authorization.startsWith(PREFIX)) {
-            log.warn("Teams webhook: thieu header Authorization dang 'HMAC <signature>'.");
+            log.warn("Missing 'HMAC <signature>' Authorization header.");
             return false;
         }
         try {
@@ -61,18 +48,17 @@ public class TeamsSignatureVerifier {
                     .decode(authorization.substring(PREFIX.length()).trim());
 
             boolean ok = MessageDigest.isEqual(expected, provided);
-            if (!ok) log.warn("Teams webhook: chu ky HMAC khong khop -> tu choi request.");
+            if (!ok) log.warn("HMAC signature mismatch, rejecting the request.");
             return ok;
         } catch (IllegalArgumentException e) {
-            log.warn("Teams webhook: secret hoac signature khong phai base64 hop le.");
+            log.warn("The secret or the signature is not valid base64.");
             return false;
         } catch (Exception e) {
-            log.warn("Teams webhook: loi khi kiem tra chu ky: {}", e.getMessage());
+            log.warn("Signature verification failed: {}", e.getMessage());
             return false;
         }
     }
 
-    /** Chu ky de Teams xac thuc phan hoi cua chung ta (Teams khong bat buoc, nhung nen co). */
     public String signResponse(String body) {
         try {
             byte[] key = Base64.getDecoder().decode(properties.getHmacSecret().trim());

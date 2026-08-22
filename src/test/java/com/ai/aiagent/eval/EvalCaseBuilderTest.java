@@ -6,10 +6,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-/**
- * Khu trung cau hoi la phan de sai am tham: khong khu thi bo do phinh len bang cac cau
- * hoi giong nhau, va diem so bi keo lech theo dung nhung cau bi lap nhieu nhat.
- */
 class EvalCaseBuilderTest {
 
     @Test

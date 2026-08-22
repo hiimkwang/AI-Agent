@@ -8,10 +8,6 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Chon bo rerank theo cau hinh {@code rag.rerank.provider}: LLM | COHERE | NONE.
- * Chon COHERE ma thieu key thi tu dong quay ve LLM.
- */
 @Component
 @Slf4j
 public class RerankerProvider {
@@ -35,15 +31,12 @@ public class RerankerProvider {
         }
         if ("COHERE".equalsIgnoreCase(configured)) {
             if (cohereReranker.isAvailable()) return cohereReranker;
-            log.warn("rag.rerank.provider=COHERE nhung thieu COHERE_API_KEY -> dung LLM rerank.");
+            log.warn("rag.rerank.provider=COHERE but COHERE_API_KEY is missing, falling back to LLM "
+                    + "rerank.");
         }
         return llmReranker;
     }
 
-    /**
-     * Khong rerank: giu thu tu gop RRF va quy diem RRF ve thang 0..1 de van co the
-     * so voi nguong. Nhanh nhat, re nhat, nhung de lot doan "trung tu khoa lac de".
-     */
     static class PassthroughReranker implements Reranker {
 
         @Override
@@ -55,8 +48,10 @@ public class RerankerProvider {
         public RerankResult rerank(String query, List<RetrievedChunk> candidates, int topK) {
             List<RetrievedChunk> out = new ArrayList<>(
                     candidates.subList(0, Math.min(topK, candidates.size())));
-            // Khong co bo rerank thi diem tin cay nhat dang co la cosine
-            out.forEach(c -> c.setRerankScore(c.getRawScore()));
+            // Passthrough still has to hand the gate a score on the 0..1 relevance scale.
+            // Using rawScore meant a full-text-only chunk arrived with a ts_rank_cd of 14, which
+            // sails past minRerankScore no matter how irrelevant it is.
+            out.forEach(c -> c.setRerankScore(c.getCosine() == null ? 0.0 : c.getCosine()));
             return RerankResult.reliable(out, name());
         }
     }

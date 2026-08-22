@@ -12,25 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Diem vao duy nhat de chuyen MOI dinh dang -> Markdown.
- *
- * Toan bo pipeline nap lieu di qua day truoc khi bam chunk, nen chi co MOT dinh
- * dang trung gian phai xu ly (Markdown). Loi ich:
- *   - cau truc heading duoc giu lai -> bam chunk theo muc, khong cat ngang dieu/khoan
- *   - bang bieu duoc giu duoi dang bang Markdown
- *   - ban Markdown duoc luu lai nen bam lai chunk khong can convert lai file goc
- *   - ban co the tu chuyen sang .md truoc roi nap: he thong nhan .md nguyen ban
- */
 @Service
 @Slf4j
 public class DocumentConverterService {
 
-    /**
-     * @param markdown  ket qua Markdown
-     * @param format    dinh dang nguon
-     * @param warnings  canh bao (vd PDF khong co text -> can OCR)
-     */
     public record Result(String markdown, DocumentFormat format, List<String> warnings) {
         public boolean isEmpty() {
             return markdown == null || markdown.isBlank();
@@ -84,24 +69,10 @@ public class DocumentConverterService {
             warnings.add("Tai lieu dai " + markdown.length() + " ky tu, da cat con " + max + ".");
             markdown = Markdown.truncate(markdown, max);
         }
-        log.debug("Chuyen doi '{}' ({}) -> {} ky tu Markdown", fileName, format, markdown.length());
+        log.debug("Converted '{}' ({}) to {} chars of Markdown", fileName, format, markdown.length());
         return new Result(markdown, format, warnings);
     }
 
-    /**
-     * PDF: boc text truoc, chi OCR khi that su can.
-     *
-     * Hai truong hop can OCR, va truong hop thu hai moi la cai hay bi bo sot:
-     *   1) Khong boc duoc chu nao  -> ban scan thuan tuy, ro rang.
-     *   2) Boc duoc RAT IT chu     -> file "lai": vai trang dau la ban danh may (co
-     *      text), phan con lai la ban scan dinh kem. Tinh theo so ky tu TREN MOT TRANG
-     *      chu khong theo tong so: mot cong van scan 30 trang van co the co vai tram
-     *      ky tu tu trang bia, du de vuot moi nguong tinh theo tong.
-     *
-     * Neu OCR khong bat hoac that bai thi giu nguyen hanh vi cu: tra ve thu boc duoc
-     * (co the rong) kem canh bao, va {@code IngestionJobService} se tinh file do la
-     * that bai chu khong am tham bo qua.
-     */
     private String fromPdf(byte[] bytes, String fileName, List<String> warnings) {
         String md = pdfConverter.convert(bytes, fileName);
         if (!needsOcr(md)) return md;
@@ -119,20 +90,15 @@ public class DocumentConverterService {
         }
         warnings.add("Noi dung PDF nay duoc doc bang OCR - nen kiem tra lai ban Markdown "
                 + "o man Tai lieu truoc khi tin dung.");
-        // Uu tien ban OCR: khi da roi vao nhanh nay thi phan text boc duoc chi la vai
-        // dong bia, gop vao chi lam nhieu.
         return scanned;
     }
 
-    /** @return true khi so ky tu tren mot trang thap hon nguong cau hinh. */
     private boolean needsOcr(String markdown) {
         if (markdown == null || markdown.isBlank()) return true;
 
         int minPerPage = props.getOcr().getMinCharsPerPage();
         if (minPerPage <= 0) return false;
 
-        // PdfToMarkdown danh dau moi trang bang mot comment; dem chung la cach re nhat
-        // de biet tai lieu co bao nhieu trang ma khong phai mo lai file.
         int pages = 0;
         int from = 0;
         while ((from = markdown.indexOf("<!-- page ", from)) >= 0) {
@@ -145,7 +111,6 @@ public class DocumentConverterService {
         return textOnly.length() / pages < minPerPage;
     }
 
-    /** File .txt/.csv: bao heading tu ten file; CSV duoc chuyen thanh bang Markdown. */
     private String fromPlainText(byte[] bytes, String fileName) {
         String raw = new String(bytes, StandardCharsets.UTF_8);
         String ext = DocumentFormat.extensionOf(fileName);

@@ -13,13 +13,6 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Kiem tra nhat ky kiem toan va viec don du lieu qua han tren DB that.
- *
- * Hai thu nay chi co gia tri khi thuc su chay dung tren Postgres: cau xoa dung
- * {@code (? || ' days')::interval} - mot cach viet de sai am tham (xoa 0 dong ma
- * khong bao loi), va do dung la kieu loi khong bao gio bi phat hien bang mat.
- */
 @Import(AuditRepository.class)
 class AuditAndRetentionIT extends PostgresTestBase {
 
@@ -83,7 +76,6 @@ class AuditAndRetentionIT extends PostgresTestBase {
     void purgeRemovesOnlyOldRows() {
         audit.insert(event("POST /settings", "quang@bsc.com.vn", 200, true));
         audit.insert(event("POST /settings", "quang@bsc.com.vn", 200, true));
-        // Day mot dong ve qua khu 400 ngay.
         jdbc.update("UPDATE rag_audit_log SET created_at = now() - interval '400 days' WHERE id = 1");
 
         int deleted = audit.purgeOlderThanDays(365);

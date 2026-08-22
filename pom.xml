@@ -35,10 +35,9 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
-        <!-- Dang nhap bang tai khoan cong ty (Microsoft Entra ID, OIDC authorization code).
-             CHI duoc dung khi rag.entra.enabled=true; khong cau hinh ENTRA_CLIENT_ID thi
-             Spring Boot khong tao ClientRegistrationRepository va he thong chay y nhu cu
-             bang API key. Xem SecurityConfig. -->
+        <!-- Entra ID sign-in. Only active when rag.entra.enabled=true; without
+             ENTRA_CLIENT_ID no ClientRegistrationRepository is created and the app
+             keeps running on API keys. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-client</artifactId>
@@ -62,7 +61,7 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- ============ LLM ============ -->
+        <!-- LLM -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
@@ -78,22 +77,22 @@
             <artifactId>langchain4j-ollama</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
-        <!-- Embedding chay TRONG TIEN TRINH (ONNX, khong can API key, khong can mang).
-             Dung cho dev/test va lam duong du phong khi provider ngoai gap su co. -->
+        <!-- In-process ONNX embedding: no API key, no network. Dev, test and
+             fallback only. -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-embeddings-all-minilm-l6-v2</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
-        <!-- Claude (Anthropic) qua SDK chinh thuc -->
+        <!-- Claude via the official Anthropic SDK -->
         <dependency>
             <groupId>com.anthropic</groupId>
             <artifactId>anthropic-java</artifactId>
             <version>${anthropic.version}</version>
         </dependency>
 
-        <!-- ============ Chuyen doi tai lieu sang Markdown ============ -->
-        <!-- Office: .doc .docx .xls .xlsx .ppt .pptx (giu cau truc bang) -->
+        <!-- Document conversion to Markdown -->
+        <!-- Office formats, table structure preserved -->
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
@@ -110,7 +109,7 @@
             <artifactId>pdfbox</artifactId>
             <version>${pdfbox.version}</version>
         </dependency>
-        <!-- HTML -> Markdown -->
+        <!-- HTML to Markdown -->
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
@@ -122,7 +121,7 @@
             <version>${flexmark.version}</version>
         </dependency>
 
-        <!-- ============ Luu tru ============ -->
+        <!-- Storage -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -141,7 +140,7 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Cache trong bo nho (exact-match + semantic cache) -->
+        <!-- In-memory cache (exact match + semantic) -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
@@ -153,16 +152,9 @@
             <scope>test</scope>
         </dependency>
 
-        <!--
-            Testcontainers: dung Postgres+pgvector THAT trong test.
-
-            Truoc day toan bo SQL tim kiem (ChunkRepository) va ca 7 migration Flyway
-            khong co mot test tu dong nao cham toi - vi test nap context can DB nen bi
-            @Disabled. Do dung la phan de hong nhat khi sua ma lai khong duoc bao ve.
-
-            Cac test nay TU BO QUA khi may khong co Docker (xem DockerAvailable), nen
-            `mvn test` van xanh tren may khong chay Docker.
-        -->
+        <!-- Testcontainers runs the search SQL and all Flyway migrations against a
+             real Postgres+pgvector. These tests skip themselves when Docker is absent
+             (see DockerAvailable), so `mvn test` stays green without it. -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
@@ -182,15 +174,9 @@
 
     <build>
         <plugins>
-            <!--
-                Chay CA cac lop *IT trong `mvn test`, khong tach sang failsafe.
-
-                Ly do rat thuc dung: `mvn clean package` la lenh build duy nhat duoc
-                dung o day, va no khong goi failsafe. Tach ra thi cac test cham DB se
-                khong bao gio chay trong quy trinh that - tuc la ton cong viet ma
-                khong bao ve duoc gi. Chung tu bo qua khi may khong co Docker (xem
-                PostgresTestBase) nen khong lam do build o may khong chay Docker.
-            -->
+            <!-- *IT classes run under surefire, not failsafe: `mvn clean package` is
+                 the only build command used here and it never invokes failsafe. They
+                 skip themselves without Docker (see PostgresTestBase). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>

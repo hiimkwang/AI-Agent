@@ -11,53 +11,14 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Bam Markdown theo CAU TRUC, khong phai theo so ky tu.
- *
- * Cach cu cat cung 2000/500 ky tu nen thuong xuyen cat ngang giua mot dieu, mot
- * khoan hoac giua mot bang - chunk sinh ra mat nghia. Cach nay:
- *
- *   1) Tach tai lieu thanh BLOCK (doan van, danh sach, bang, code fence, heading).
- *      Bang va code fence la NGUYEN KHOI - khong bao gio bi cat giua.
- *   2) Gom block thanh SECTION theo heading, moi section mang mot "duong dan
- *      heading" (vd "Noi quy > Che do nghi phep > Nghi khong luong").
- *   3) Section qua ngan duoc gop voi section ke tiep (tranh chunk 1 dong vo nghia).
- *   4) Moi section duoc dong thanh PARENT <= parent-max-chars theo ranh gioi block.
- *   5) Moi parent duoc chia thanh CHILD <= child-max-chars theo ranh gioi CAU,
- *      co overlap.
- *
- * Ket qua: tim bang child nho (chinh xac), tra loi bang parent lon (du ngu canh),
- * va ca hai deu mang duong dan heading nen chunk khong con "mat goc".
- */
 @Component
 @Slf4j
 public class MarkdownChunker {
 
     private static final Pattern HEADING = Pattern.compile("^(#{1,6})\\s+(.*)$");
-    /**
-     * Heading kieu setext: mot dong chu, dong duoi toan {@code =} (cap 1) hoac
-     * {@code -} (cap 2). Ho tro dang nay de an toan voi file .md nguoi dung tu viet
-     * hoac tu bo chuyen doi khac - neu khong, chunk se mat het cau truc muc.
-     */
     private static final Pattern SETEXT_UNDERLINE = Pattern.compile("^(={2,}|-{2,})\\s*$");
     private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?;:])\\s+(?=\\p{Lu}|\\d|-)");
 
-    /**
-     * Cau truc van ban phap quy Viet Nam, nhan dien tren chuoi DA BO DAU.
-     *
-     * TAI SAO CAN: quy che/quy trinh/quyet dinh chuyen tu PDF hay Word gan nhu khong bao
-     * gio co heading Markdown - "Dieu 7. Nghi phep hang nam" chi la mot doan van thuong.
-     * Khong nhan ra thi ca tai lieu la MOT section, parent duoc dong thuan theo so ky tu,
-     * va chunk bi cat ngang giua mot Dieu. Tra loi "theo Dieu 12" ma chi co nua Dieu 12
-     * la kieu sai nghiem trong hon han viec khong tra loi.
-     *
-     * Nhan ra roi thi tan dung duoc TOAN BO co che san co: moi Dieu thanh mot section,
-     * duong dan heading tu dong thanh "Chuong II > Dieu 7. Nghi phep hang nam", va parent
-     * khong bao gio vuot qua ranh gioi Dieu.
-     *
-     * KHONG nhan "Khoan"/"Diem": chung danh so ngay trong than Dieu ("1.", "a)"), tach ra
-     * se lam vun chunk den muc mat ngu canh - dung dieu ma parent-child sinh ra de tranh.
-     */
     private static final Pattern LEGAL_PART = Pattern.compile(
             "^phan\\s+(thu\\s+)?[\\p{L}\\d]+\\b.*", Pattern.CASE_INSENSITIVE);
     private static final Pattern LEGAL_CHAPTER = Pattern.compile(
@@ -69,7 +30,6 @@ public class MarkdownChunker {
     private static final Pattern LEGAL_APPENDIX = Pattern.compile(
             "^phu\\s+luc\\b.*", Pattern.CASE_INSENSITIVE);
 
-    /** Dong qua dai thi khong phai tieu de ma la mot cau co chua tu do. */
     private static final int MAX_LEGAL_HEADING_CHARS = 200;
 
     private final RagProperties props;
@@ -78,27 +38,12 @@ public class MarkdownChunker {
         this.props = props;
     }
 
-    /**
-     * @param index         thu tu chunk trong tai lieu
-     * @param headingPath   duong dan heading, cach nhau bang " > "
-     * @param content       child chunk - cai duoc TIM
-     * @param parentContent parent chunk - cai duoc dua vao cau tra loi
-     */
     public record Chunk(int index, String headingPath, String content, String parentContent) {
 
         public String embedText(String generatedContext) {
             return embedText(null, generatedContext);
         }
 
-        /**
-         * Van ban dung de nhung.
-         *
-         * @param documentIdentity ten tai lieu + so hieu + ngay hieu luc, vi du
-         *        {@code [Quy che nghi phep - QD-123/2026/QD-BSC - hieu luc 01/01/2026]}.
-         *        Khong co no thi nhung thong tin do KHONG nam trong vector cua chunk, nen
-         *        cau hoi dang "quy dinh so bao nhieu", "van ban nao quy dinh nghi phep"
-         *        gan nhu chac chan truot - du tai lieu dung nam ngay do.
-         */
         public String embedText(String documentIdentity, String generatedContext) {
             StringBuilder sb = new StringBuilder();
             if (documentIdentity != null && !documentIdentity.isBlank()) {
@@ -115,12 +60,6 @@ public class MarkdownChunker {
         }
     }
 
-    /**
-     * Dong dinh danh tai lieu gan vao dau van ban dem di nhung.
-     *
-     * Tra ve chuoi rong khi khong co thong tin nao dang gia - de khong them mot dong
-     * nhieu vao moi chunk.
-     */
     public static String documentIdentity(String title, String docNumber,
                                           java.time.LocalDate effectiveDate) {
         List<String> parts = new ArrayList<>();
@@ -161,18 +100,16 @@ public class MarkdownChunker {
                     String normalized = child.strip();
                     if (normalized.isEmpty()) continue;
                     if (seen != null && !seen.add(fingerprint(normalized))) {
-                        continue; // chunk trung lap trong cung tai lieu
+                        continue;
                     }
                     chunks.add(new Chunk(index++, section.headingPath(), normalized, parent));
                 }
             }
         }
-        log.debug("Bam duoc {} chunk tu {} section ({} block).",
+        log.debug("Chunked into {} chunks from {} sections ({} blocks).",
                 chunks.size(), sections.size(), blocks.size());
         return chunks;
     }
-
-    // ------------------------------------------------------------ 1) Block
 
     private List<Block> toBlocks(String markdown) {
         String[] lines = markdown.replace("\r\n", "\n").split("\n", -1);
@@ -185,7 +122,6 @@ public class MarkdownChunker {
             String line = lines[index];
             String trimmed = line.strip();
 
-            // Code fence: nguyen khoi tu ``` den ```
             if (trimmed.startsWith("```")) {
                 if (inCodeFence) {
                     buffer.append(line).append('\n');
@@ -213,19 +149,17 @@ public class MarkdownChunker {
                 continue;
             }
 
-            // Setext: dong hien tai la chu, dong KE TIEP la === hoac ---
             if (!trimmed.isEmpty() && index + 1 < lines.length
                     && SETEXT_UNDERLINE.matcher(lines[index + 1].strip()).matches()
                     && !trimmed.startsWith("|")) {
                 flush(blocks, buffer, bufferType, 0);
                 int level = lines[index + 1].strip().startsWith("=") ? 1 : 2;
                 blocks.add(new Block(BlockType.HEADING, level, trimmed));
-                index++; // bo qua dong gach duoi
+                index++;
                 bufferType = BlockType.TEXT;
                 continue;
             }
 
-            // Cau truc phap quy: coi nhu heading tong hop, tan dung toan bo co che section
             int legalLevel = props.getChunking().isLegalStructureEnabled()
                     ? legalHeadingLevel(trimmed) : 0;
             if (legalLevel > 0) {
@@ -256,16 +190,10 @@ public class MarkdownChunker {
         return blocks;
     }
 
-    /**
-     * @return cap heading tuong ung neu dong nay la mot moc cau truc phap quy, 0 neu khong.
-     *         Cap duoc chon de {@code Phan > Chuong > Muc > Dieu} long dung thu tu, va deu
-     *         SAU cap 1 de heading Markdown that (neu tai lieu co) van la goc.
-     */
     static int legalHeadingLevel(String line) {
         String trimmed = line == null ? "" : line.strip();
         if (trimmed.isEmpty() || trimmed.length() > MAX_LEGAL_HEADING_CHARS) return 0;
 
-        // Bo dinh dang dam cua Markdown: "**Dieu 7. ...**" van la mot moc cau truc
         String text = trimmed.replaceAll("^[*_#\\s]+", "").replaceAll("[*_\\s]+$", "");
         String plain = com.ai.aiagent.store.TsQueryBuilder.stripDiacritics(text)
                 .toLowerCase().strip();
@@ -284,8 +212,6 @@ public class MarkdownChunker {
         buffer.setLength(0);
         if (!text.isEmpty()) blocks.add(new Block(type, level, text));
     }
-
-    // ---------------------------------------------------------- 2) Section
 
     private List<Section> toSections(List<Block> blocks) {
         List<Section> sections = new ArrayList<>();
@@ -325,10 +251,6 @@ public class MarkdownChunker {
         return sb.toString();
     }
 
-    /**
-     * Gop section qua ngan vao section ke tiep, MIEN LA cung nhanh heading -
-     * neu khong se tron lan noi dung cua hai muc khac nhau.
-     */
     private List<Section> mergeTinySections(List<Section> sections) {
         int min = props.getChunking().getMinSectionChars();
         if (min <= 0) return sections;
@@ -339,16 +261,13 @@ public class MarkdownChunker {
             if (!out.isEmpty()) {
                 Section previous = out.get(out.size() - 1);
                 boolean sameBranch = sharePrefix(previous.headingPath(), section.headingPath());
-                // KHONG gop qua ranh gioi phap quy. Mot "Dieu" la don vi ngu nghia tron
-                // ven; gop hai Dieu lai vua tao ra parent bat qua hai Dieu (dung dieu ma
-                // legal-structure sinh ra de tranh), vua GAN NHAM NHAN: buoc chon duong
-                // dan cu the hon ben duoi se dan noi dung Dieu 1 duoi ten Dieu 2.
+                // Never merge across a legal unit boundary: a short Dieu folded into the
+                // next one inherits its heading and the answer then cites the wrong article.
                 boolean legalBoundary = isLegalUnit(previous.headingPath())
                         || isLegalUnit(section.headingPath());
                 if (previous.length() < min && sameBranch && !legalBoundary) {
                     List<Block> merged = new ArrayList<>(previous.blocks());
                     merged.addAll(section.blocks());
-                    // Giu duong dan CU THE HON de chunk khong mat vi tri
                     String path = section.headingPath().length() >= previous.headingPath().length()
                             ? section.headingPath() : previous.headingPath();
                     out.set(out.size() - 1, new Section(path, merged));
@@ -360,7 +279,6 @@ public class MarkdownChunker {
         return out;
     }
 
-    /** Section nay ket thuc bang mot moc cau truc phap quy (Dieu/Chuong/Muc/Phu luc)? */
     private boolean isLegalUnit(String headingPath) {
         if (!props.getChunking().isLegalStructureEnabled()
                 || headingPath == null || headingPath.isBlank()) {
@@ -378,9 +296,6 @@ public class MarkdownChunker {
         return rootA.equals(rootB);
     }
 
-    // ----------------------------------------------------------- 3) Parent
-
-    /** Dong block vao parent, khong vuot parent-max-chars, khong cat giua block. */
     private List<String> packParents(Section section) {
         int max = Math.max(400, props.getChunking().getParentMaxChars());
         List<String> parents = new ArrayList<>();
@@ -403,7 +318,6 @@ public class MarkdownChunker {
         return parents;
     }
 
-    /** Block don le vuot gioi han: bang thi cat theo HANG va lap lai header. */
     private List<String> splitOversizedBlock(Block block, int max) {
         if (block.length() <= max || max <= 0) return List.of(block.text());
 
@@ -413,10 +327,6 @@ public class MarkdownChunker {
         return splitBySentences(block.text(), max, 0);
     }
 
-    /**
-     * Cat bang lon nhung LAP LAI dong header + dong phan cach o moi manh, nho vay
-     * tung manh van doc duoc doc lap - dieu kien bat buoc de chunk bang co nghia.
-     */
     private List<String> splitTable(String table, int max) {
         String[] lines = table.split("\n");
         if (lines.length <= 2) return List.of(table);
@@ -439,8 +349,6 @@ public class MarkdownChunker {
         return parts.isEmpty() ? List.of(table) : parts;
     }
 
-    // ------------------------------------------------------------ 4) Child
-
     private List<String> splitChildren(String parent) {
         int max = Math.max(200, props.getChunking().getChildMaxChars());
         int overlap = Math.max(0, Math.min(props.getChunking().getChildOverlapChars(), max / 2));
@@ -448,15 +356,10 @@ public class MarkdownChunker {
         return splitBySentences(parent, max, overlap);
     }
 
-    /**
-     * Cat theo ranh gioi CAU (khong cat giua cau). Neu mot "cau" dai hon gioi han
-     * - thuong la mot dong bang rat dai - thi moi cat cung theo do dai.
-     */
     private List<String> splitBySentences(String text, int max, int overlap) {
         List<String> units = new ArrayList<>();
         for (String line : text.split("\n")) {
             if (line.isBlank()) continue;
-            // Dong bang / danh sach giu nguyen ven, khong tach thanh cau
             if (line.strip().startsWith("|") || line.strip().startsWith("- ")
                     || line.strip().startsWith("* ")) {
                 units.add(line);
@@ -497,7 +400,6 @@ public class MarkdownChunker {
         return out.stream().filter(s -> !s.isBlank()).toList();
     }
 
-    /** Dau tay chunk de khu trung: bo dau cach va chu hoa. */
     static String fingerprint(String text) {
         return text.replaceAll("\\s+", " ").toLowerCase().strip();
     }

@@ -2,7 +2,9 @@
 
 Spring Boot service cung cấp chatbot hỏi–đáp trên tài liệu nội bộ (RAG) cho BSC,
 kèm hai giao diện web: màn hỏi–đáp (`/`) và màn quản trị (`/admin.html`).
-Ngôn ngữ nghiệp vụ, Javadoc và log trong repo này là **tiếng Việt** — giữ nguyên quy ước đó.
+**Log ứng dụng: tiếng Anh.** Chữ hiện ra cho người dùng và người vận hành (thông báo API,
+toast, thẻ Teams, nội dung màn quản trị): **tiếng Việt**. Comment trong code và file cấu
+hình: **tiếng Anh, ngắn gọn** — chỉ viết khi giải thích điều không đọc được từ code.
 
 ## Stack
 
@@ -117,6 +119,14 @@ Thiết kế nền tảng nhiều bot + tích hợp Teams + phân quyền Entra:
 Hướng dẫn bật đăng nhập bằng tài khoản công ty: [docs/ENTRA-SETUP.md](docs/ENTRA-SETUP.md).
 Triển khai, sao lưu/khôi phục, nhật ký kiểm toán, vòng đời dữ liệu, OCR, quét virus:
 [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Phương án triển khai lên máy chủ UAT cụ thể của BSC (10.21.170.55, cạnh Drupal sẵn có):
+[docs/DEPLOY-UAT.md](docs/DEPLOY-UAT.md).
+Bộ cài systemd cho máy chủ: [aiagent/](aiagent) — `bin/Linux/install.sh` sinh unit
+file từ `bin/Linux/deploy.env`. Vận hành **chỉ sửa `config/aiagent.env`**, file này
+được cả `aiagent.service` lẫn `rag-postgres.service` đọc nên mật khẩu CSDL khai một
+lần. `config/application.properties` chỉ là bản đồ `khoá=${BIEN}`, không giữ giá trị —
+ghi giá trị cứng vào đó là giết placeholder và vô hiệu biến trong `aiagent.env`.
+`deploy/aiagent.service` là bản đời trước — đừng cài cả hai.
 
 ## Bất biến — phá là hỏng dữ liệu
 
@@ -156,6 +166,16 @@ Triển khai, sao lưu/khôi phục, nhật ký kiểm toán, vòng đời dữ 
 - **`rag_collections.slug` CHÍNH LÀ cột `category`.** V3 cố ý không thêm khoá ngoại
   `collection_id` vào `rag_chunks` để không phải sửa một dòng SQL tìm kiếm nào. Mọi đường
   ghi `category` phải đi qua `PlatformService`, vì DB không còn ràng buộc giúp.
+  Cụ thể: `IngestionService.ingest` gọi `PlatformService.ensureCollection` sau khi ghi
+  tài liệu — **đừng gỡ**. Không có nó, quét thư mục sinh ra category theo tên thư mục con
+  mà không nhóm nào khai, và toàn bộ tài liệu đó chỉ quản trị viên đọc được, âm thầm
+  (đã xảy ra thật: 201 tài liệu / 17 category / 0 collection). Nhóm tự khai luôn ở trạng
+  thái **ACL rỗng = đóng**: nó chấm dứt trạng thái mồ côi chứ không tự mở dữ liệu cho ai.
+- **Đổi `category` của tài liệu đã nạp phải đổi CẢ BA thứ cùng lúc**: `rag_documents.category`,
+  `rag_documents.doc_key` (vì `doc_key = category/fileName` là khoá ghi đè — bỏ sót thì lần
+  nạp sau tạo bản ghi thứ hai thay vì ghi đè), và `rag_chunks.category` + `rag_chunks.doc_id`
+  (bộ truy xuất lọc trên bản sao ở chunk, không phải ở document). Xem
+  `DocumentController.moveCategory`.
 - **Trong channel Teams phải HẠ quyền ADMIN xuống USER.** Chỉ thu hẹp danh sách
   collection là chưa đủ: `HybridRetriever` lọc `allowed_roles` bằng
   `isAdmin() ? Set.of() : roles()`, nên một quản trị viên hỏi trong channel sẽ kéo tài
@@ -179,6 +199,67 @@ Triển khai, sao lưu/khôi phục, nhật ký kiểm toán, vòng đời dữ 
   dùng `min-section-chars` mặc định, đặt 0 là làm test mất khả năng bắt lỗi.
 - Đổi `rag.chunking.*` (kể cả `legal-structure-enabled`, `prefix-document-identity`)
   ⇒ phải **nạp lại tài liệu** mới có tác dụng. Chỉ `rag.retrieval.*` mới áp dụng ngay.
+- **Lịch sử hội thoại phải đến CẢ hai nơi: bộ viết lại câu hỏi VÀ model trả lời.** Bản cũ chỉ
+  đưa vào `QueryPlanner` — truy xuất được hưởng lợi, còn model viết câu trả lời nhận đúng câu
+  gốc trần trụi. Đo trên UAT: hỏi "Lệnh điều kiện OCO" rồi hỏi tiếp "Lệnh cơ sở ấy" ⇒ *"Tôi
+  không tìm thấy thông tin này trong tài liệu nội bộ"*. Hai cửa sổ lịch sử là hai tham số khác
+  nhau và **cố ý** khác: `rag.query-rewrite.max-history-turns` (6) đủ để giải đại từ,
+  `rag.chat.history-turns` (3) ngắn hơn vì mỗi lượt bị tính tiền ở *mọi* câu hỏi. Lượt của trợ
+  lý phải bị cắt (`history-chars-per-turn`), nếu không câu trả lời 1500 ký tự sẽ lấn át chính
+  đoạn tài liệu nó đứng cạnh.
+- **Câu đã viết lại là GỢI Ý đi kèm câu gốc, không thay thế câu gốc.** Bộ viết lại chạy bằng
+  `internal.model` (model rẻ) và sai đủ thường xuyên: "Lệnh cơ sở ấy" — câu hỏi tiếp nối về
+  OCO — bị viết lại thành "Lệnh cơ sở là gì?", tức là **vứt đi đúng cái tham chiếu** mà nó
+  được giao nhiệm vụ giải. Đưa cả hai vào prompt thì model tự giải tham chiếu, nó làm việc đó
+  tốt hơn bộ viết lại.
+- **Khoá cache phải gồm ngữ cảnh hội thoại khi có lịch sử.** Không thì câu hỏi tiếp nối rò rỉ
+  giữa các hội thoại: "Lệnh cơ sở ấy" được lưu chỉ bằng bốn chữ đó, người tiếp theo gõ đúng
+  bốn chữ ấy trong một hội thoại về chuyện khác sẽ nhận câu trả lời của hội thoại này. Cache
+  semantic (0.97) làm nặng thêm vì câu hỏi tiếp nối đều ngắn và na ná nhau. Câu hỏi **đầu
+  tiên** không có ngữ cảnh nên vẫn dùng chung một ô — đó cũng là chỗ cache thực sự có giá trị.
+  Vì vậy `RagChatService.prepare` đọc lịch sử **trước** khi tra cache; đừng đảo lại thứ tự.
+- **Câu từ chối KHÔNG được vào `rag_answer_cache`.** System prompt dạy mô hình nói "Tôi không
+  tìm thấy thông tin này trong tài liệu nội bộ" khi đoạn trích chưa đủ — và đó đúng là câu
+  không được đóng băng: tài liệu vẫn được nạp thêm, tham số truy xuất vẫn được chỉnh, nên
+  "không tìm thấy" hôm nay là câu **sai** ngày mai, phục vụ lại trong 200 ms mà người dùng
+  không có cách nào biết là đồ cũ. Cache semantic (cosine ≥ 0.97) phát tán nó sang cả câu hỏi
+  gần giống. `AnswerCacheService.looksLikeRefusal` chặn ở `store`; bắt nhầm chỉ tốn một lần
+  cache miss, bỏ sót thì hỏng cả TTL — nên mẫu regex cố ý rộng. Đã xảy ra thật với câu
+  "Lệnh STO". Xem `AnswerCacheRefusalTest`.
+- **Bấm 👎 phải xoá luôn bản cache của câu hỏi đó**, nếu không hỏi lại vẫn ra đúng câu cũ và
+  nút phản hồi trông như bị hỏng. Xoá theo *nội dung câu hỏi*, mọi phạm vi — câu trả lời tệ
+  thì tệ với tất cả, và cache là bộ tăng tốc chứ không phải hàng rào phân quyền.
+- **Mục lục tài liệu Word là rác truy xuất, phải loại.** Vài trang "2.2.5 Giải pháp thực hiện
+  21" chunk ra như văn bản thường, embedding gần *mọi* câu hỏi về tài liệu đó vì nó nhắc lại
+  toàn bộ tên chương mục, và không trả lời được gì. Đo trên UAT: một đoạn như vậy được rerank
+  chấm **0.92 — ô cao nhất** — cho câu "Lệnh STO", đẩy bản đặc tả thật xuống dưới.
+  `TableOfContentsFilter` lọc sau RRF (áp dụng ngay cho tài liệu đã nạp, không cần nạp lại).
+  Nhận diện cố ý hẹp: phải có số mục nhiều cấp hoặc dấu chấm nối, **kèm** số trang cuối dòng,
+  trên ≥60% số dòng và ít nhất 5 dòng. Loại sạch thì giữ nguyên danh sách gốc — trả về rỗng
+  sẽ thành câu từ chối, tệ hơn là để cổng lọc tự quyết.
+  **Quét bằng tay, KHÔNG dùng regex** — và đó là kinh nghiệm phải trả giá: bản đầu dùng
+  `^\s*\d+(?:\.\d+)+\.?\s+\S.*?\s+\d{1,4}\s*$`; `.*?` đứng trước một mỏ neo cuối dòng
+  quay lui theo **bình phương** độ dài với mọi dòng KHÔNG khớp — tức là gần hết. Đo trên UAT:
+  `retrievalMs` từ 596 ms vọt lên **26.000 ms**, không một dòng log lỗi nào.
+  `TableOfContentsFilterTest.aLongNonMatchingChunkIsFast` chốt lại chuyện này.
+- **Câu từ chối do CHÍNH MODEL viết phải được đối xử như một lần cổng từ chối.** Cổng có thể cho
+  đoạn trích đi qua rồi model vẫn kết luận là không đủ; với người hỏi thì hai thứ đó y hệt nhau.
+  Vì vậy `finishGenerated` phát hiện câu từ chối (dùng lại `looksLikeRefusal`) rồi: **bỏ danh
+  sách nguồn** (liệt kê 6 nguồn ngay dưới câu "tôi không tìm thấy" trông như lỗi — đúng cái ảnh
+  chụp màn hình đã cho thấy), gắn `suggestions` lấy từ heading của chính các ứng viên đã truy
+  xuất, và chỉ chèn câu hỏi lại khi không gợi ý được gì cụ thể. Gợi ý là **chip bấm được** nên
+  phải đọc ra một câu hỏi: `tidyTopic` cắt số mục đầu dòng, dấu hai chấm cuối, mã số, và bỏ
+  mẩu một từ.
+- **Không khớp đường dẫn bằng `getRequestURI()`. Dùng `RequestPaths.within(request)`.**
+  `getRequestURI()` **có** cả context path, nên ứng dụng chạy dưới tiền tố
+  (`server.servlet.context-path=/rag` trên UAT) sẽ làm mọi phép so đường dẫn **hỏng theo
+  chiều mở**, im lặng: `RateLimitFilter` tắt hẳn giới hạn tần suất, `AuditFilter` ngừng ghi
+  nhật ký, miễn trừ CSRF cho `/api/messages` không còn hiệu lực nên bot Teams bị chặn.
+  Không một dòng log nào báo. Xem `RequestPathsTest`.
+- **Giao diện web phải chạy được ở cả gốc lẫn dưới tiền tố.** Mọi đường dẫn tuyệt đối
+  trong `static/` đi qua `url()` trong `app.js`, hàm này lấy tiền tố từ chính `src` của
+  `app.js`. Thêm `fetch('/api/...')` trần là chạy đúng khi dev ở gốc và **404 trên máy chủ**.
+  Tài nguyên trong HTML dùng đường dẫn tương đối (`app.css`, `app.js`, `./`), không dùng `/`.
 - **Nhật ký kiểm toán ghi bằng FILTER, không bằng lời gọi trong từng controller.**
   `AuditFilter` nằm ngay trước `ExceptionTranslationFilter` nên bắt được cả thao tác
   **bị từ chối** (401/403) — đó mới là thứ cần nhất khi điều tra. Thêm endpoint quản
@@ -193,8 +274,18 @@ Triển khai, sao lưu/khôi phục, nhật ký kiểm toán, vòng đời dữ 
 
 ## Quy ước code
 
-- Javadoc và log **tiếng Việt**, giải thích *tại sao*, và khi sửa lỗi cũ thì nói rõ
-  lỗi đó là gì (xem `RelevanceGate`, `TsQueryBuilder`, `Reranker` làm mẫu).
+- Comment **tiếng Anh, ngắn**, chỉ giải thích *tại sao* khi code không tự nói được.
+  Không viết đoạn văn dài, không kể lại lịch sử sửa lỗi trong comment.
+- **Log bằng tiếng Anh.** Mẫu logback đã in `class.method.line`, nên **không** lặp lại tên
+  thành phần trong thông điệp (`log.warn("Bot: ...")` là thừa). Mức log:
+  `ERROR` hỏng thật cần người xử lý (kèm throwable khi là lỗi không lường trước) ·
+  `WARN` bước phụ trợ hỏng nhưng đi tiếp, cấu hình thiếu, phụ thuộc ngoài lỗi ·
+  `INFO` sự kiện vòng đời và mỗi request một dòng ·
+  `DEBUG` mọi thứ theo khối lượng.
+  **Nội dung câu hỏi/câu trả lời/đoạn tài liệu chỉ được ghi ở mức `DEBUG`**, và phải qua
+  cả cờ cấu hình lẫn `log.isDebugEnabled()` — đó là dữ liệu nội bộ, không phải log vận hành.
+  Câu trả lời đầy đủ và danh sách ứng viên truy xuất từng ở `INFO`: một câu hỏi sinh hàng
+  chục dòng và đổ nguyên văn tài liệu vào log.
 - Tham số hoá qua `rag.*` trong `RagProperties`. **Không dùng `@Value` vào field**
   cho tham số cần tune — `RagProperties` là bean mutable để `RagSettingsService`
   đổi được lúc runtime.

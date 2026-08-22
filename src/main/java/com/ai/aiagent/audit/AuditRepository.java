@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Doc/ghi bang {@code rag_audit_log}. */
 @Repository
 @Slf4j
 public class AuditRepository {
@@ -33,14 +32,6 @@ public class AuditRepository {
                 e.succeeded(), e.latencyMs(), e.clientIp(), e.userAgent(), e.traceId());
     }
 
-    /**
-     * Tra ve nhat ky theo bo loc, moi nhat truoc.
-     *
-     * @param actor  loc theo UPN hoac actor_id (khop mot phan, khong phan biet hoa thuong)
-     * @param action loc theo hanh dong (khop mot phan, vi du {@code "DELETE"} hay
-     *               {@code "/admin/collections"})
-     * @param onlyDenied chi lay thao tac bi tu choi/that bai
-     */
     public List<Map<String, Object>> search(String actor, String action, Boolean onlyDenied,
                                             int days, int limit, int offset) {
         StringBuilder sql = new StringBuilder("""
@@ -91,7 +82,6 @@ public class AuditRepository {
         }, args.toArray());
     }
 
-    /** Tong hop cho man quan tri: ai thao tac nhieu nhat, hanh dong nao pho bien nhat. */
     public Map<String, Object> summary(int days) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("days", days);
@@ -116,7 +106,6 @@ public class AuditRepository {
         return out;
     }
 
-    /** @return so dong da xoa. Dung cho {@code RetentionService}. */
     public int purgeOlderThanDays(int days) {
         return jdbc.update(
                 "DELETE FROM rag_audit_log WHERE created_at < now() - (? || ' days')::interval",

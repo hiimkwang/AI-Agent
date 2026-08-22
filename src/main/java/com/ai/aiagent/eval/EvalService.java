@@ -19,22 +19,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Danh gia chat luong RAG kieu RAGAS rut gon, LLM lam giam khao.
- *
- * Ba sua doi quan trong so voi ban cu:
- *
- *  1) BO CAU HOI LUU BEN. Truoc day phai truyen case bang tay moi lan goi API nen
- *     khong ai chay dinh ky, va khong so sanh duoc giua cac lan. Gio golden dataset
- *     nam trong DB, moi lan chay duoc luu kem tham so.
- *
- *  2) GIAM KHAO PARSE LOI THI BO CASE, KHONG CHO 0. Truoc day parse loi tra {0,0},
- *     keo diem trung binh xuong va bao cao mot chat luong TE HON THUC TE - khien viec
- *     tinh chinh di sai huong.
- *
- *  3) DO THEM {@code abstainRate}. Gio he thong biet tu choi tra loi, nen phai theo doi
- *     ca hai chieu: tu choi qua it (bia dat) va tu choi qua nhieu (vo dung).
- */
 @Service
 @Slf4j
 public class EvalService {
@@ -107,14 +91,13 @@ public class EvalService {
             chatRequest.setModel(model);
             chatRequest.setCategory(testCase.category() != null
                     ? testCase.category() : request.category());
-            // Cache PHAI tat khi eval: khong thi lan chay thu hai chi do cache
             chatRequest.setUseCache(false);
 
             ChatResponse response;
             try {
                 response = chatService.answer(chatRequest, scope);
             } catch (Exception e) {
-                log.warn("Eval case '{}' loi: {}", testCase.question(), e.getMessage());
+                log.warn("Eval case '{}' failed: {}", testCase.question(), e.getMessage());
                 repository.addResult(runId, testCase.id(), testCase.question(),
                         "LOI: " + e.getMessage(), List.of(), null, null, null, false, false, null);
                 results.add(new CaseResult(testCase.question(), "LOI: " + e.getMessage(),
@@ -129,7 +112,6 @@ public class EvalService {
             costSum += response.usage() == null ? 0 : response.usage().costUsd();
             if (response.abstained()) abstainCount++;
 
-            // Context recall: nguon mong doi co duoc truy xuat khong
             Boolean sourceHit = null;
             if (testCase.expectedSource() != null && !testCase.expectedSource().isBlank()) {
                 recallDenominator++;
@@ -147,7 +129,6 @@ public class EvalService {
                 sumRelevance += judgement.relevance();
                 judged++;
             } else {
-                // KHONG cho 0: giam khao loi thi bo case khoi mau
                 skipped++;
             }
 
@@ -173,8 +154,8 @@ public class EvalService {
         repository.completeRun(runId, judged, skipped, avgFaithfulness, avgRelevance,
                 contextRecall, abstainRate, avgLatency, round6(costSum));
 
-        log.info("Eval '{}' xong: {} case, cham duoc {}, bo {} | faithfulness={} relevance={} "
-                        + "recall={} abstain={} latency={}ms cost=${}",
+        log.info("Eval '{}' finished: {} case(s), {} judged, {} skipped | faithfulness={} "
+                        + "relevance={} recall={} abstain={} latency={}ms cost=${}",
                 suite, cases.size(), judged, skipped, avgFaithfulness, avgRelevance,
                 contextRecall, abstainRate, avgLatency, round6(costSum));
 
@@ -188,17 +169,8 @@ public class EvalService {
         }
     }
 
-    /**
-     * Cham 2 tieu chi bang LLM.
-     *
-     * Truong hop tu choi tra loi duoc xu ly rieng: "khong tim thay thong tin" la
-     * faithful = 1.0 (khong bia gi ca) nhung relevance thi tuy - neu tai lieu that su
-     * khong co thi day la cau tra loi DUNG.
-     */
     private Judgement judge(String question, String answer, boolean abstained, String expectedAnswer) {
         if (abstained) {
-            // Khong bia dat -> faithful tuyet doi. Relevance de giam khao danh gia
-            // dua tren expectedAnswer neu co, nguoc lai coi la 0.5 (khong ket luan).
             if (expectedAnswer == null || expectedAnswer.isBlank()) {
                 return new Judgement(true, 1.0, 0.5);
             }
@@ -230,7 +202,7 @@ public class EvalService {
             int start = response.indexOf('{');
             int end = response.lastIndexOf('}');
             if (start < 0 || end <= start) {
-                log.debug("Giam khao khong tra ve JSON cho cau '{}' -> bo case khoi mau.", question);
+                log.debug("Judge returned no JSON for '{}', dropping the case from the sample.", question);
                 return Judgement.failed();
             }
             JsonNode json = mapper.readTree(response.substring(start, end + 1));
@@ -241,12 +213,12 @@ public class EvalService {
                     clamp(json.path("faithfulness").asDouble(-1)),
                     clamp(json.path("relevance").asDouble(-1)));
         } catch (Exception e) {
-            log.debug("Giam khao loi cho cau '{}': {} -> bo case khoi mau.", question, e.getMessage());
+            log.debug("Judge failed for '{}': {}. Dropping the case from the sample.",
+                    question, e.getMessage());
             return Judgement.failed();
         }
     }
 
-    /** Luu tham so retrieval kem lan chay de biet diem thay doi vi da doi gi. */
     private Map<String, Object> snapshotParams() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("topK", props.getRetrieval().getTopK());

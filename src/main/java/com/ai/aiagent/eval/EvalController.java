@@ -9,13 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * API danh gia chat luong (chi ADMIN).
- *
- * Quy trinh dung: them case vao bo cau hoi chuan mot lan -> moi lan doi tham so
- * (top-k, chunk-size, model, nguong tu choi) thi chay lai cung bo do -> so sanh diem
- * giua cac lan chay. Do la cach duy nhat de biet mot thay doi lam tot len hay xau di.
- */
 @RestController
 @RequestMapping("/api/v1/rag/eval")
 public class EvalController {
@@ -33,7 +26,6 @@ public class EvalController {
         this.repository = repository;
     }
 
-    /** Chay bo cau hoi chuan da luu trong DB. */
     @PostMapping("/run")
     public EvalService.EvalReport run(@RequestBody(required = false) RunRequest request) {
         RunRequest r = request == null
@@ -46,18 +38,6 @@ public class EvalController {
     public record RunRequest(String suite, String provider, String model, String category) {
     }
 
-    /**
-     * Chi do CHAT LUONG TRUY XUAT: recall@k va MRR, khong sinh cau tra loi, khong giam
-     * khao LLM.
-     *
-     * Day la phep do nen chay sau MOI lan doi tham so truy xuat (chunking, trong so tsv,
-     * model embedding, top-k, tu dien thuat ngu). No re va deterministic, khac han
-     * {@code /run} - von ton mot lan goi LLM giam khao cho moi case nen tren thuc te
-     * khong ai chay thuong xuyen.
-     *
-     * Bat {@code includeRerank} de so sanh thu tu TRUOC va SAU rerank; do la cach duy
-     * nhat de biet bo rerank dang lam tot len hay dang lam hong thu tu.
-     */
     @PostMapping("/retrieval")
     public RetrievalEvalService.RetrievalReport runRetrieval(
             @RequestBody(required = false) RetrievalRunRequest request) {
@@ -73,8 +53,6 @@ public class EvalController {
                                       boolean includeRerank) {
     }
 
-    // ------------------------------------------------------------ Cases
-
     @GetMapping("/cases")
     public Map<String, Object> listCases(@RequestParam(required = false) String suite,
                                          @RequestParam(defaultValue = "false") boolean onlyActive) {
@@ -85,7 +63,6 @@ public class EvalController {
                 "cases", cases.stream().map(this::toMap).toList());
     }
 
-    /** Them mot hoac nhieu cau hoi chuan. */
     @PostMapping("/cases")
     public Map<String, Object> addCases(@RequestBody CasesRequest request) {
         if (request.cases() == null || request.cases().isEmpty()) {
@@ -119,19 +96,6 @@ public class EvalController {
         return Map.of("deleted", deleted > 0);
     }
 
-    // -------------------------------------------- Tao bo cau hoi khong can gan nhan tay
-
-    /**
-     * Sinh bo cau hoi tu CHINH kho tai lieu: moi doan tai lieu -> mot cau hoi ma doan do
-     * tra loi duoc, nguon dung chinh la file chua doan do.
-     *
-     * Dung duoc NGAY NGAY DAU, truoc khi co nguoi dung nao - go bo dieu kien "phai co bo
-     * cau hoi that truoc khi do duoc bat cu thu gi".
-     *
-     * Cau hoi sinh ra DE HON cau hoi that (dung chung tu vung voi doan tai lieu), nen con
-     * so tuyet doi cao hon thuc te. Nhung do lech do tac dong nhu nhau len moi cau hinh
-     * duoc dem ra so, nen dung tot cho viec CHON cau hinh.
-     */
     @PostMapping("/cases/generate")
     public Map<String, Object> generateCases(@RequestBody(required = false) GenerateRequest request) {
         GenerateRequest r = request == null ? new GenerateRequest(null, null, null) : request;
@@ -154,13 +118,6 @@ public class EvalController {
         return caseBuilder.status();
     }
 
-    /**
-     * Thu hoach cau hoi THAT tu lich su hoi thoai - bo do tu lon len theo thoi gian
-     * van hanh, dung nhu cach no phai hinh thanh.
-     *
-     * @param negative {@code true} thi lay cac cau bi danh gia xau vao mot bo rieng, CHUA
-     *                 co nguon dung - do la danh sach viec can nguoi xem lai
-     */
     @PostMapping("/cases/harvest")
     public Map<String, Object> harvest(@RequestBody(required = false) HarvestRequest request) {
         HarvestRequest r = request == null
@@ -178,8 +135,6 @@ public class EvalController {
 
     public record HarvestRequest(String suite, Integer sinceDays, Integer limit, Boolean negative) {
     }
-
-    // ------------------------------------------------------------- Runs
 
     @GetMapping("/runs")
     public Map<String, Object> runs(@RequestParam(required = false) String suite,

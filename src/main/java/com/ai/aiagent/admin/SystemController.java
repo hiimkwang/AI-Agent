@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Trang thai he thong, metrics, cache (chi ADMIN). */
 @RestController
 @RequestMapping("/api/v1/rag/admin")
 @Slf4j
@@ -63,7 +62,6 @@ public class SystemController {
         this.props = props;
     }
 
-    /** Tong hop moi thu trang quan tri can, trong mot lan goi. */
     @GetMapping("/overview")
     public Map<String, Object> overview() {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -106,8 +104,6 @@ public class SystemController {
         ingest.put("antivirusEnabled", props.getAntivirus().isEnabled());
         out.put("ingest", ingest);
 
-        // Tuan thu: hai thu kiem toan noi bo hoi dau tien. Dua len man tong quan de
-        // khong ai phai di tim xem chung co dang bat khong.
         Map<String, Object> compliance = new LinkedHashMap<>();
         compliance.put("auditEnabled", props.getAudit().isEnabled());
         compliance.put("auditIncludeRead", props.getAudit().isIncludeRead());
@@ -140,7 +136,6 @@ public class SystemController {
         return Map.of("cleared", cleared, "message", "Đã xoá " + cleared + " bản ghi cache.");
     }
 
-    /** Don hoi thoai cu - truoc day bo nho hoi thoai khong bao gio duoc giai phong. */
     @DeleteMapping("/conversations/purge")
     public Map<String, Object> purgeConversations(@RequestParam(defaultValue = "90") int olderThanDays) {
         int deleted = conversations.purgeInactiveOlderThanDays(olderThanDays);

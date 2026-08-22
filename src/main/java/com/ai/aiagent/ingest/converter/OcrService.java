@@ -28,24 +28,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-/**
- * OCR cho PDF ban scan: ket xuat tung trang thanh anh roi nho model thi giac doc.
- *
- * Vi sao khong dung Tesseract: no doi mot goi nhi phan cai san tren may chu (kem bo
- * du lieu tieng Viet), thu ma moi truong may chu noi bo cua ngan hang/CTCK thuong
- * khong cho cai them. Huong nay KHONG them phu thuoc nao: PDFBox da co san trong du
- * an va tu ket xuat duoc trang thanh anh, con model thi giac thi dung lai dung API
- * key da cau hinh. Doi lai, chat luong tieng Viet co dau cao hon Tesseract dang ke,
- * va bang bieu duoc giu lai duoi dang bang Markdown thay vi vo vun.
- *
- * CAI GIA phai tra: MOT loi goi model cho MOI trang. Vi vay mac dinh TAT
- * ({@code rag.ocr.enabled=false}) va co tran {@code rag.ocr.max-pages} - mot ban scan
- * 800 trang lot vao se lang le tieu het han muc API neu khong co tran nay.
- *
- * Goi REST truc tiep thay vi qua {@code LlmClient}: giao dien do chi nhan van ban,
- * mo rong no de mang anh se lam phuc tap ca bon provider trong khi chi mot cho nay
- * can. Cung ly do voi {@code GeminiLlmClient}.
- */
 @Component
 @Slf4j
 public class OcrService {
@@ -77,9 +59,6 @@ public class OcrService {
         return props.getOcr().isEnabled();
     }
 
-    /**
-     * @return Markdown doc duoc, hoac chuoi rong khi OCR tat / that bai hoan toan
-     */
     public String ocrPdf(byte[] pdfBytes, String fileName) {
         RagProperties.Ocr config = props.getOcr();
         if (!config.isEnabled()) return "";
@@ -88,10 +67,11 @@ public class OcrService {
             int total = document.getNumberOfPages();
             int pages = Math.min(total, Math.max(1, config.getMaxPages()));
             if (pages < total) {
-                log.warn("OCR '{}': tai lieu {} trang, chi doc {} trang dau (rag.ocr.max-pages).",
+                log.warn("OCR '{}': document has {} pages, only the first {} will be read "
+                                + "(rag.ocr.max-pages).",
                         fileName, total, pages);
             }
-            log.info("OCR '{}': bat dau doc {} trang bang {}/{}.",
+            log.info("OCR '{}': reading {} page(s) with {}/{}.",
                     fileName, pages, config.getProvider(), config.getModel());
 
             List<String> rendered = render(document, pages, config, fileName);
@@ -101,27 +81,21 @@ public class OcrService {
             for (int i = 0; i < texts.size(); i++) {
                 String text = texts.get(i);
                 if (text == null || text.isBlank()) continue;
-                // Cung dinh dang moc trang voi PdfToMarkdown de truy nguon "trang may"
-                // hoat dong giong nhau du tai lieu di duong nao.
                 sb.append("\n<!-- page ").append(i + 1).append(" -->\n\n");
                 sb.append(text.strip()).append("\n\n");
             }
             String markdown = sb.toString();
             if (markdown.isBlank()) {
-                log.warn("OCR '{}': khong doc duoc chu nao.", fileName);
+                log.warn("OCR '{}': no text recognised.", fileName);
                 return "";
             }
-            log.info("OCR '{}': xong, {} ky tu.", fileName, markdown.length());
+            log.info("OCR '{}': finished, {} chars.", fileName, markdown.length());
             return markdown;
         } catch (Exception e) {
-            // OCR that bai KHONG duoc lam do ca luot nap: nguoi dung se thay canh bao
-            // "PDF khong co text" nhu truoc khi co tinh nang nay.
-            log.error("OCR '{}' that bai: {}", fileName, e.getMessage());
+            log.error("OCR '{}' failed", fileName, e);
             return "";
         }
     }
-
-    // ============================================================ Ket xuat anh
 
     private List<String> render(PDDocument document, int pages, RagProperties.Ocr config,
                                 String fileName) {
@@ -129,22 +103,19 @@ public class OcrService {
         List<String> out = new ArrayList<>(pages);
         for (int i = 0; i < pages; i++) {
             try {
-                // RGB chu khong phai ARGB: PNG co kenh alpha lam anh nang hon ma
-                // khong them thong tin gi cho viec doc chu.
                 BufferedImage image = renderer.renderImageWithDPI(
                         i, Math.max(72, config.getDpi()), ImageType.RGB);
                 ByteArrayOutputStream buffer = new ByteArrayOutputStream();
                 ImageIO.write(image, "png", buffer);
                 out.add(Base64.getEncoder().encodeToString(buffer.toByteArray()));
             } catch (Exception e) {
-                log.warn("OCR '{}': khong ket xuat duoc trang {}: {}", fileName, i + 1, e.getMessage());
+                log.warn("OCR '{}': could not render page {}: {}", fileName, i + 1, e.getMessage());
                 out.add(null);
             }
         }
         return out;
     }
 
-    /** Doc song song nhung co gioi han - moi trang la mot loi goi model. */
     private List<String> readAll(List<String> images, RagProperties.Ocr config, String fileName) {
         int threads = Math.max(1, Math.min(config.getConcurrency(), 16));
         ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
@@ -162,8 +133,7 @@ public class OcrService {
                     try {
                         return readPage(image, config);
                     } catch (Exception e) {
-                        // Mot trang loi khong duoc lam mat ca tai lieu.
-                        log.warn("OCR '{}': loi o trang {}: {}", fileName, page, e.getMessage());
+                        log.warn("OCR '{}': page {} failed: {}", fileName, page, e.getMessage());
                         return "";
                     }
                 });
@@ -174,14 +144,12 @@ public class OcrService {
             }
             return out;
         } catch (Exception e) {
-            log.error("OCR '{}': loi khi doc song song: {}", fileName, e.getMessage());
+            log.error("OCR '{}': parallel page read failed", fileName, e);
             return List.of();
         } finally {
             pool.shutdownNow();
         }
     }
-
-    // ============================================================ Goi model
 
     private String readPage(String imageBase64, RagProperties.Ocr config) throws Exception {
         boolean anthropic = "ANTHROPIC".equalsIgnoreCase(config.getProvider());
@@ -240,7 +208,6 @@ public class OcrService {
         ObjectNode body = mapper.createObjectNode();
         body.put("model", config.getModel());
         body.put("max_tokens", 8000);
-        // Nhiet do 0: day la viec CHEP LAI, khong phai viec sang tao.
         body.put("temperature", 0.0);
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "user").set("content", content);

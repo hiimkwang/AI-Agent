@@ -19,14 +19,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Chay truy xuat NHUNG KHONG sinh cau tra loi.
- *
- * Muc dich: tra loi cau hoi "vi sao no tra loi nhu vay" ma khong phai doc log.
- * Thay duoc tung buoc - bien the truy van, ket qua tung nhanh, diem RRF, diem
- * rerank, va quyet dinh cua cong tu choi. Cung la cach kiem tra pipeline khi chua
- * cau hinh model sinh cau tra loi (chi can embedding).
- */
 @RestController
 @RequestMapping("/api/v1/rag/admin")
 @Slf4j
@@ -93,7 +85,7 @@ public class RetrievalDebugController {
         out.put("counts", counts);
 
         Map<String, Object> scoring = new LinkedHashMap<>();
-        scoring.put("bestCosine", round(retrieval.bestRawScore()));
+        scoring.put("bestCosine", round(retrieval.bestCosine()));
         scoring.put("bestRerankScore", round(rerank.bestScore()));
         scoring.put("reranker", rerank.rerankerName());
         scoring.put("rerankReliable", rerank.reliable());
@@ -121,7 +113,10 @@ public class RetrievalDebugController {
             m.put("fileName", c.getFileName());
             m.put("headingPath", c.getHeadingPath());
             m.put("matchedBy", c.getMatchedBy());
-            m.put("cosine", round(c.getRawScore()));
+            // Null, not a number, when this chunk only matched full-text: showing a
+            // ts_rank_cd here is what made "cosine 14.0" appear on the diagnostics screen.
+            m.put("cosine", c.getCosine() == null ? null : round(c.getCosine()));
+            m.put("fulltextRank", c.getCosine() == null ? round(c.getRawScore()) : null);
             m.put("rrf", round(c.getFusedScore()));
             m.put("finalScore", round(c.getFinalScore()));
             m.put("rerankScore", c.getRerankScore() < 0 ? null : round(c.getRerankScore()));

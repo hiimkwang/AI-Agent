@@ -1,5 +1,6 @@
 package com.ai.aiagent.bot;
 
+import com.ai.aiagent.common.HttpTimeouts;
 import com.ai.aiagent.config.BotProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,22 +15,10 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Gui Activity NGUOC LAI cho Teams.
- *
- * Bot Framework la giao thuc hai chieu bat doi xung: Teams goi ta o
- * {@code POST /api/messages} va ta phai tra 200 that nhanh, roi gui cau tra loi that su
- * bang mot loi goi RIENG toi {@code serviceUrl}. Do la ly do lop nay ton tai - va cung
- * la ly do bot lam duoc nhung viec Outgoing Webhook cu khong lam duoc: bao "dang go",
- * gui nhieu tin nhan cho mot cau hoi, gui the Adaptive Card.
- *
- * {@code serviceUrl} lay tu chinh activity chu KHONG hard-code: no khac nhau theo dam
- * may (thuong mai/chinh phu) va theo vung. Da duoc {@link BotAuthenticator} doi chieu
- * voi claim trong token nen an toan de dung.
- */
 @Component
 @ConditionalOnProperty(prefix = "rag.bot", name = "enabled", havingValue = "true")
 @Slf4j
@@ -45,10 +34,11 @@ public class BotConnectorClient {
     public BotConnectorClient(BotProperties props, ObjectMapper mapper, RestClient.Builder builder) {
         this.props = props;
         this.mapper = mapper;
-        this.http = builder.build();
+        this.http = builder
+                .requestFactory(HttpTimeouts.factory(props.getConnectorTimeoutSeconds()))
+                .build();
     }
 
-    /** Hien "dang gõ..." de nguoi dung biet bot da nhan cau hoi. */
     public void sendTyping(BotActivity activity) {
         ObjectNode payload = mapper.createObjectNode();
         payload.put("type", "typing");
@@ -63,10 +53,6 @@ public class BotConnectorClient {
         send(activity, payload, "text");
     }
 
-    /**
-     * Gui the Adaptive Card. Kem luon {@code text} lam ban du phong: Teams dung chuoi do
-     * cho thong bao day va cho cac client khong ve duoc the.
-     */
     public void sendCard(BotActivity activity, JsonNode card, String fallbackText) {
         ObjectNode attachment = mapper.createObjectNode();
         attachment.put("contentType", "application/vnd.microsoft.card.adaptive");
@@ -74,21 +60,21 @@ public class BotConnectorClient {
 
         ObjectNode payload = mapper.createObjectNode();
         payload.put("type", "message");
+        // NOT "text": an activity carrying both text and a card makes Teams render the answer
+        // twice - once as a plain bubble, once inside the card. "summary" is what Teams uses for
+        // the toast/notification preview and is never drawn in the conversation.
         if (fallbackText != null && !fallbackText.isBlank()) {
-            payload.put("text", fallbackText);
+            payload.put("summary", fallbackText);
         }
         payload.set("attachments", mapper.createArrayNode().add(attachment));
         send(activity, payload, "card");
     }
 
-    // ============================================================ Noi bo
-
     private void send(BotActivity activity, ObjectNode payload, String kind) {
         if (activity.serviceUrl() == null || activity.conversationId() == null) {
-            log.warn("Bot: thieu serviceUrl/conversationId, khong gui duoc {}.", kind);
+            log.warn("Missing serviceUrl/conversationId, cannot send {}.", kind);
             return;
         }
-        // Noi tin nhan vao dung luong tra loi cua Teams
         if (activity.id() != null) {
             payload.put("replyToId", activity.id());
         }
@@ -105,19 +91,13 @@ public class BotConnectorClient {
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
-            // Khong nem tiep: mot tin nhan khong gui duoc thi log lai, khong duoc keo
-            // sap ca luong xu ly (vi du typing loi khong duoc lam mat cau tra loi).
-            log.warn("Bot: gui {} that bai: {}: {}", kind,
+            // serviceUrl is in the message on purpose: without it there is no way to tell a
+            // rejected token from the wrong regional endpoint, and no way to retry by hand.
+            log.warn("Sending {} failed (serviceUrl={}): {}: {}", kind, base,
                     e.getClass().getSimpleName(), e.getMessage());
         }
     }
 
-    /**
-     * Token de goi Bot Framework Connector, cache den truoc han 60 giay.
-     *
-     * Bot multi-tenant xin token tai tenant AO {@code botframework.com}, khong phai tenant
-     * cua cong ty - day la cho hay nham va bieu hien la loi 401 kho hieu khi gui tin nhan.
-     */
     private String token() {
         String current = cachedToken;
         if (current != null && Instant.now().isBefore(tokenExpiresAt)) {
@@ -153,11 +133,42 @@ public class BotConnectorClient {
         }
     }
 
-    /** Chi dung trong test/chan doan: cho biet dang xin token o tenant nao. */
     Map<String, Object> describe() {
-        return Map.of("appId", props.getAppId(),
-                "appType", props.getAppType().name(),
-                "tokenTenant", props.outboundTokenTenant(),
-                "issuers", List.copyOf(props.effectiveIssuers()));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("appId", props.getAppId());
+        out.put("appType", props.getAppType().name());
+        out.put("tokenTenant", props.outboundTokenTenant());
+        out.put("issuers", List.copyOf(props.effectiveIssuers()));
+        out.put("metadataUrl", props.effectiveMetadataUrl());
+        // Never the secret itself, only whether one is present.
+        out.put("appPasswordConfigured", !props.getAppPassword().isBlank());
+        out.put("configured", props.isConfigured());
+        return out;
+    }
+
+    /**
+     * Asks for an outbound token and reports only whether it worked. This is the check
+     * that separates "bot never received the message" from "bot answered but could not
+     * send", which otherwise look identical from the outside.
+     */
+    Map<String, Object> tokenProbe() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        try {
+            token();
+            out.put("ok", true);
+            out.put("expiresAt", tokenExpiresAt.toString());
+        } catch (Exception e) {
+            out.put("ok", false);
+            out.put("error", abbreviate(e.getMessage()));
+            out.put("hint", "Kiem tra BOT_APP_PASSWORD (secret het han?) va BOT_APP_TYPE "
+                    + "/ BOT_TENANT_ID.");
+        }
+        return out;
+    }
+
+    private static String abbreviate(String message) {
+        if (message == null) return "khong ro nguyen nhan";
+        String flat = message.replaceAll("\\s+", " ").strip();
+        return flat.length() <= 300 ? flat : flat.substring(0, 300) + "…";
     }
 }

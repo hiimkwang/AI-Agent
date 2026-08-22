@@ -2,6 +2,8 @@ package com.ai.aiagent.observability;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,13 +12,6 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Kiem tra viec tach so lieu theo bot.
- *
- * Diem de sai nhat khong phai viec gan the, ma la viec TONG HOP sau khi gan: tach the
- * xong ma van doc {@code count()} cua mot chuoi duy nhat thi trang quan tri se hien so
- * cua dung mot bot va goi do la so lieu toan he.
- */
 class RagMetricsTest {
 
     private SimpleMeterRegistry registry;
@@ -46,7 +41,6 @@ class RagMetricsTest {
         metrics.recordQuestion("");
 
         assertThat(counter("rag.questions", RagMetrics.WEB)).isEqualTo(2.0);
-        // Mot the rong lam vo chuoi so lieu ben Prometheus, khong duoc phep ton tai.
         assertThat(registry.find("rag.questions").tag("bot", "").counter()).isNull();
     }
 
@@ -104,6 +98,62 @@ class RagMetricsTest {
     }
 
     @Test
+    @DisplayName("Chi phi theo bot phai SONG SOT khi doi sang ten cua Prometheus")
+    // SimpleMeterRegistry does not apply Prometheus naming, so this only reproduces against
+    // the real registry: a gauge named rag.cost.usd.total collides with the rag.cost.usd
+    // counter (Micrometer appends _total), and the counter is dropped with just a warning.
+    void costPerBotSurvivesPrometheusNaming() {
+        PrometheusMeterRegistry prom = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        RagMetrics prometheusMetrics = new RagMetrics(prom);
+
+        prometheusMetrics.recordUsage("OPENAI", "gpt-4o-mini", 10, 5, 0.002, "nhan-su");
+        prometheusMetrics.recordUsage("OPENAI", "gpt-4o-mini", 20, 8, 0.003, "phap-che");
+
+        // Trieu chung that: chuoi so lieu bien mat khoi ban scrape.
+        String scrape = prom.scrape();
+        assertThat(scrape)
+                .as("ban scrape khong co rag_cost_usd_total")
+                .contains("rag_cost_usd_total");
+        assertThat(scrape)
+                .as("mat nhan bot -> chi phi theo tung bot khong con")
+                .contains("bot=\"nhan-su\"")
+                .contains("bot=\"phap-che\"");
+
+        // Chan nguyen nhan: khong duoc co gauge nao chiem ten Prometheus cua counter.
+        assertThat(prom.find("rag.cost.usd").counter()).isNotNull();
+        assertThat(prom.find("rag.cost.usd.total").gauge())
+                .as("gauge nay chiem ten rag_cost_usd_total cua counter")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("Khong metric nao bi loai im lang khi xuat sang Prometheus")
+    void noMeterIsSilentlyDroppedByPrometheus() {
+        PrometheusMeterRegistry prom = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        RagMetrics all = new RagMetrics(prom);
+
+        all.recordQuestion("nhan-su");
+        all.recordAbstained("RERANK_SCORE_BELOW_THRESHOLD", "nhan-su");
+        all.recordCacheHit("SEMANTIC", "nhan-su");
+        all.recordError("nhan-su");
+        all.recordUsage("OPENAI", "gpt-4o-mini", 10, 5, 0.002, "nhan-su");
+        all.recordTotal(100, "nhan-su");
+        all.recordRetrieval(30, "nhan-su");
+        all.recordRerank(20, "nhan-su");
+        all.recordGeneration(50, "nhan-su");
+
+        // Every meter the class claims to publish has to actually be in the registry.
+        for (String name : java.util.List.of("rag.questions", "rag.questions.abstained",
+                "rag.abstain.reason", "rag.cache.hits", "rag.errors", "rag.cost.usd",
+                "rag.tokens", "rag.tokens.input.total", "rag.tokens.output.total",
+                "rag.latency")) {
+            assertThat(prom.find(name).meters())
+                    .as("metric '%s' khong co trong registry -> bi Prometheus loai", name)
+                    .isNotEmpty();
+        }
+    }
+
+    @Test
     @DisplayName("Do tre toan luot: p50 la trung binh co trong so, khong phai cua mot bot")
     void totalLatencyIsWeightedAcrossBots() {
         metrics.recordTotal(100, "nhan-su");
@@ -113,18 +163,13 @@ class RagMetricsTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> latency = (Map<String, Object>) metrics.snapshot().get("latencyMs");
 
-        assertThat(latency.get("totalP50")).isEqualTo(200L);   // (100+100+400)/3
+        assertThat(latency.get("totalP50")).isEqualTo(200L);
         assertThat(latency.get("totalP95")).isEqualTo(400L);
     }
 
-    /**
-     * Loi da xay ra that: {@code stage=total} duoc gan them the {@code bot} con ba buoc
-     * kia thi khong, va Prometheus LOAI BO IM LANG chuoi total - khong mot dong log nao.
-     * Micrometer khong tu bat loi nay (SimpleMeterRegistry chap nhan tuot), nen phai
-     * kiem tra bang chinh dieu kien cua Prometheus: cung ten metric => cung bo khoa tag.
-     */
     @Test
     @DisplayName("Moi chuoi rag.latency dung CHUNG mot bo khoa tag")
+    // Prometheus drops series with mismatched tag keys without logging anything.
     void everyLatencySeriesHasTheSameTagKeys() {
         metrics.recordTotal(100, "nhan-su");
         metrics.recordRetrieval(30, "nhan-su");

@@ -12,18 +12,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 @EnableScheduling
 public class AppConfig {
 
-    /**
-     * Spring Boot tu cau hinh {@code PlatformTransactionManager} nhung KHONG tao
-     * {@code TransactionTemplate}. Ta can no de mo transaction tuong minh trong
-     * {@code IngestionService} (loi goi noi bo cung class nen {@code @Transactional}
-     * se khong duoc proxy chan).
-     */
     @Bean
     public TransactionTemplate transactionTemplate(PlatformTransactionManager manager) {
         return new TransactionTemplate(manager);
     }
 
-    /** Pool chay SSE: moi request stream chiem mot luong cho den khi xong. */
     @Bean(name = "sseExecutor")
     public TaskExecutor sseExecutor() {
         SimpleAsyncTaskExecutor executor = new SimpleAsyncTaskExecutor("sse-");

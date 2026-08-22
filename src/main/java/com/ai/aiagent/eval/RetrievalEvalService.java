@@ -17,32 +17,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Do CHAT LUONG TRUY XUAT, tach roi khoi chat luong cau tra loi.
- *
- * TAI SAO CAN LOP RIENG: {@link EvalService} cham diem bang mot lan goi LLM giam khao
- * cho MOI case. Bo do do dung, nhung dat va cham den muc khong ai chay thuong xuyen -
- * nen tren thuc te moi lan doi tham so deu la doan mo. Lop nay chi ton mot lan nhung
- * cau hoi + vai cau SQL, re den muc chay duoc sau MOI lan doi tham so.
- *
- * CO Y KHONG goi query rewrite (mot lan LLM/case) va mac dinh KHONG rerank: de phep do
- * la DETERMINISTIC va gan nhu mien phi. Dung phep do nay de tra loi cau hoi
- * "doi chunking / embedding / trong so tsv co lam tim kiem tot len khong", chu khong
- * phai "ca pipeline tot len khong" - cho do van la {@link EvalService}.
- *
- * Diem quan trong nhat: bao ca MRR TRUOC va SAU rerank. Chi nhin diem cuoi cung thi
- * khong tra loi duoc cau hoi "bo rerank dang lam tot len hay dang lam hong thu tu" -
- * ma dieu do xay ra that voi reranker bang LLM.
- */
 @Service
 @Slf4j
 public class RetrievalEvalService {
 
-    /**
-     * @param topK         so ket qua xet; mac dinh theo {@code rag.retrieval.candidates}
-     * @param includeRerank chay ca bo rerank de so sanh thu tu truoc/sau. Tot len chinh
-     *                      xac hon nhung TON mot lan goi LLM cho moi case
-     */
     public record RetrievalEvalRequest(String suite, String category, Integer topK,
                                        boolean includeRerank) {
     }
@@ -104,8 +82,6 @@ public class RetrievalEvalService {
         long latencySum = 0;
 
         for (EvalRepository.EvalCase testCase : cases) {
-            // Chi cham duoc case co khai bao nguon mong doi. Case khong khai bao van chay
-            // (de thay he thong tra ve gi) nhung khong tinh vao diem.
             String expected = testCase.expectedSource() == null
                     || testCase.expectedSource().isBlank() ? null
                     : testCase.expectedSource().toLowerCase(Locale.ROOT);
@@ -117,7 +93,7 @@ public class RetrievalEvalService {
                         testCase.category() != null ? testCase.category() : request.category())
                         .candidates();
             } catch (Exception e) {
-                log.warn("Eval truy xuat loi cho '{}': {}", testCase.question(), e.getMessage());
+                log.warn("Retrieval eval failed for '{}': {}", testCase.question(), e.getMessage());
                 results.add(new CaseResult(testCase.question(), testCase.expectedSource(),
                         null, null, 0, List.of()));
                 skipped++;
@@ -165,8 +141,8 @@ public class RetrievalEvalService {
         repository.completeRetrievalRun(runId, measured, skipped, recall, mrr, mrrReranked,
                 avgLatency);
 
-        log.info("Eval TRUY XUAT '{}': {} case ({} cham duoc) | recall@1={} @3={} @5={} @10={} "
-                        + "| MRR={} MRR sau rerank={} | {} ms/case",
+        log.info("Retrieval eval '{}': {} case(s) ({} measured) | recall@1={} @3={} @5={} "
+                        + "@10={} | MRR={} MRR after rerank={} | {} ms/case",
                 suite, cases.size(), measured, recall[0], recall[1], recall[2], recall[3],
                 mrr, mrrReranked, avgLatency);
 
@@ -174,15 +150,6 @@ public class RetrievalEvalService {
                 mrr, mrrReranked, avgLatency, results);
     }
 
-    // ============================================================ Noi bo
-
-    /**
-     * Bien the truy van KHONG dung LLM: cau goc + ban mo rong thuat ngu.
-     *
-     * Co y bo query rewrite (mot lan goi LLM cho moi case): giu phep do deterministic
-     * va gan nhu mien phi. Chay lai cung mot bo cau hoi tren cung du lieu phai ra cung
-     * mot con so, neu khong thi khong so sanh duoc giua hai lan doi tham so.
-     */
     private List<String> variants(String question) {
         List<String> variants = new ArrayList<>();
         variants.add(question);
@@ -201,12 +168,12 @@ public class RetrievalEvalService {
                     .rerank(question, candidates, props.getRetrieval().getTopK());
             return result.chunks();
         } catch (Exception e) {
-            log.warn("Rerank loi trong eval ({}) -> bo qua cot sau rerank.", e.getMessage());
+            log.warn("Rerank failed during eval ({}), the post-rerank column is skipped.",
+                    e.getMessage());
             return List.of();
         }
     }
 
-    /** @return thu hang 1-based cua ket qua dau tien khop nguon mong doi, null neu khong co */
     private Integer rankOf(List<RetrievedChunk> chunks, String expectedLower) {
         if (expectedLower == null) return null;
         for (int i = 0; i < chunks.size(); i++) {
@@ -218,7 +185,6 @@ public class RetrievalEvalService {
         return null;
     }
 
-    /** Vai nguon dau, de nguoi doc bao cao thay NGAY he thong dang tra ve gi thay vi doan. */
     private List<String> topSources(List<RetrievedChunk> chunks) {
         return chunks.stream()
                 .map(RetrievedChunk::getFileName)

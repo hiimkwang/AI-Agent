@@ -1,13 +1,11 @@
 package com.ai.aiagent.llm;
 
-/** Cac nha cung cap mo hinh chat duoc ho tro. */
 public enum LlmProvider {
     OPENAI,
     ANTHROPIC,
     GEMINI,
     OLLAMA;
 
-    /** @return null neu {@code value} rong (nghia la "dung mac dinh toan cuc"). */
     public static LlmProvider fromString(String value) {
         if (value == null || value.isBlank()) {
             return null;

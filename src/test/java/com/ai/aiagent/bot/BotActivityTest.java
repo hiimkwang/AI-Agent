@@ -17,10 +17,6 @@ class BotActivityTest {
         return BotActivity.from(mapper.readTree(json));
     }
 
-    /**
-     * Teams chen mention vao dau tin nhan trong channel. Khong bo di thi ten bot lot vao
-     * cau truy van va lam nhieu ca vector search lan full-text.
-     */
     @Test
     @DisplayName("Bo mention <at>...</at> khoi noi dung cau hoi")
     void stripsMention() {
@@ -73,10 +69,6 @@ class BotActivityTest {
                  "channelData":{"team":{"aadGroupId":"x"}}}""").isChannel());
     }
 
-    /**
-     * Trong mot Team, moi lan co nguoi moi vao channel deu sinh conversationUpdate.
-     * Chao moi su kien do la bot spam ca kenh.
-     */
     @Test
     @DisplayName("Chi coi la 'bot vua duoc cai' khi CHINH bot nam trong membersAdded")
     void detectsOnlyBotInstall() throws Exception {

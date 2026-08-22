@@ -6,14 +6,6 @@ import org.springframework.stereotype.Repository;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Luu cau hinh doi luc runtime.
- *
- * Truoc day cac tham so retrieval bind bang {@code @Value} vao field cua service,
- * nghia la chi doc mot lan luc khoi tao bean -> muon thu {@code top-k} khac phai
- * restart, nen tren thuc te khong ai thu. Gio gia tri sua qua Settings API duoc ghi
- * o day va ap lai vao {@code RagProperties} moi lan khoi dong.
- */
 @Repository
 public class SettingsRepository {
 

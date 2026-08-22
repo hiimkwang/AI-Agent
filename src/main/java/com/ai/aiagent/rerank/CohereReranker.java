@@ -17,12 +17,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Rerank bang Cohere Rerank API (cross-encoder chuyen dung, da ngon ngu).
- *
- * Re va nhanh hon nhieu so voi nhoi 30 doan vao mot prompt LLM, va tra ve
- * {@code relevance_score} that nen dat nguong tu choi rat chuan. Nen dung khi co key.
- */
 @Component
 @Slf4j
 public class CohereReranker implements Reranker {
@@ -76,7 +70,7 @@ public class CohereReranker implements Reranker {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
-                log.warn("Cohere rerank tra ve {} -> khong dang tin. {}",
+                log.warn("Cohere rerank returned HTTP {}, marking the result unreliable. {}",
                         response.statusCode(), abbreviate(response.body()));
                 return RerankResult.degraded(fallback(candidates, topK), name());
             }
@@ -90,12 +84,11 @@ public class CohereReranker implements Reranker {
                 chunk.setRerankScore(r.path("relevance_score").asDouble(0));
                 out.add(chunk);
             }
-            log.debug("Cohere rerank: {} ung vien -> giu {} doan.", candidates.size(), out.size());
-            // Cohere luon tra ve top_n doan, nen "rong" o day la ket qua that
+            log.debug("Cohere rerank: {} candidates in, {} passages kept.", candidates.size(), out.size());
             return RerankResult.reliable(out, name());
 
         } catch (Exception e) {
-            log.warn("Cohere rerank loi ({}) -> khong dang tin.", e.getMessage());
+            log.warn("Cohere rerank failed ({}), marking the result unreliable.", e.getMessage());
             return RerankResult.degraded(fallback(candidates, topK), name());
         }
     }

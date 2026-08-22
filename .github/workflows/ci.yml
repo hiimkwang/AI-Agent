@@ -1,10 +1,6 @@
-# =====================================================================
-# CI: build + chay toan bo test, KE CA cac test cham DB that.
-#
-# Runner cua GitHub Actions co san Docker, nen cac lop *IT (Testcontainers)
-# se chay THAT o day - khac voi may ca nhan khong bat Docker, noi chung tu
-# bo qua. Nghia la: du ai do quen bat Docker, PR van duoc kiem tra day du.
-# =====================================================================
+# Build and run the full test suite, including the Testcontainers *IT classes.
+# GitHub runners have Docker, so those run for real here even when a developer
+# machine skipped them locally.
 name: CI
 
 on:

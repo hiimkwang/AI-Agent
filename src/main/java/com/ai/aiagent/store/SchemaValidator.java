@@ -6,12 +6,6 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-/**
- * Kiem tra so chieu embedding trong DB co khop cau hinh khong, ngay luc khoi dong.
- *
- * Truoc day khong co buoc nay: doi model embedding sang so chieu khac chi bao loi
- * LUC INSERT (giua job nap lieu), rat kho lan ra nguyen nhan. Gio sai la biet ngay.
- */
 @Component
 @Slf4j
 public class SchemaValidator {
@@ -37,27 +31,28 @@ public class SchemaValidator {
         int configured = props.getEmbedding().getDimensions();
 
         if (actual == null) {
-            log.warn("Khong doc duoc so chieu cot embedding tu DB - bo qua kiem tra.");
+            log.warn("Could not read the embedding column dimension from the database, "
+                    + "skipping the check.");
         } else if (actual != configured) {
             log.error("""
                     ============================================================
-                    SO CHIEU EMBEDDING KHONG KHOP
-                      DB dang la : vector({})
-                      Cau hinh   : {} ({} / {})
-                    Vector cua CAU HOI va cua TAI LIEU buoc phai cung mot model.
-                    Hoac tra rag.embedding.dimensions ve {}, hoac tao lai schema voi
-                    so chieu moi roi NAP LAI (re-ingest) toan bo tai lieu.
+                    EMBEDDING DIMENSION MISMATCH
+                      Database : vector({})
+                      Config   : {} ({} / {})
+                    Question vectors and document vectors must come from the same
+                    model. Either set rag.embedding.dimensions back to {}, or recreate
+                    the schema at the new size and RE-INGEST every document.
                     ============================================================""",
                     actual, configured, props.getEmbedding().getProvider(),
                     props.getEmbedding().modelName(), actual);
         } else {
-            log.info("Schema OK: vector({}) khop cau hinh, {} tai lieu / {} chunk.",
+            log.info("Schema OK: vector({}) matches the configuration, {} document(s) / {} chunk(s).",
                     actual, documentRepository.countAll(), chunkRepository.count());
         }
 
         int orphaned = jobRepository.markOrphanedAsInterrupted();
         if (orphaned > 0) {
-            log.info("Danh dau {} job nap lieu bi ngat o lan chay truoc.", orphaned);
+            log.info("Marked {} ingestion job(s) as interrupted by the previous shutdown.", orphaned);
         }
     }
 }

@@ -16,13 +16,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
-/**
- * Google Gemini qua REST (Generative Language API) voi API key.
- *
- * Van goi REST truc tiep thay vi dung module cua langchain4j: ban 0.31 chi co
- * Vertex AI (can GCP credential), chua co Google AI Gemini dung API key.
- * Ban stream dung endpoint {@code :streamGenerateContent?alt=sse}.
- */
 @Slf4j
 public class GeminiLlmClient implements LlmClient {
 
@@ -102,6 +95,7 @@ public class GeminiLlmClient implements LlmClient {
                     new java.io.InputStreamReader(res.body(), java.nio.charset.StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
+                    if (sink.cancelled()) break;
                     if (!line.startsWith("data:")) continue;
                     String payload = line.substring(5).trim();
                     if (payload.isEmpty() || "[DONE]".equals(payload)) continue;

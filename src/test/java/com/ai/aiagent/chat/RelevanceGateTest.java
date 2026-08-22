@@ -14,11 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Cong tu choi tra loi la thu quyet dinh he thong co noi "toi khong biet" hay khong -
- * cau quan trong nhat cua mot chatbot tai lieu noi bo. Bon nhanh quyet dinh cua no
- * deu can duoc khoa lai bang test.
- */
 class RelevanceGateTest {
 
     private RagProperties props;
@@ -89,13 +84,11 @@ class RelevanceGateTest {
     @Test
     @DisplayName("Rerank BI LOI -> khong tin diem rerank, chuyen sang danh gia bang cosine")
     void fallsBackToCosineWhenRerankerDegraded() {
-        // cosine 0.5 >= nguong 0.20 -> van tra loi
         RelevanceGate.Decision ok = gate.evaluate(
                 new RetrievalResult(List.of(chunk(0.5, -1)), 1, 0, 0.5),
                 RerankResult.degraded(List.of(chunk(0.5, -1)), "LLM"));
         assertFalse(ok.abstain());
 
-        // cosine 0.05 < nguong 0.20 -> tu choi
         RelevanceGate.Decision low = gate.evaluate(
                 new RetrievalResult(List.of(chunk(0.05, -1)), 1, 0, 0.05),
                 RerankResult.degraded(List.of(chunk(0.05, -1)), "LLM"));

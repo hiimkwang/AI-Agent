@@ -35,17 +35,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Office -> Markdown, GIU CAU TRUC.
- *
- * Diem khac quan trong so voi cach cu (ApachePoiDocumentParser cua langchain4j):
- * cach cu tra ve text phang, lam mat het heading va bang. Bo chuyen doi nay:
- *   - Word:  style "Heading N" -> "#" tuong ung; bang -> bang Markdown; giu dung
- *            THU TU xuat hien cua doan va bang trong tai lieu.
- *   - Excel: moi sheet -> mot heading + mot bang Markdown (dung DataFormatter nen
- *            ngay/tien/phan tram hien dung nhu trong file).
- *   - PowerPoint: moi slide -> mot heading + noi dung + bang.
- */
 @Component
 @Slf4j
 public class OfficeToMarkdown {
@@ -70,14 +59,11 @@ public class OfficeToMarkdown {
         }
     }
 
-    // ------------------------------------------------------------------ Word
-
     private String fromDocx(byte[] bytes, String fileName) throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append(Markdown.heading(1, stripExtension(fileName)));
 
         try (XWPFDocument doc = new XWPFDocument(new ByteArrayInputStream(bytes))) {
-            // getBodyElements() giu dung thu tu doan/bang trong tai lieu
             for (IBodyElement element : doc.getBodyElements()) {
                 if (element instanceof XWPFParagraph p) {
                     appendParagraph(sb, p);
@@ -106,7 +92,6 @@ public class OfficeToMarkdown {
         sb.append(text).append("\n\n");
     }
 
-    /** @return 0 neu khong phai heading, 1..6 theo style "Heading N" / "Title". */
     private int headingLevelOf(XWPFParagraph p) {
         String style = p.getStyle();
         if (style == null) style = p.getStyleID();
@@ -142,13 +127,11 @@ public class OfficeToMarkdown {
     private String fromDoc(byte[] bytes, String fileName) throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append(Markdown.heading(1, stripExtension(fileName)));
-        // .doc (binary cu) khong cho truy cap style dang tin cay -> lay theo doan
         try (HWPFDocument doc = new HWPFDocument(new ByteArrayInputStream(bytes));
              WordExtractor extractor = new WordExtractor(doc)) {
             for (String paragraph : extractor.getParagraphText()) {
                 String text = paragraph == null ? "" : paragraph.strip();
                 if (text.isEmpty()) continue;
-                // Dong ngan IN HOA => coi la heading
                 if (text.length() <= 80 && text.equals(text.toUpperCase()) && text.matches(".*\\p{L}.*")) {
                     sb.append(Markdown.heading(2, text));
                 } else {
@@ -158,8 +141,6 @@ public class OfficeToMarkdown {
         }
         return sb.toString();
     }
-
-    // ------------------------------------------------------------- Excel
 
     private String fromSpreadsheet(byte[] bytes, String fileName) throws IOException {
         StringBuilder sb = new StringBuilder();
@@ -205,7 +186,6 @@ public class OfficeToMarkdown {
         return sb.toString();
     }
 
-    /** DataFormatter tra ve dung dinh dang nhu nguoi dung thay (ngay, tien, %). */
     private String cellValue(Cell cell) {
         try {
             return dataFormatter.formatCellValue(cell).strip();
@@ -213,8 +193,6 @@ public class OfficeToMarkdown {
             return "";
         }
     }
-
-    // -------------------------------------------------------- PowerPoint
 
     private String fromPptx(byte[] bytes, String fileName) throws IOException {
         StringBuilder sb = new StringBuilder();
@@ -241,7 +219,6 @@ public class OfficeToMarkdown {
                         sb.append('\n');
                     }
                 }
-                // Ghi chu cua nguoi trinh bay thuong chua giai thich quan trong
                 if (slide.getNotes() != null) {
                     StringBuilder notes = new StringBuilder();
                     for (XSLFShape shape : slide.getNotes().getShapes()) {

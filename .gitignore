@@ -45,3 +45,13 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Server installer bundle ###
+aiagent/config/aiagent.env
+aiagent/deploy/*.jar
+aiagent/lib/
+aiagent/logs/
+aiagent/work/
+
+# Teams app package: sinh tu teams-app/build.ps1, chua App ID cua tenant.
+bsc-rag-assistant.zip

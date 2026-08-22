@@ -8,14 +8,6 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Cau hinh bao mat: {@code rag.security.*}.
- *
- * Mo hinh don gian nhung du dung cho service noi bo: moi client la mot API key
- * kem danh sach role va danh sach phong ban duoc phep doc. Phong ban dung cho
- * ACL tai lieu - client CHI thay tai lieu thuoc phong ban cua minh, thay vi tin
- * vao tham so {@code category} do client tu khai nhu truoc day.
- */
 @Component
 @ConfigurationProperties(prefix = "rag.security")
 @Getter
@@ -23,7 +15,6 @@ import java.util.List;
 public class SecurityProperties {
 
     private boolean enabled = true;
-    /** Chi bat tren may dev: khong co API key nao van cho vao voi quyen ADMIN. */
     private boolean allowAnonymous = false;
     private String headerName = "X-API-Key";
     private int maxQuestionLength = 4000;
@@ -35,9 +26,7 @@ public class SecurityProperties {
     public static class Client {
         private String id;
         private String key = "";
-        /** Vi du: ADMIN,USER */
         private String roles = "USER";
-        /** {@code *} = tat ca phong ban. Vi du: NHAN-SU,KE-TOAN */
         private String departments = "*";
 
         public boolean isUsable() {
@@ -48,8 +37,15 @@ public class SecurityProperties {
     @Getter @Setter
     public static class RateLimit {
         private boolean enabled = true;
+        /** Chi ap cho endpoint SINH cau tra loi - do la thu ton tien. */
         private int chatPerMinute = 30;
         private int adminPerMinute = 120;
         private int webhookPerMinute = 60;
+        /**
+         * Cac lenh doc nhe ma giao dien can de ve trang (/me, /settings, /models,
+         * /categories, /conversations). Mot lan tai trang la ~5 request, nen neu dem
+         * chung voi chat thi chi F5 vai lan la bi 429 du chua hoi cau nao.
+         */
+        private int otherPerMinute = 300;
     }
 }

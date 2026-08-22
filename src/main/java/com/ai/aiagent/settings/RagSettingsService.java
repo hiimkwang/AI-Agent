@@ -1,5 +1,9 @@
 package com.ai.aiagent.settings;
 
+import com.ai.aiagent.chat.RagChatService;
+import com.ai.aiagent.chat.PromptBuilder;
+import com.ai.aiagent.chat.RelevanceGate;
+import com.ai.aiagent.chat.SmallTalkDetector;
 import com.ai.aiagent.config.RagProperties;
 import com.ai.aiagent.llm.LlmProvider;
 import com.ai.aiagent.store.SettingsRepository;
@@ -12,17 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Cau hinh doi duoc LUC RUNTIME va luu ben.
- *
- * Truoc day cac tham so retrieval bind bang {@code @Value} vao field cua tung service
- * -> chi doc mot lan luc tao bean, muon thu {@code top-k} khac phai restart, nen tren
- * thuc te khong ai thu va viec tinh chinh bang eval tro thanh vo nghia.
- *
- * Gio: sua qua API -> ap ngay vao {@link RagProperties} (bean dung chung) -> ghi xuong
- * bang {@code rag_settings} -> nap lai khi khoi dong. Doi {@code min-rerank-score} hay
- * {@code candidates} roi chay lai eval trong cung mot phien lam viec.
- */
 @Service
 @Slf4j
 public class RagSettingsService {
@@ -30,7 +23,6 @@ public class RagSettingsService {
     public record ModelSelection(LlmProvider provider, String model) {
     }
 
-    /** Cac khoa duoc phep sua luc runtime, kem cach doc/ghi vao RagProperties. */
     private static final String K_PROVIDER = "llm.provider";
     private static final String K_MODEL = "llm.model";
     private static final String K_INTERNAL_PROVIDER = "internal.provider";
@@ -48,14 +40,24 @@ public class RagSettingsService {
     private static final String K_RECENCY = "retrieval.recencyBoostEnabled";
     private static final String K_EXCLUDE_EXPIRED = "retrieval.excludeExpired";
     private static final String K_RERANK_PROVIDER = "rerank.provider";
+    private static final String K_RERANK_BATCH = "rerank.batchSize";
     private static final String K_CACHE_ENABLED = "cache.enabled";
     private static final String K_CACHE_SEMANTIC = "cache.semanticEnabled";
+    private static final String K_CACHE_REFUSAL = "cache.refusalPattern";
     private static final String K_CACHE_THRESHOLD = "cache.semanticThreshold";
     private static final String K_CONTEXTUAL = "ingestion.contextualEnabled";
     private static final String K_REWRITE = "queryRewrite.enabled";
     private static final String K_CLARIFY = "retrieval.clarifyAmbiguousEnabled";
     private static final String K_GLOSSARY = "retrieval.glossaryEnabled";
     private static final String K_CITATIONS = "chat.citationsEnabled";
+    private static final String K_HISTORY_TURNS = "chat.historyTurns";
+    private static final String K_NO_ANSWER_FOLLOW_UP = "chat.noAnswerFollowUp";
+    private static final String K_SYSTEM_PROMPT = "chat.systemPrompt";
+    private static final String K_NOT_FOUND_MSG = "chat.notFoundMessage";
+    private static final String K_NOT_RELEVANT_MSG = "chat.notRelevantMessage";
+    private static final String K_SMALL_TALK = "chat.smallTalkEnabled";
+    private static final String K_SMALL_TALK_PATTERN = "chat.smallTalkPattern";
+    private static final String K_SMALL_TALK_REPLY = "chat.smallTalkReply";
 
     private final RagProperties props;
     private final SettingsRepository repository;
@@ -71,19 +73,17 @@ public class RagSettingsService {
         Map<String, String> stored = repository.loadAll();
         int applied = 0;
         for (Map.Entry<String, String> e : stored.entrySet()) {
-            // Khoa "provider.*" thuoc ve ProviderSettingsService (API key/model provider),
-            // khong phai cua service nay - bo qua de khong log canh bao gia moi lan khoi dong.
             if (e.getKey().startsWith(ProviderSettingsService.KEY_PREFIX)) continue;
             try {
                 if (applyOne(e.getKey(), e.getValue())) applied++;
             } catch (Exception ex) {
-                log.warn("Bo qua cau hinh luu san '{}={}': {}", e.getKey(), e.getValue(), ex.getMessage());
+                log.warn("Ignoring stored setting '{}={}': {}", e.getKey(), e.getValue(), ex.getMessage());
             }
         }
         LlmProvider provider = LlmProvider.fromString(props.getLlm().getDefaultProvider());
         current.set(new ModelSelection(provider == null ? LlmProvider.OPENAI : provider,
                 props.getLlm().getDefaultModel()));
-        log.info("Cau hinh LLM mac dinh: {}/{} (noi bo: {}/{}), da ap {} cau hinh luu san.",
+        log.info("Default LLM: {}/{} (internal: {}/{}), {} stored setting(s) applied.",
                 current.get().provider(), current.get().model(),
                 props.getInternal().getProvider(), props.getInternal().getModel(), applied);
     }
@@ -92,7 +92,6 @@ public class RagSettingsService {
         return current.get();
     }
 
-    /** Toan bo gia tri hien tai cua cac khoa sua duoc, cho trang quan tri. */
     public Map<String, Object> snapshot() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put(K_PROVIDER, props.getLlm().getDefaultProvider());
@@ -112,14 +111,40 @@ public class RagSettingsService {
         m.put(K_RECENCY, props.getRetrieval().isRecencyBoostEnabled());
         m.put(K_EXCLUDE_EXPIRED, props.getRetrieval().isExcludeExpired());
         m.put(K_RERANK_PROVIDER, props.getRerank().getProvider());
+        m.put(K_RERANK_BATCH, props.getRerank().getBatchSize());
         m.put(K_CACHE_ENABLED, props.getCache().isEnabled());
         m.put(K_CACHE_SEMANTIC, props.getCache().isSemanticEnabled());
+        m.put(K_CACHE_REFUSAL, props.getCache().getRefusalPattern());
         m.put(K_CACHE_THRESHOLD, props.getCache().getSemanticThreshold());
         m.put(K_CONTEXTUAL, props.getIngestion().isContextualEnabled());
         m.put(K_REWRITE, props.getQueryRewrite().isEnabled());
         m.put(K_CLARIFY, props.getRetrieval().isClarifyAmbiguousEnabled());
         m.put(K_GLOSSARY, props.getRetrieval().isGlossaryEnabled());
         m.put(K_CITATIONS, props.getChat().isCitationsEnabled());
+        m.put(K_HISTORY_TURNS, props.getChat().getHistoryTurns());
+        m.put(K_NO_ANSWER_FOLLOW_UP, props.getChat().getNoAnswerFollowUp());
+        m.put(K_SYSTEM_PROMPT, props.getChat().getSystemPrompt());
+        m.put(K_NOT_FOUND_MSG, props.getChat().getNotFoundMessage());
+        m.put(K_NOT_RELEVANT_MSG, props.getChat().getNotRelevantMessage());
+        m.put(K_SMALL_TALK, props.getChat().isSmallTalkEnabled());
+        m.put(K_SMALL_TALK_PATTERN, props.getChat().getSmallTalkPattern());
+        m.put(K_SMALL_TALK_REPLY, props.getChat().getSmallTalkReply());
+        return m;
+    }
+
+    /**
+     * The text shipped in the jar for each overridable key, so the admin screen can show
+     * what an empty override actually falls back to.
+     */
+    public Map<String, Object> textDefaults() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put(K_SYSTEM_PROMPT, PromptBuilder.defaultSystemPrompt());
+        m.put(K_CACHE_REFUSAL, RagProperties.DEFAULT_REFUSAL_PATTERN);
+        m.put(K_NO_ANSWER_FOLLOW_UP, RagChatService.DEFAULT_NO_ANSWER_FOLLOW_UP);
+        m.put(K_NOT_FOUND_MSG, RelevanceGate.DEFAULT_NOT_FOUND);
+        m.put(K_NOT_RELEVANT_MSG, RelevanceGate.DEFAULT_NOT_RELEVANT_ENOUGH);
+        m.put(K_SMALL_TALK_PATTERN, SmallTalkDetector.DEFAULT_PATTERN);
+        m.put(K_SMALL_TALK_REPLY, SmallTalkDetector.DEFAULT_REPLY);
         return m;
     }
 
@@ -127,11 +152,6 @@ public class RagSettingsService {
         return List.copyOf(snapshot().keySet());
     }
 
-    /**
-     * Ap va luu nhieu cau hinh mot luc.
-     *
-     * @return danh sach khoa da doi
-     */
     public List<String> update(Map<String, Object> changes, String updatedBy) {
         List<String> changed = new java.util.ArrayList<>();
         for (Map.Entry<String, Object> e : changes.entrySet()) {
@@ -144,15 +164,13 @@ public class RagSettingsService {
             repository.put(key, value, updatedBy);
             changed.add(key);
         }
-        // Provider/model mac dinh duoc cache rieng nen phai lam moi
         LlmProvider provider = LlmProvider.fromString(props.getLlm().getDefaultProvider());
         current.set(new ModelSelection(provider == null ? LlmProvider.OPENAI : provider,
                 props.getLlm().getDefaultModel()));
-        log.info("Da cap nhat {} cau hinh boi {}: {}", changed.size(), updatedBy, changed);
+        log.info("{} setting(s) updated by {}: {}", changed.size(), updatedBy, changed);
         return changed;
     }
 
-    /** Doi provider/model tra loi mac dinh (loi tat quen dung nhat). */
     public ModelSelection updateModel(LlmProvider provider, String model, String updatedBy) {
         Map<String, Object> changes = new LinkedHashMap<>();
         if (provider != null) changes.put(K_PROVIDER, provider.name());
@@ -163,11 +181,10 @@ public class RagSettingsService {
 
     public void resetToFileDefaults() {
         repository.clear();
-        log.info("Da xoa cau hinh luu trong DB - se tra ve gia tri trong application.properties "
-                + "sau khi khoi dong lai.");
+        log.info("Cleared the settings stored in the database; values from "
+                + "application.properties apply again after a restart.");
     }
 
-    /** @return false neu khoa khong duoc ho tro. */
     private boolean applyOne(String key, String value) {
         RagProperties.Retrieval r = props.getRetrieval();
         RagProperties.Cache c = props.getCache();
@@ -203,19 +220,49 @@ public class RagSettingsService {
                 }
                 props.getRerank().setProvider(v);
             }
+            case K_RERANK_BATCH -> props.getRerank().setBatchSize(intInRange(value, 4, 40));
             case K_CACHE_ENABLED -> c.setEnabled(bool(value));
             case K_CACHE_SEMANTIC -> c.setSemanticEnabled(bool(value));
+            case K_CACHE_REFUSAL -> c.setRefusalPattern(optionalText(value));
             case K_CACHE_THRESHOLD -> c.setSemanticThreshold(doubleInRange(value, 0.5, 1.0));
             case K_CONTEXTUAL -> props.getIngestion().setContextualEnabled(bool(value));
             case K_REWRITE -> props.getQueryRewrite().setEnabled(bool(value));
             case K_CLARIFY -> r.setClarifyAmbiguousEnabled(bool(value));
             case K_GLOSSARY -> r.setGlossaryEnabled(bool(value));
             case K_CITATIONS -> props.getChat().setCitationsEnabled(bool(value));
+            // Blank resets to the built-in default instead of wiping the prompt.
+            case K_HISTORY_TURNS -> props.getChat().setHistoryTurns(intInRange(value, 0, 10));
+            case K_NO_ANSWER_FOLLOW_UP ->
+                    props.getChat().setNoAnswerFollowUp(optionalText(value));
+            case K_SYSTEM_PROMPT -> props.getChat().setSystemPrompt(optionalText(value));
+            case K_NOT_FOUND_MSG -> props.getChat().setNotFoundMessage(optionalText(value));
+            case K_NOT_RELEVANT_MSG -> props.getChat().setNotRelevantMessage(optionalText(value));
+            case K_SMALL_TALK -> props.getChat().setSmallTalkEnabled(bool(value));
+            case K_SMALL_TALK_PATTERN -> props.getChat().setSmallTalkPattern(regex(value));
+            case K_SMALL_TALK_REPLY -> props.getChat().setSmallTalkReply(optionalText(value));
             default -> {
                 return false;
             }
         }
         return true;
+    }
+
+    private static String optionalText(String value) {
+        if (value == null || value.isBlank() || "null".equals(value)) return "";
+        return value.strip();
+    }
+
+    // Rejected here rather than at first use: a broken pattern would otherwise only
+    // show up as a warning in the log while greetings quietly stop working.
+    private static String regex(String value) {
+        String pattern = optionalText(value);
+        if (pattern.isEmpty()) return "";
+        try {
+            java.util.regex.Pattern.compile(pattern);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Bieu thuc chinh quy khong hop le: " + e.getMessage());
+        }
+        return pattern;
     }
 
     private static String requireText(String value) {

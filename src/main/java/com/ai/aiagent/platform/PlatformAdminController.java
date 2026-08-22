@@ -3,8 +3,10 @@ package com.ai.aiagent.platform;
 import com.ai.aiagent.platform.PlatformModels.BotDef;
 import com.ai.aiagent.platform.PlatformModels.CollectionDef;
 import com.ai.aiagent.security.CurrentScope;
+import com.ai.aiagent.security.GraphDirectoryClient;
 import jakarta.validation.constraints.NotBlank;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,19 +16,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Quan tri nen tang nhieu bot: tap tai lieu, bot, quyen doc, doi tuong su dung,
- * rang buoc Team -> bot.
- *
- * Nam duoi {@code /api/v1/rag/admin/**} nen mac nhien chi ADMIN goi duoc - xem
- * {@code SecurityConfig}. Phan quyen min hon (chu bot chi sua duoc bot cua minh) dung
- * bang {@code rag_grants}, se noi vao khi giao dien tach vai tro Editor.
- */
 @RestController
 @RequestMapping("/api/v1/rag/admin")
 @Slf4j
@@ -35,12 +30,50 @@ public class PlatformAdminController {
     private final PlatformRepository repository;
     private final PlatformService platform;
 
-    public PlatformAdminController(PlatformRepository repository, PlatformService platform) {
+    private final DelegationService delegation;
+    private final ObjectProvider<GraphDirectoryClient> graph;
+
+    public PlatformAdminController(PlatformRepository repository, PlatformService platform,
+                                   DelegationService delegation,
+                                   ObjectProvider<GraphDirectoryClient> graph) {
         this.repository = repository;
         this.platform = platform;
+        this.delegation = delegation;
+        this.graph = graph;
     }
 
-    // ============================================================ Tong quan
+    /** Group display names, so the admin screen can show names instead of GUIDs. */
+    @PostMapping("/group-names")
+    public Map<String, Object> groupNames(@RequestBody List<String> groupIds) {
+        GraphDirectoryClient client = graph.getIfAvailable();
+        if (client == null || !client.isReady()) return Map.of("names", Map.of());
+        return Map.of("names", client.groupNames(groupIds));
+    }
+
+    /**
+     * Declare a collection for every category that documents already use but nothing declares.
+     *
+     * <p>Exists because the folder ingest derives one category per subfolder: a single scan can
+     * produce a dozen categories, and typing each of them back into the create form by hand is
+     * both tedious and easy to get wrong - a typo leaves the documents orphaned exactly as before.
+     * Every collection is created closed (no ACL); read access is still a separate decision.
+     */
+    @PostMapping("/collections/declare-missing")
+    public Map<String, Object> declareMissingCollections() {
+        List<String> orphans = repository.orphanCategories();
+        List<String> created = new ArrayList<>();
+        for (String slug : orphans) {
+            if (platform.ensureCollection(slug, CurrentScope.get().displayId())) created.add(slug);
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("created", created);
+        out.put("message", created.isEmpty()
+                ? "Không có nhóm nào thiếu."
+                : "Đã tạo " + created.size() + " nhóm tài liệu: " + String.join(", ", created)
+                  + ". Các nhóm này CHƯA cấp quyền đọc cho ai — hãy chọn nhóm Entra được đọc ở "
+                  + "bảng bên dưới, nếu không vẫn chỉ quản trị viên đọc được.");
+        return out;
+    }
 
     @GetMapping("/platform")
     public Map<String, Object> overview() {
@@ -50,19 +83,15 @@ public class PlatformAdminController {
         out.put("bots", snapshot.bots());
         out.put("channelBindings", snapshot.bindings());
         out.put("grants", repository.grants());
-        // Category co tai lieu nhung chua khai bao collection => khong ai doc duoc, va
-        // trieu chung la "nap tai lieu roi ma hoi khong ra". Bao thang tren giao dien.
+        out.put("namespaceGrants", repository.namespaceGrants());
         out.put("orphanCategories", repository.orphanCategories());
+        out.put("uncategorizedDocuments", repository.uncategorizedDocuments());
         out.put("aclConfigured", !platform.hasNoAcl());
-        // Bot khong duoc gan tap tai lieu nao thi tu choi MOI cau hoi. Cai dat moi rat
-        // de roi vao trang thai nay, va thong bao tu choi khong noi len duoc nguyen nhan.
         out.put("botsWithoutCollections", snapshot.bots().stream()
                 .filter(b -> b.collectionSlugs().isEmpty())
                 .map(BotDef::slug).toList());
         return out;
     }
-
-    // ============================================================ Collection
 
     public record CollectionRequest(
             @NotBlank String slug,
@@ -98,12 +127,45 @@ public class PlatformAdminController {
         return Map.of("message", "Đã cập nhật nhóm tài liệu.");
     }
 
+    public record BulkIdsRequest(List<Long> ids) {
+    }
+
     /**
-     * Xoa CAU HINH nhom tai lieu, KHONG xoa tai lieu.
-     *
-     * Tai lieu la du lieu, cau hinh la chinh sach. Xoa nham chinh sach thi khai bao lai
-     * trong mot phut; xoa nham tai lieu thi phai nap lai ca kho.
+     * Xoá nhiều nhóm tài liệu một lượt. Tài liệu KHÔNG bị xoá theo - chúng giữ nguyên cột
+     * {@code category}, mà không còn nhóm nào khai slug đó nữa thì chỉ quản trị viên đọc được.
+     * Nên phần trả về nói rõ số tài liệu vừa thành mồ côi, thay vì chỉ báo "đã xoá".
      */
+    @PostMapping("/collections/bulk-delete")
+    public Map<String, Object> bulkDeleteCollections(@RequestBody BulkIdsRequest request) {
+        List<Long> ids = request.ids() == null ? List.of()
+                : request.ids().stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of("deleted", 0, "message", "Không có nhóm tài liệu nào được chọn.");
+        }
+
+        int deleted = 0;
+        int orphanedDocuments = 0;
+        List<String> slugs = new ArrayList<>();
+        for (Long id : ids) {
+            CollectionDef existing = platform.snapshot().collections().stream()
+                    .filter(c -> c.id() == id).findFirst().orElse(null);
+            if (existing == null) continue;
+            orphanedDocuments += existing.documentCount();
+            slugs.add(existing.slug());
+            deleted += repository.deleteCollection(id) > 0 ? 1 : 0;
+        }
+        platform.refresh();
+
+        String message = "Đã xoá " + deleted + " nhóm tài liệu.";
+        if (orphanedDocuments > 0) {
+            message += " Lưu ý: " + orphanedDocuments + " tài liệu vẫn còn trong kho nhưng giờ "
+                    + "không nhóm nào khai, nên chỉ quản trị viên đọc được — xoá tài liệu đó "
+                    + "hoặc khai lại nhóm.";
+        }
+        return Map.of("deleted", deleted, "slugs", slugs,
+                "orphanedDocuments", orphanedDocuments, "message", message);
+    }
+
     @DeleteMapping("/collections/{id}")
     public Map<String, Object> deleteCollection(@PathVariable long id) {
         CollectionDef existing = requireCollection(id);
@@ -128,8 +190,6 @@ public class PlatformAdminController {
                 ? "Đã xoá toàn bộ quyền đọc. Nhóm này giờ không ai đọc được (trừ quản trị)."
                 : "Đã cấp quyền đọc cho " + ids.size() + " nhóm Entra.");
     }
-
-    // ============================================================ Bot
 
     public record BotRequest(
             @NotBlank String slug,
@@ -172,7 +232,6 @@ public class PlatformAdminController {
     public Map<String, Object> deleteBot(@PathVariable long id) {
         BotDef existing = requireBot(id);
         if (repository.deleteBot(id) == 0) {
-            // Xoa bot mac dinh se lam moi cuoc tro chuyen khong khop luat nao mat bot.
             throw new IllegalArgumentException(
                     "Không xoá được bot mặc định. Hãy đặt bot khác làm mặc định trước.");
         }
@@ -212,14 +271,10 @@ public class PlatformAdminController {
         repository.setBotAudience(id, groups, users, request.names());
         platform.refresh();
         return Map.of("message", groups.isEmpty() && users.isEmpty()
-                // Rong = mo, khac han ACL collection (rong = dong). Noi ro de khong ai
-                // tuong minh vua khoa bot lai.
                 ? "Đã xoá giới hạn đối tượng: mọi người dùng đã xác thực đều dùng được bot "
                   + "này (quyền đọc tài liệu vẫn theo ACL của từng nhóm tài liệu)."
                 : "Đã giới hạn bot cho " + (groups.size() + users.size()) + " đối tượng.");
     }
-
-    // ============================================================ Rang buoc kenh
 
     public record ChannelRequest(long botId, @NotBlank String teamAadGroupId, String channelId) {
     }
@@ -240,32 +295,100 @@ public class PlatformAdminController {
         return Map.of("message", "Đã bỏ gán. Team này sẽ dùng bot mặc định.");
     }
 
-    // ============================================================ Grant
-
-    public record GrantRequest(String principalType, @NotBlank String principalId,
+    /**
+     * {@code principalId} is a uuid in the database. {@code principalUpn} lets an admin
+     * type an email instead and have Graph resolve it - typing a GUID by hand is the
+     * step people get wrong.
+     */
+    public record GrantRequest(String principalType, String principalId, String principalUpn,
                                String scopeType, long scopeId, String role, String displayName) {
     }
 
     @PostMapping("/grants")
     public Map<String, Object> grant(@RequestBody GrantRequest request) {
-        repository.grant(
-                upper(request.principalType(), "GROUP"),
-                request.principalId(),
+        String type = upper(request.principalType(), "GROUP");
+        Resolved who = resolvePrincipal(type, request.principalId(), request.principalUpn(),
+                request.displayName());
+
+        repository.grant(type, who.id(),
                 upper(request.scopeType(), "BOT"),
                 request.scopeId(),
                 upper(request.role(), "OWNER"),
-                request.displayName(),
+                who.displayName(),
                 CurrentScope.get().displayId());
-        return Map.of("message", "Đã cấp quyền.");
+        delegation.refresh();
+        return Map.of("message", "Đã cấp quyền.", "principalId", who.id());
     }
 
     @DeleteMapping("/grants/{id}")
     public Map<String, Object> revoke(@PathVariable long id) {
         repository.revoke(id);
+        delegation.refresh();
         return Map.of("message", "Đã thu hồi quyền.");
     }
 
-    // ============================================================ Tro giup
+    public record NamespaceGrantRequest(String principalType, String principalId,
+                                        String principalUpn, @NotBlank String slugPrefix,
+                                        Integer maxCollections, String displayName) {
+    }
+
+    /**
+     * Hands out a slug prefix so the person can create their own collections. This is the
+     * grant an admin gives once, instead of creating every collection for them.
+     */
+    @PostMapping("/namespace-grants")
+    public Map<String, Object> grantNamespace(@RequestBody NamespaceGrantRequest request) {
+        String type = upper(request.principalType(), "USER");
+        Resolved who = resolvePrincipal(type, request.principalId(), request.principalUpn(),
+                request.displayName());
+        String prefix = normalizeSlug(request.slugPrefix());
+        int max = request.maxCollections() == null || request.maxCollections() <= 0
+                ? 20 : Math.min(request.maxCollections(), 500);
+
+        repository.grantNamespace(type, who.id(), prefix, max, who.displayName(),
+                CurrentScope.get().displayId());
+        delegation.refresh();
+        return Map.of("message", "Đã cấp tiền tố '" + prefix + "' (tối đa " + max + " nhóm).",
+                "principalId", who.id(), "slugPrefix", prefix);
+    }
+
+    @DeleteMapping("/namespace-grants/{id}")
+    public Map<String, Object> revokeNamespace(@PathVariable long id) {
+        repository.revokeNamespace(id);
+        delegation.refresh();
+        return Map.of("message", "Đã thu hồi tiền tố. Các nhóm tài liệu đã tạo vẫn còn.");
+    }
+
+    private record Resolved(String id, String displayName) {
+    }
+
+    private Resolved resolvePrincipal(String type, String principalId, String principalUpn,
+                                      String displayName) {
+        String id = principalId == null ? "" : principalId.strip();
+        if (!id.isEmpty()) return new Resolved(id, displayName);
+
+        String upn = principalUpn == null ? "" : principalUpn.strip();
+        if (upn.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Cần principalId (Object ID) hoặc principalUpn (email) của đối tượng.");
+        }
+        if (!"USER".equals(type)) {
+            throw new IllegalArgumentException(
+                    "Chỉ tra được email cho principalType=USER. Nhóm phải dùng Object ID.");
+        }
+        GraphDirectoryClient client = graph.getIfAvailable();
+        if (client == null || !client.isReady()) {
+            throw new IllegalStateException("Chưa bật đăng nhập Entra nên không tra được email. "
+                    + "Hãy nhập Object ID vào principalId.");
+        }
+        String resolved = client.objectIdOfUpn(upn);
+        if (resolved == null || resolved.isBlank()) {
+            throw new IllegalArgumentException("Không tìm thấy người dùng '" + upn
+                    + "' trên Entra ID.");
+        }
+        return new Resolved(resolved,
+                displayName == null || displayName.isBlank() ? upn : displayName);
+    }
 
     private CollectionDef requireCollection(long id) {
         return platform.snapshot().collections().stream()
@@ -279,11 +402,6 @@ public class PlatformAdminController {
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy bot id=" + id));
     }
 
-    /**
-     * Slug phai khop cot {@code category} cua tai lieu, ma cot do luon duoc ghi bang chu
-     * thuong khong dau. Chuan hoa o day de khong sinh ra collection "Nhan-Su" khong bao
-     * gio khop tai lieu nao.
-     */
     static String normalizeSlug(String raw) {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("Mã nhóm không được để trống.");

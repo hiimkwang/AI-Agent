@@ -15,17 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Metadata muc tai lieu.
- *
- * Bang nay la moi: truoc day chi co bang chunk, {@code docId = fileName}, va khong
- * co cho nao luu ngay hieu luc / phong ban / so hieu / phien ban. Vi vay khong tra
- * loi duoc "quy dinh moi nhat la gi" va van ban het hieu luc van duoc trich dan
- * ngang hang voi van ban dang ap dung.
- *
- * {@code doc_key} la khoa on dinh (mac dinh {@code category/fileName}) nen hai file
- * cung ten o hai nhom khac nhau khong con ghi de len nhau nhu truoc.
- */
 @Repository
 @Slf4j
 public class DocumentRepository {
@@ -36,7 +25,6 @@ public class DocumentRepository {
         this.jdbc = jdbc;
     }
 
-    /** Tao moi hoac cap nhat theo {@code doc_key}; tra ve id. */
     public long upsert(DocumentMeta meta) {
         String sql = """
                 INSERT INTO rag_documents
@@ -78,7 +66,6 @@ public class DocumentRepository {
         return id;
     }
 
-    /** Luu ban Markdown rieng (tach ra vi chuoi co the rat dai). */
     public void updateMarkdown(long id, String markdown) {
         jdbc.update("UPDATE rag_documents SET markdown = ?, updated_at = now() WHERE id = ?",
                 markdown, id);
@@ -107,17 +94,38 @@ public class DocumentRepository {
         return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }
 
-    /** @return sha256 cua lan nap truoc, dung de bo qua file khong doi. */
     public Optional<String> findSha(String docKey) {
         List<String> found = jdbc.queryForList(
                 "SELECT content_sha256 FROM rag_documents WHERE doc_key = ?", String.class, docKey);
         return found.isEmpty() ? Optional.empty() : Optional.ofNullable(found.get(0));
     }
 
-    /** Danh sach tai lieu co phan trang va tim kiem theo ten. */
     public List<DocumentMeta> list(String category, String search, int limit, int offset) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM rag_documents WHERE 1 = 1 ");
         List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("SELECT * FROM rag_documents WHERE 1 = 1 ");
+        sql.append(filterClause(category, search, args));
+        sql.append(" ORDER BY updated_at DESC LIMIT ? OFFSET ?");
+        args.add(Math.min(Math.max(limit, 1), 500));
+        args.add(Math.max(offset, 0));
+        return jdbc.query(sql.toString(), ROW_MAPPER, args.toArray());
+    }
+
+    /**
+     * How many documents match the same filter {@link #list} would page through. The list
+     * is capped at one page, so without this the UI cannot tell "100 documents" from
+     * "100 shown of 4000" and offers no way to act on the rest.
+     */
+    public long count(String category, String search) {
+        List<Object> args = new ArrayList<>();
+        String sql = "SELECT COUNT(*) FROM rag_documents WHERE 1 = 1 "
+                + filterClause(category, search, args);
+        Long c = jdbc.queryForObject(sql, Long.class, args.toArray());
+        return c == null ? 0 : c;
+    }
+
+    /** Shared so the count can never drift away from what the list actually returns. */
+    private String filterClause(String category, String search, List<Object> args) {
+        StringBuilder sql = new StringBuilder();
         if (category != null && !category.isBlank()) {
             sql.append(" AND category = ? ");
             args.add(category);
@@ -130,10 +138,7 @@ public class DocumentRepository {
             args.add(like);
             args.add(like);
         }
-        sql.append(" ORDER BY updated_at DESC LIMIT ? OFFSET ?");
-        args.add(Math.min(Math.max(limit, 1), 500));
-        args.add(Math.max(offset, 0));
-        return jdbc.query(sql.toString(), ROW_MAPPER, args.toArray());
+        return sql.toString();
     }
 
     public long countAll() {
@@ -141,8 +146,32 @@ public class DocumentRepository {
         return c == null ? 0 : c;
     }
 
+    /**
+     * Move a document into another category.
+     *
+     * <p>{@code doc_key} is {@code category/fileName} and it is the overwrite key, so the key has
+     * to move with the category. Leaving it behind would make the next ingest of the same file
+     * create a second row instead of overwriting this one.
+     *
+     * @return rows updated
+     */
+    public int updateCategory(long id, String category, String docKey) {
+        return jdbc.update("""
+                UPDATE rag_documents
+                   SET category = ?, doc_key = ?, updated_at = now()
+                 WHERE id = ?
+                """, category, docKey, id);
+    }
+
+    /** True when another document already occupies this {@code doc_key}. */
+    public boolean docKeyTakenByOther(String docKey, long selfId) {
+        Long other = jdbc.query(
+                "SELECT id FROM rag_documents WHERE doc_key = ? AND id <> ? LIMIT 1",
+                rs -> rs.next() ? rs.getLong(1) : null, docKey, selfId);
+        return other != null;
+    }
+
     public int deleteById(long id) {
-        // rag_chunks co ON DELETE CASCADE nen chunk se tu bien mat
         return jdbc.update("DELETE FROM rag_documents WHERE id = ?", id);
     }
 
@@ -156,7 +185,6 @@ public class DocumentRepository {
                 String.class);
     }
 
-    /** Thong ke tong quan cho trang quan tri. */
     public Map<String, Object> stats() {
         Map<String, Object> out = new LinkedHashMap<>();
         jdbc.query("""

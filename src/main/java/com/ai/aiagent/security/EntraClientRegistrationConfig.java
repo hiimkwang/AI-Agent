@@ -11,24 +11,6 @@ import org.springframework.security.oauth2.client.registration.InMemoryClientReg
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 
-/**
- * Khai bao ClientRegistration cua Entra ID BANG CODE, khong qua
- * {@code spring.security.oauth2.client.registration.*}.
- *
- * Ly do: neu khai bao trong properties voi gia tri mac dinh rong
- * ({@code client-id=${ENTRA_CLIENT_ID:}}) thi Spring Boot van coi la "da cau hinh"
- * (chuoi rong khac null) va se NEM LOI LUC KHOI DONG khi chua ai bat SSO - tuc la
- * hong ca moi truong dev dang chay bang API key. Dat dieu kien
- * {@code rag.entra.enabled=true} o day thi bat SSO thuc su la mot cong tac.
- *
- * Cung khong dung {@code ClientRegistrations.fromIssuerLocation}: ham do goi mang ngay
- * luc khoi dong, nghia la Entra cham hay mang truc trac la ung dung khong len duoc.
- * Cac endpoint cua Entra on dinh va co tai lieu, khai bao thang an toan hon.
- *
- * KHONG khai bao {@code userInfoUri}: moi thu can cho phan quyen ({@code oid},
- * {@code tid}, {@code preferred_username}, {@code roles}) deu co san trong ID token.
- * Goi them userinfo cua Graph chi them mot diem hong va mot quyen phai xin.
- */
 @Configuration
 @ConditionalOnProperty(prefix = "rag.entra", name = "enabled", havingValue = "true")
 @Slf4j
@@ -45,6 +27,9 @@ public class EntraClientRegistrationConfig {
                     + "Dat day du hai bien nay, hoac dat rag.entra.enabled=false de chay bang API key.");
         }
 
+        // Built in code rather than declared under spring.security.oauth2.client
+        // .registration.*: empty defaults there read as "configured" and break startup
+        // when SSO is off. fromIssuerLocation is avoided as it calls out at startup.
         ClientRegistration registration = ClientRegistration
                 .withRegistrationId(props.getRegistrationId())
                 .clientName("Tài khoản công ty")
@@ -61,7 +46,7 @@ public class EntraClientRegistrationConfig {
                 .userNameAttributeName("preferred_username")
                 .build();
 
-        log.info("Entra ID: da dang ky client '{}' cho tenant {}.",
+        log.info("Entra ID client '{}' registered for tenant {}.",
                 props.getRegistrationId(), tenant);
         return new InMemoryClientRegistrationRepository(registration);
     }

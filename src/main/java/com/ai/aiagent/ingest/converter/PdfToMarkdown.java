@@ -16,36 +16,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-/**
- * PDF -> Markdown, co suy ra CAU TRUC thay vi chi bóc text phang.
- *
- * PDF khong luu heading, nen ta suy ra tu hai tin hieu doc lap:
- *
- *  1) CO CHU: dong nao co font lon han han so voi co chu than bai thi la heading.
- *     Ti le so voi median quyet dinh cap (h1/h2/h3).
- *  2) MAU SO THU TU: rat hieu qua voi van ban phap quy tieng Viet -
- *     "PHAN I", "Chuong II", "Muc 3", "Dieu 12.", "1.2.3 ..." - dung duoc ca khi
- *     thong tin font khong dang tin (PDF scan-to-text, PDF xuat tu Word cu).
- *
- * Ngoai ra tu dong nhan va BO header/footer lap lai giua cac trang (so trang, ten
- * cong ty, duong dan file...) - neu khong, chung se lot vao gan nhu moi chunk.
- */
 @Component
 @Slf4j
 public class PdfToMarkdown {
 
-    /** Cap 1: PHAN / CHUONG. */
     private static final Pattern VN_LEVEL_1 = Pattern.compile(
             "^\\s*(PH\\p{L}N|CH\\p{L}\\p{L}NG|PART|CHAPTER)\\s+([IVXLCDM]+|\\d+)\\b.*",
             Pattern.CASE_INSENSITIVE);
-    /** Cap 2: MUC / DIEU. */
     private static final Pattern VN_LEVEL_2 = Pattern.compile(
             "^\\s*(M\\p{L}C|\\p{L}I\\p{L}U|SECTION|ARTICLE)\\s+(\\d+|[IVXLCDM]+)\\b.*",
             Pattern.CASE_INSENSITIVE);
-    /** Cap 3: 1. / 1.2 / 1.2.3 theo sau la chu. */
     private static final Pattern NUMBERED = Pattern.compile(
             "^\\s*(\\d+(?:\\.\\d+){0,3})\\.?\\s+\\p{Lu}.{2,120}$");
-    /** Cap 3: PHU LUC / APPENDIX. */
     private static final Pattern APPENDIX = Pattern.compile(
             "^\\s*(PH\\p{L}\\s*L\\p{L}C|APPENDIX|ANNEX)\\b.*", Pattern.CASE_INSENSITIVE);
 
@@ -58,17 +40,17 @@ public class PdfToMarkdown {
     public String convert(byte[] bytes, String fileName) {
         try (PDDocument document = Loader.loadPDF(bytes)) {
             if (document.isEncrypted()) {
-                log.warn("PDF '{}' bi ma hoa - chi lay duoc phan text khong bao ve.", fileName);
+                log.warn("PDF '{}' is encrypted, only unprotected text could be extracted.", fileName);
             }
             LineCollector collector = new LineCollector();
             collector.setSortByPosition(true);
             collector.setStartPage(1);
             collector.setEndPage(document.getNumberOfPages());
-            collector.getText(document); // ket qua duoc gom vao collector.lines
+            collector.getText(document);
 
             List<Line> lines = collector.lines;
             if (lines.isEmpty()) {
-                log.warn("PDF '{}' khong boc duoc text nao. Co the la ban scan -> can OCR.", fileName);
+                log.warn("PDF '{}' yielded no text; it is probably a scan and needs OCR.", fileName);
                 return "";
             }
 
@@ -83,14 +65,9 @@ public class PdfToMarkdown {
         }
     }
 
-    /** Ket qua boc duoc tu 1 dong van ban trong PDF. */
     private record Line(int page, String text, double fontSize, boolean bold) {
     }
 
-    /**
-     * PDFTextStripper mac dinh chi tra ve String. Ta override {@code writeString}
-     * de doc thong tin font cua tung dong - day la cach duy nhat lay duoc co chu.
-     */
     private static class LineCollector extends PDFTextStripper {
         private final List<Line> lines = new ArrayList<>();
 
@@ -117,7 +94,6 @@ public class PdfToMarkdown {
                         if (f.contains("bold") || f.contains("black") || f.contains("heavy")) boldCount++;
                     }
                 } catch (RuntimeException ignored) {
-                    // Font co the bi loi trong PDF hong - khong sao, coi nhu khong bold
                 }
             }
             double avgSize = count == 0 ? 0 : sizeSum / count;
@@ -126,7 +102,6 @@ public class PdfToMarkdown {
         }
     }
 
-    /** Co chu than bai = median co chu cua cac dong dai (dong ngan hay la tieu de). */
     private double medianFontSize(List<Line> lines) {
         List<Double> sizes = lines.stream()
                 .filter(l -> l.text().length() > 60 && l.fontSize() > 0)
@@ -140,10 +115,6 @@ public class PdfToMarkdown {
         return sizes.get(sizes.size() / 2);
     }
 
-    /**
-     * Bo header/footer: dong xuat hien o >= 60% so trang (va tai liệu co >= 3 trang)
-     * gan nhu chac chan la header/footer chu khong phai noi dung.
-     */
     private void dropRepeatedHeadersFooters(List<Line> lines, int pageCount) {
         if (pageCount < 3) return;
 
@@ -162,10 +133,10 @@ public class PdfToMarkdown {
 
         int before = lines.size();
         lines.removeIf(l -> repeated.contains(normalizeForRepeat(l.text())));
-        log.debug("PDF: bo {} dong header/footer lap lai ({} mau).", before - lines.size(), repeated.size());
+        log.debug("Dropped {} repeated header/footer line(s) ({} distinct patterns).",
+                    before - lines.size(), repeated.size());
     }
 
-    /** Thay so bang # de "Trang 3/20" va "Trang 4/20" duoc coi la cung mot mau. */
     private String normalizeForRepeat(String text) {
         return text.replaceAll("\\d+", "#").strip().toLowerCase();
     }
@@ -183,7 +154,6 @@ public class PdfToMarkdown {
             if (line.page() != currentPage) {
                 currentPage = line.page();
                 flush(sb, paragraph);
-                // Danh dau trang duoi dang comment: giup truy nguon "trang may"
                 sb.append("\n<!-- page ").append(currentPage).append(" -->\n\n");
             }
 
@@ -196,7 +166,6 @@ public class PdfToMarkdown {
             } else {
                 if (paragraph.length() > 0) paragraph.append(' ');
                 paragraph.append(line.text());
-                // Dong ket thuc bang dau cau => het doan
                 if (line.text().matches(".*[.;:!?]\\s*$")) {
                     flush(sb, paragraph);
                 }
@@ -212,12 +181,10 @@ public class PdfToMarkdown {
         paragraph.setLength(0);
     }
 
-    /** @return 0 neu khong phai heading, nguoc lai la cap heading 2..4. */
     private int headingLevelOf(Line line, double bodySize) {
         String text = line.text();
         if (text.length() > 160) return 0;
 
-        // Tin hieu 1: mau so thu tu (dang tin nhat voi van ban phap quy)
         if (VN_LEVEL_1.matcher(text).matches()) return 2;
         if (VN_LEVEL_2.matcher(text).matches()) return 3;
         if (APPENDIX.matcher(text).matches()) return 2;
@@ -227,11 +194,9 @@ public class PdfToMarkdown {
             return (int) Math.min(4, 3 + depth);
         }
 
-        // Tin hieu 2: co chu
         if (bodySize > 0 && line.fontSize() >= bodySize * 1.35) return 2;
         if (bodySize > 0 && line.fontSize() >= bodySize * 1.15 && line.bold()) return 3;
 
-        // Dong ngan, IN HOA HET, khong ket thuc bang dau cau
         if (text.length() <= 80 && text.equals(text.toUpperCase())
                 && text.matches(".*\\p{L}.*") && !text.matches(".*[.;:!?]\\s*$")) {
             return 3;

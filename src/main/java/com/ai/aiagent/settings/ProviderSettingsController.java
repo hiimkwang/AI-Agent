@@ -5,12 +5,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-/**
- * Cau hinh API key / model cua tung provider LLM - CHI ADMIN.
- *
- * Nam duoi {@code /api/v1/rag/admin/**}, da bi khoa {@code hasRole("ADMIN")} boi
- * {@code SecurityConfig}, nen khong can khai bao rule rieng.
- */
 @RestController
 @RequestMapping("/api/v1/rag/admin/providers")
 public class ProviderSettingsController {
@@ -26,11 +20,6 @@ public class ProviderSettingsController {
         return settings.snapshot();
     }
 
-    /**
-     * Doi nhieu cau hinh mot luc, vi du:
-     * {@code {"openai.apiKey": "sk-...", "anthropic.chatModel": "claude-sonnet-5"}}.
-     * Khoa vang mat trong body = giu nguyen.
-     */
     @PostMapping
     public Map<String, Object> update(@RequestBody Map<String, Object> changes) {
         if (changes == null || changes.isEmpty()) {
@@ -51,10 +40,6 @@ public class ProviderSettingsController {
                 "providers", settings.snapshot());
     }
 
-    /**
-     * Xac thuc key/baseUrl bang cach goi that API cua nha cung cap va lay danh sach
-     * model - thanh cong thi luu lai luon, that bai thi khong dung gi ca.
-     */
     @PostMapping("/{provider}/connect")
     public Map<String, Object> connect(@PathVariable String provider, @RequestBody ConnectRequest request) {
         var models = settings.connect(provider,

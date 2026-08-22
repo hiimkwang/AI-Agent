@@ -12,28 +12,23 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
-/**
- * Nap tai lieu HANG LOAT, chay nen, tien do luu trong DB.
- *
- * Khac ban cu:
- *   - trang thai job nam trong bang {@code rag_ingest_jobs} nen khong mat khi restart
- *   - co the YEU CAU DUNG job dang chay
- *   - nap tu thu muc may chu phai qua {@link PathAllowlist} (truoc day nhan duong dan
- *     tuy y - ai goi duoc API cung bat server doc file bat ky roi doc lai qua /chat)
- *   - de quy vao thu muc con
- */
 @Service
 @Slf4j
 public class IngestionJobService {
 
-    /** Mot don vi cong viec: noi dung + ten file (khong giu handle file mo). */
-    public record WorkItem(String fileName, Path path, byte[] content, boolean deleteAfter) {
+    /** @param category per-file override; null means "use the category of the job". */
+    public record WorkItem(String fileName, Path path, byte[] content, boolean deleteAfter,
+                           String category) {
     }
 
     private final IngestionService ingestion;
@@ -64,9 +59,68 @@ public class IngestionJobService {
         executor.shutdownNow();
     }
 
-    /** Nap toan bo file hop le trong mot thu muc TRONG DANH SACH CHO PHEP. */
+    /** One folder found by a scan, with the category it would be ingested under. */
+    public record FolderGroup(String folder, String suggestedCategory, int fileCount,
+                              List<String> sampleFiles) {
+    }
+
+    /**
+     * @param unsupported files present but not ingestable - reported so a missing document is
+     *                    never a surprise later
+     */
+    public record FolderScan(String root, int fileCount, List<FolderGroup> groups,
+                             List<String> unsupported) {
+    }
+
+    /**
+     * Look at a folder without ingesting anything, so the operator can see what would happen and
+     * fix the categories before committing. Nothing here writes to the database.
+     */
+    public FolderScan scanFolder(String folderPath, boolean recursive) {
+        Path root = allowlist.requireAllowedDirectory(folderPath);
+        List<Path> supported = new ArrayList<>();
+        List<String> unsupported = new ArrayList<>();
+        try (Stream<Path> walk = recursive ? Files.walk(root, 12) : Files.list(root)) {
+            walk.filter(Files::isRegularFile).forEach(p -> {
+                if (DocumentFormat.isSupported(p.getFileName().toString())) {
+                    supported.add(p);
+                } else if (unsupported.size() < 50) {
+                    unsupported.add(root.relativize(p).toString());
+                }
+            });
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Khong doc duoc thu muc: " + e.getMessage());
+        }
+
+        Map<String, List<Path>> byFolder = new LinkedHashMap<>();
+        for (Path p : supported) {
+            byFolder.computeIfAbsent(relativeFolder(root, p), k -> new ArrayList<>()).add(p);
+        }
+
+        List<FolderGroup> groups = new ArrayList<>();
+        byFolder.forEach((folder, paths) -> groups.add(new FolderGroup(
+                folder,
+                CategorySlugs.fromPath(root, paths.get(0)),
+                paths.size(),
+                paths.stream().limit(5).map(p -> p.getFileName().toString()).toList())));
+        groups.sort(Comparator.comparing(FolderGroup::folder));
+
+        return new FolderScan(root.toString(), supported.size(), groups, unsupported);
+    }
+
+    /**
+     * @param categoryFromFolder derive the category of each file from the folders between the root
+     *                           and the file, instead of using one category for the whole job.
+     *                           Ignored when {@code options.category()} is set - an explicit
+     *                           choice always wins over a derived one.
+     * @param categoryByFolder   per-folder override keyed by the folder path relative to the root,
+     *                           exactly as {@link #scanFolder} reports it. Wins over everything
+     *                           else: this is what the operator confirmed on screen.
+     */
     public String submitFolder(String folderPath, boolean recursive,
-                               IngestionService.IngestOptions options) {
+                               IngestionService.IngestOptions options,
+                               boolean categoryFromFolder,
+                               Map<String, String> categoryByFolder) {
         Path root = allowlist.requireAllowedDirectory(folderPath);
         List<Path> files = new ArrayList<>();
         try (Stream<Path> walk = recursive ? Files.walk(root, 12) : Files.list(root)) {
@@ -80,20 +134,49 @@ public class IngestionJobService {
             throw new IllegalArgumentException("Khong tim thay file nao duoc ho tro trong: " + folderPath
                     + ". Cac duoi file ho tro: " + DocumentFormat.allExtensions());
         }
+        boolean derive = categoryFromFolder
+                && (options.category() == null || options.category().isBlank());
+        Map<String, String> overrides = categoryByFolder == null ? Map.of() : categoryByFolder;
         List<WorkItem> items = files.stream()
-                .map(p -> new WorkItem(p.getFileName().toString(), p, null, false))
+                .map(p -> new WorkItem(p.getFileName().toString(), p, null, false,
+                        categoryFor(root, p, overrides, derive)))
                 .toList();
         return submit(items, "FOLDER", options);
     }
 
-    /** Nap danh sach file da doc san vao bo nho (thuong la file vua upload). */
+    /**
+     * Precedence: what the operator confirmed per folder, then the derived slug, then nothing
+     * (which leaves the job-wide category to apply, and fails loudly if there is none either).
+     */
+    static String categoryFor(Path root, Path file, Map<String, String> overrides, boolean derive) {
+        String chosen = overrides.get(relativeFolder(root, file));
+        if (chosen != null && !chosen.isBlank()) return chosen.strip().toLowerCase(Locale.ROOT);
+        return derive ? CategorySlugs.fromPath(root, file) : null;
+    }
+
+    /**
+     * Always '/'-separated: this string is the key the scan hands to the browser and gets back on
+     * confirm, and {@code Path.toString()} would emit backslashes on Windows - the override would
+     * then silently miss and every file fall back to the derived category.
+     */
+    static String relativeFolder(Path root, Path file) {
+        Path parent = file.getParent();
+        if (parent == null) return "";
+        Path relative = root.relativize(parent);
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < relative.getNameCount(); i++) {
+            if (out.length() > 0) out.append('/');
+            out.append(relative.getName(i));
+        }
+        return out.toString();
+    }
+
     public String submitUploads(List<WorkItem> uploads, IngestionService.IngestOptions options) {
         return submit(uploads, "UPLOAD", options);
     }
 
-    /** Tao WorkItem tu noi dung da doc - dung boi controller khi nhan multipart. */
     public static WorkItem upload(String fileName, byte[] content) {
-        return new WorkItem(fileName, null, content, false);
+        return new WorkItem(fileName, null, content, false, null);
     }
 
     private String submit(List<WorkItem> items, String kind, IngestionService.IngestOptions options) {
@@ -103,7 +186,7 @@ public class IngestionJobService {
         String jobId = UUID.randomUUID().toString();
         jobs.create(jobId, kind, options.category(), items.size(), options.createdBy());
         executor.submit(() -> run(jobId, items, options));
-        log.info("Tao job nap lieu {} [{}]: {} file (category={}).",
+        log.info("Ingestion job {} created [{}]: {} file(s), category={}.",
                 jobId, kind, items.size(), options.category());
         return jobId;
     }
@@ -119,7 +202,7 @@ public class IngestionJobService {
         for (WorkItem item : items) {
             if (jobs.isCancelRequested(jobId)) {
                 cancelled = true;
-                log.info("Job {} bi yeu cau dung sau {}/{} file.", jobId, processed, items.size());
+                log.info("Ingestion job {} cancelled after {}/{} file(s).", jobId, processed, items.size());
                 break;
             }
             jobs.progress(jobId, item.fileName(), processed, succeeded, failed, skipped, totalChunks);
@@ -129,7 +212,7 @@ public class IngestionJobService {
 
                 IngestionService.IngestOptions perFile = item.path() == null ? options
                         : IngestionService.IngestOptions.builder()
-                        .category(options.category())
+                        .category(item.category() != null ? item.category() : options.category())
                         .department(options.department())
                         .sourcePath(item.path().toString())
                         .allowedRoles(options.allowedRoles())
@@ -159,9 +242,8 @@ public class IngestionJobService {
                 }
             } catch (Exception e) {
                 failed++;
-                // Loi mot file KHONG duoc lam dung ca job
                 jobs.addError(jobId, item.fileName() + ": " + e.getMessage());
-                log.warn("Job {} - loi nap file {}: {}", jobId, item.fileName(), e.getMessage());
+                log.warn("Ingestion job {}: file {} failed: {}", jobId, item.fileName(), e.getMessage());
             } finally {
                 processed++;
             }
@@ -171,13 +253,12 @@ public class IngestionJobService {
         jobs.finish(jobId, cancelled ? "CANCELLED" : "DONE");
 
         if (succeeded > 0) {
-            // Tai lieu doi => cau tra loi cache co the da sai
             int purged = cache.invalidateAll();
-            log.info("Job {} xong: thanh cong {}, bo qua {}, loi {}, tong {} chunk. "
-                            + "Da xoa {} ban ghi cache.",
+            log.info("Ingestion job {} finished: {} succeeded, {} skipped, {} failed, {} chunks "
+                            + "total, {} cache entries purged.",
                     jobId, succeeded, skipped, failed, totalChunks, purged);
         } else {
-            log.info("Job {} xong: thanh cong {}, bo qua {}, loi {}.",
+            log.info("Ingestion job {} finished: {} succeeded, {} skipped, {} failed.",
                     jobId, succeeded, skipped, failed);
         }
     }

@@ -10,23 +10,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Cache cau tra loi, hai tang:
- *   - EXACT: khop chinh xac theo hash cua (cau hoi da chuan hoa + pham vi truy cap)
- *   - SEMANTIC: khop theo cosine giua vector cau hoi, nguong ~0.97
- *
- * Truoc day khong co cache nao ca, nen mot cau hoi duoc muoi nguoi hoi la muoi lan
- * tra du 3-4 loi goi LLM. Cau hoi noi bo lap lai rat nhieu nen day la cho tiet kiem
- * lon nhat.
- *
- * Cache key LUON gom pham vi truy cap ({@code scope_key}) de khong bao gio tra cau
- * tra loi cua phong ban khac cho nguoi khong co quyen.
- */
 @Repository
 @Slf4j
 public class AnswerCacheRepository {
 
-    /** @param kind EXACT hoac SEMANTIC - de bao cho nguoi dung biet vi sao tra loi nhanh. */
     public record Hit(long id, String answer, String citationsJson, String provider,
                       String model, String kind, double similarity) {
     }
@@ -51,7 +38,6 @@ public class AnswerCacheRepository {
         return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }
 
-    /** Tim cau hoi tuong duong ve ngu nghia trong cung pham vi truy cap. */
     public Optional<Hit> findSemantic(String scopeKey, float[] embedding, double threshold) {
         String vector = Vectors.toLiteral(embedding);
         List<Hit> found = jdbc.query("""
@@ -100,8 +86,7 @@ public class AnswerCacheRepository {
                     embedding == null ? null : Vectors.toLiteral(embedding),
                     String.valueOf(Math.max(1, ttlMinutes)));
         } catch (org.springframework.dao.DataAccessException e) {
-            // Cache loi khong duoc lam sap cau tra loi
-            log.warn("Khong ghi duoc cache cau tra loi: {}", e.getMessage());
+            log.warn("Could not write the answer cache entry: {}", e.getMessage());
         }
     }
 
@@ -113,7 +98,6 @@ public class AnswerCacheRepository {
         return jdbc.update("DELETE FROM rag_answer_cache WHERE expires_at IS NOT NULL AND expires_at <= now()");
     }
 
-    /** Giu bang cache khong phinh vo han: xoa ban ghi cu nhat khi vuot gioi han. */
     public int trimTo(int maxEntries) {
         return jdbc.update("""
                 DELETE FROM rag_answer_cache
@@ -129,7 +113,10 @@ public class AnswerCacheRepository {
         return jdbc.update("DELETE FROM rag_answer_cache");
     }
 
-    /** Xoa cache lien quan mot tai lieu - goi sau khi nap lai hoac xoa tai lieu. */
+    public int deleteByQuestion(String question) {
+        return jdbc.update("DELETE FROM rag_answer_cache WHERE question = ?", question);
+    }
+
     public int invalidateAll() {
         return clear();
     }
